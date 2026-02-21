@@ -71,7 +71,7 @@ include("n3.jl")
 export
     # Term types
     Identifier, Node, IdentifiedNode,
-    URIRef, BNode, Literal, Variable, Triple,
+    URIRef, BNode, Literal, Variable, Triple, TripleTerm,
     n3, datatype, lang, value, toPython,
     defrag, fragment,
 

@@ -284,6 +284,28 @@ Base.hash(a::Variable, h::UInt) = hash(a.name, hash(:Variable, h))
 
 n3(v::Variable) = string("?", v.name)
 
+# ─── TripleTerm (RDF-star) ──────────────────────────────────────────
+
+"""
+    TripleTerm(subject::Node, predicate::URIRef, object::Identifier)
+
+An RDF-star triple term — a triple used as a term (subject or object) in another triple.
+Written as `<< s p o >>` in SPARQL 1.2 and Turtle-star.
+"""
+struct TripleTerm <: Node
+    subject::Node
+    predicate::URIRef
+    object::Identifier
+end
+
+Base.show(io::IO, tt::TripleTerm) = print(io, "TripleTerm(", tt.subject, ", ", tt.predicate, ", ", tt.object, ")")
+Base.:(==)(a::TripleTerm, b::TripleTerm) = a.subject == b.subject && a.predicate == b.predicate && a.object == b.object
+function Base.hash(a::TripleTerm, h::UInt)
+    hash(a.object, hash(a.predicate, hash(a.subject, hash(:TripleTerm, h))))
+end
+
+n3(tt::TripleTerm) = string("<< ", n3(tt.subject), " ", n3(tt.predicate), " ", n3(tt.object), " >>")
+
 # ─── Triple ─────────────────────────────────────────────────────────
 
 """
@@ -312,6 +334,7 @@ _type_order(::BNode) = 1
 _type_order(::URIRef) = 2
 _type_order(::Literal) = 3
 _type_order(::Variable) = 4
+_type_order(::TripleTerm) = 5
 
 function Base.isless(a::Identifier, b::Identifier)
     oa, ob = _type_order(a), _type_order(b)

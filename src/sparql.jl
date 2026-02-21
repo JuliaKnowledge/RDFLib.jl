@@ -185,6 +185,12 @@ struct _GraphPattern
     patterns::Vector{Any}
 end
 
+struct _Service
+    endpoint::Any  # URIRef or variable name (String)
+    patterns::Vector{Any}
+    silent::Bool
+end
+
 # ─── Parser ─────────────────────────────────────────────────────────
 
 function _sparql_parse(query::AbstractString, g::RDFGraph)
@@ -217,6 +223,21 @@ function _sparql_parse(query::AbstractString, g::RDFGraph)
         if !haskey(prefixes, prefix)
             prefixes[prefix] = uri
         end
+    end
+
+    # Strip FROM / FROM NAMED clauses (appear between SELECT clause and WHERE)
+    while true
+        m_fn = match(r"\bFROM\s+NAMED\s+<([^>]*)>"i, q)
+        if !isnothing(m_fn)
+            q = replace(q, m_fn.match => "", count=1)
+            continue
+        end
+        m_f = match(r"\bFROM\s+<([^>]*)>"i, q)
+        if !isnothing(m_f)
+            q = replace(q, m_f.match => "", count=1)
+            continue
+        end
+        break
     end
 
     q_upper = uppercase(strip(q))
@@ -257,7 +278,8 @@ function _sparql_parse_select(q::AbstractString, prefixes::Dict{String,String})
         ))
     end
     # Parse general select expressions: (expr AS ?alias) that are NOT aggregates
-    sel_expr_regex = r"\(([^()]*(?:\([^()]*\)[^()]*)*)\s+AS\s+\?(\w+)\s*\)"i
+    # Support up to 3 levels of nested parentheses
+    sel_expr_regex = r"\(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\s+AS\s+\?(\w+)\s*\)"i
     for m_se in eachmatch(sel_expr_regex, vars_str)
         inner = strip(m_se.captures[1])
         alias = String(m_se.captures[2])
@@ -265,7 +287,7 @@ function _sparql_parse_select(q::AbstractString, prefixes::Dict{String,String})
         if !isnothing(match(r"^\s*(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT|SAMPLE)\s*\("i, inner))
             continue
         end
-        push!(select_exprs, _SelectExpr(inner, alias))
+        push!(select_exprs, _SelectExpr(_sparql_expand_prefixes_in_expr(inner, prefixes), alias))
     end
     clean_vars = strip(replace(vars_str, agg_regex => ""))
     clean_vars = strip(replace(clean_vars, sel_expr_regex => ""))
@@ -409,6 +431,7 @@ function _sparql_expand_keywords!(out::Vector{String}, stmt::AbstractString)
                 is_kw = startswith(kw, "BIND") || startswith(kw, "FILTER") ||
                          startswith(kw, "OPTIONAL") || startswith(kw, "MINUS") ||
                          startswith(kw, "VALUES") || startswith(kw, "GRAPH") ||
+                         startswith(kw, "SERVICE") ||
                          startswith(kw, "{")
                 # Don't split before '{' if buffer ends with UNION (part of { } UNION { } construct)
                 if is_kw && startswith(kw, "{") && position(buf) > 0
@@ -494,7 +517,7 @@ function _sparql_parse_patterns(body::AbstractString, prefixes::Dict{String,Stri
         # Check for BIND (expr AS ?var)
         m = match(r"^BIND\s*\((.+)\s+AS\s+\?(\w+)\)\s*$"is, stmt)
         if !isnothing(m)
-            push!(patterns, _Bind(strip(m.captures[1]), String(m.captures[2])))
+            push!(patterns, _Bind(_sparql_expand_prefixes_in_expr(strip(m.captures[1]), prefixes), String(m.captures[2])))
             continue
         end
 
@@ -535,6 +558,16 @@ function _sparql_parse_patterns(body::AbstractString, prefixes::Dict{String,Stri
             graph_term = _sparql_parse_term(strip(m.captures[1]), prefixes)
             graph_patterns = _sparql_parse_patterns(m.captures[2], prefixes)
             push!(patterns, _GraphPattern(graph_term, graph_patterns))
+            continue
+        end
+
+        # Check for SERVICE [SILENT] <endpoint> { ... } or SERVICE [SILENT] ?var { ... }
+        m = match(r"^SERVICE\s+(SILENT\s+)?(\S+)\s*\{(.*)\}\s*$"is, stmt)
+        if !isnothing(m)
+            silent = !isnothing(m.captures[1])
+            endpoint = _sparql_parse_term(strip(m.captures[2]), prefixes)
+            svc_patterns = _sparql_parse_patterns(m.captures[3], prefixes)
+            push!(patterns, _Service(endpoint, svc_patterns, silent))
             continue
         end
 
@@ -888,6 +921,23 @@ function _sparql_parse_literal(token::AbstractString)
     end
 end
 
+"""Expand prefixed names in an expression string to full `<URI>` form."""
+function _sparql_expand_prefixes_in_expr(expr::AbstractString, prefixes::Dict{String,String})
+    result = expr
+    # Replace prefixed names (prefix:local) with <full-uri> but avoid touching
+    # strings, variables, and already-expanded URIs
+    result = replace(result, r"(?<![<\?\"'\\])(?<!\w)([A-Za-z_]\w*):([A-Za-z_]\w*)" => function(m_str)
+        mm = match(r"^([A-Za-z_]\w*):([A-Za-z_]\w*)$", m_str)
+        isnothing(mm) && return m_str
+        prefix = mm.captures[1]
+        local_name = mm.captures[2]
+        ns = get(prefixes, prefix, nothing)
+        isnothing(ns) && return m_str
+        return "<" * ns * local_name * ">"
+    end)
+    result
+end
+
 function _sparql_parse_template(body::AbstractString, prefixes::Dict{String,String})
     template = Tuple{Any,Any,Any}[]
     statements = _sparql_split_statements(body)
@@ -1163,6 +1213,39 @@ function _sparql_eval_patterns(g::RDFGraph, patterns::Vector{Any}, bindings::Vec
             # (named graph support would require a Dataset)
             inner = _sparql_eval_patterns(g, pattern.patterns, bindings)
             bindings = inner
+        elseif pattern isa _Service
+            # SERVICE [SILENT] <endpoint> { ... } — federated query
+            try
+                endpoint_uri = if pattern.endpoint isa URIRef
+                    pattern.endpoint.value
+                elseif pattern.endpoint isa String
+                    val = get(first(bindings), pattern.endpoint, nothing)
+                    val isa URIRef ? val.value : nothing
+                else
+                    nothing
+                end
+                if !isnothing(endpoint_uri)
+                    store = SPARQLStore(endpoint_uri)
+                    remote_query = _build_service_query(pattern.patterns)
+                    remote_results = _remote_select(store, remote_query)
+                    new_bindings = Dict{String, Identifier}[]
+                    for binding in bindings
+                        for rr in remote_results
+                            compatible = true
+                            for (k, v) in binding
+                                if haskey(rr, k) && rr[k] != v
+                                    compatible = false
+                                    break
+                                end
+                            end
+                            compatible && push!(new_bindings, merge(binding, rr))
+                        end
+                    end
+                    bindings = isempty(new_bindings) ? bindings : new_bindings
+                end
+            catch e
+                pattern.silent || rethrow(e)
+            end
         end
     end
 
@@ -1432,6 +1515,13 @@ function _sparql_eval_filter_expr(expr::AbstractString, binding::Dict{String, Id
     if !isnothing(m)
         val = get(binding, m.captures[1], nothing)
         return val isa BNode
+    end
+
+    # Handle isTRIPLE(?var)
+    m = match(r"^isTRIPLE\s*\(\s*\?(\w+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = get(binding, String(m.captures[1]), nothing)
+        return !isnothing(val) && val isa TripleTerm
     end
 
     # Handle isNUMERIC(?var)
@@ -2248,6 +2338,54 @@ function _sparql_eval_bind_expr(expr::AbstractString, binding::Dict{String, Iden
         return Literal(v1 == v2)
     end
 
+    # ─── RDF-star triple term functions (SPARQL 1.2) ─────────────
+
+    # TRIPLE(s, p, o) — construct a triple term
+    m = match(r"^TRIPLE\s*\((.+)\)$"i, expr)
+    if !isnothing(m)
+        args = _sparql_split_args(m.captures[1])
+        length(args) == 3 || return nothing
+        s = _sparql_eval_bind_expr(strip(args[1]), binding)
+        p = _sparql_eval_bind_expr(strip(args[2]), binding)
+        o = _sparql_eval_bind_expr(strip(args[3]), binding)
+        (isnothing(s) || isnothing(p) || isnothing(o)) && return nothing
+        s isa Node || return nothing
+        p isa URIRef || return nothing
+        return TripleTerm(s, p, o)
+    end
+
+    # SUBJECT(triple_term)
+    m = match(r"^SUBJECT\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        val isa TripleTerm && return val.subject
+        return nothing
+    end
+
+    # PREDICATE(triple_term)
+    m = match(r"^PREDICATE\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        val isa TripleTerm && return val.predicate
+        return nothing
+    end
+
+    # OBJECT(triple_term)
+    m = match(r"^OBJECT\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        val isa TripleTerm && return val.object
+        return nothing
+    end
+
+    # isTRIPLE(term)
+    m = match(r"^isTRIPLE\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        isnothing(val) && return nothing
+        return Literal(val isa TripleTerm)
+    end
+
     # ─── Arithmetic expressions (SPARQL 1.2) ─────────────────────
     arith_result = _sparql_eval_arithmetic(expr, binding)
     !isnothing(arith_result) && return arith_result
@@ -2756,6 +2894,26 @@ function sparql_results_csv(results; variables=nothing)
         write(io, "\n")
     end
     String(take!(io))
+end
+
+# ─── SERVICE query builder ─────────────────────────────────────────
+
+function _build_service_query(patterns::Vector{Any})
+    # Build a simple SELECT * WHERE { ... } from BGP patterns
+    body = IOBuffer()
+    vars = Set{String}()
+    for p in patterns
+        if p isa _BGPTriple
+            s_str = p.s isa String ? "?" * p.s : n3(p.s)
+            p_str = p.p isa String ? "?" * p.p : n3(p.p)
+            o_str = p.o isa String ? "?" * p.o : n3(p.o)
+            p.s isa String && push!(vars, p.s)
+            p.p isa String && push!(vars, p.p)
+            p.o isa String && push!(vars, p.o)
+            write(body, "  $s_str $p_str $o_str .\n")
+        end
+    end
+    "SELECT * WHERE {\n" * String(take!(body)) * "}\n"
 end
 
 # ─── Remote SPARQL query/update for SPARQLStore ────────────────────

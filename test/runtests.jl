@@ -26,5 +26,6 @@ using RDFLib
     include("test_duckdbstore.jl")
     include("test_sparqlstore.jl")
     include("test_sparql12.jl")
+    include("test_sparql12_gaps.jl")
     include("test_sparql_spec.jl")
 end
