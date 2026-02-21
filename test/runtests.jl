@@ -1,0 +1,28 @@
+using Test
+using RDFLib
+
+@testset "RDFLib.jl" begin
+    include("test_terms.jl")
+    include("test_namespaces.jl")
+    include("test_store.jl")
+    include("test_graph.jl")
+    include("test_ntriples.jl")
+    include("test_turtle.jl")
+    include("test_dataset.jl")
+    include("test_nquads.jl")
+    include("test_rdfxml.jl")
+    include("test_trig.jl")
+    include("test_jsonld.jl")
+    include("test_contentneg.jl")
+    include("test_resource.jl")
+    include("test_sparql.jl")
+    include("test_sparql_enhanced.jl")
+    include("test_visualization.jl")
+    include("test_isomorphism.jl")
+    include("test_graphutils.jl")
+    include("test_shacl.jl")
+    include("test_n3.jl")
+    include("test_sqlitestore.jl")
+    include("test_duckdbstore.jl")
+    include("test_sparqlstore.jl")
+end
