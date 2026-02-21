@@ -410,6 +410,14 @@ function _sparql_expand_keywords!(out::Vector{String}, stmt::AbstractString)
                          startswith(kw, "OPTIONAL") || startswith(kw, "MINUS") ||
                          startswith(kw, "VALUES") || startswith(kw, "GRAPH") ||
                          startswith(kw, "{")
+                # Don't split before '{' if buffer ends with UNION (part of { } UNION { } construct)
+                if is_kw && startswith(kw, "{") && position(buf) > 0
+                    buf_content = String(take!(buf))
+                    write(buf, buf_content)
+                    if endswith(rstrip(uppercase(buf_content)), "UNION")
+                        is_kw = false
+                    end
+                end
                 if is_kw && position(buf) > 0
                     push!(parts, String(take!(buf)))
                 else
@@ -603,7 +611,10 @@ function _sparql_split_statements(body::AbstractString)
                 quote_char = c
                 write(buf, c)
             elseif c == '<'
-                in_uri = true
+                # Only treat as URI if followed by a letter or _ (not space/digit for comparisons)
+                if i < length(chars) && (isletter(chars[i+1]) || chars[i+1] == '_')
+                    in_uri = true
+                end
                 write(buf, c)
             elseif c == '{'
                 depth += 1
@@ -1109,9 +1120,9 @@ function _sparql_eval_patterns(g::RDFGraph, patterns::Vector{Any}, bindings::Vec
             bindings = new_bindings
         elseif pattern isa _Minus
             new_bindings = Dict{String, Identifier}[]
+            inner = _sparql_eval_patterns(g, pattern.patterns)
             for b in bindings
-                inner = _sparql_eval_patterns(g, pattern.patterns, Dict{String, Identifier}[copy(b)])
-                # Keep binding only if no inner result is compatible
+                # Keep binding only if no inner result is compatible on shared variables
                 compatible = any(ib -> _sparql_compatible_shared(b, ib), inner)
                 compatible || push!(new_bindings, b)
             end
