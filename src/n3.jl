@@ -339,6 +339,20 @@ function parse_n3!(g::RDFGraph, input::AbstractString; base::Union{String,Nothin
     g
 end
 
+# Well-known N3/Semantic Web prefixes used without declaration
+const _N3_WELL_KNOWN_PREFIXES = Dict{String,String}(
+    "rdf"    => "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs"   => "http://www.w3.org/2000/01/rdf-schema#",
+    "owl"    => "http://www.w3.org/2002/07/owl#",
+    "xsd"    => "http://www.w3.org/2001/XMLSchema#",
+    "log"    => "http://www.w3.org/2000/10/swap/log#",
+    "math"   => "http://www.w3.org/2000/10/swap/math#",
+    "string" => "http://www.w3.org/2000/10/swap/string#",
+    "list"   => "http://www.w3.org/2000/10/swap/list#",
+    "crypto" => "http://www.w3.org/2000/10/swap/crypto#",
+    "time"   => "http://www.w3.org/2000/10/swap/time#",
+)
+
 mutable struct _N3Parser
     graph::RDFGraph
     input::String
@@ -347,10 +361,13 @@ mutable struct _N3Parser
     base::Union{String, Nothing}
     bnodecounter::Int
     formula_scope::Int  # incremented when entering a formula to scope _:label BNodes
+    forsome_uris::Set{String}   # URIs declared with @forSome
+    forall_uris::Set{String}    # URIs declared with @forAll
 end
 
 function _N3Parser(g::RDFGraph, input::String)
-    _N3Parser(g, input, 1, Dict{String,String}(), nothing, 0, 0)
+    _N3Parser(g, input, 1, Dict{String,String}(), nothing, 0, 0,
+              Set{String}(), Set{String}())
 end
 
 # ─── Shared parser utilities ────────────────────────────────────────
@@ -494,12 +511,17 @@ end
 function _n3_parse_forall_directive!(p::_N3Parser)
     _n3_consume_str!(p, "@forAll")
     _n3_skip_ws!(p)
-    # Parse variable list until '.'
+    rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+    log_ForAll = URIRef("http://www.w3.org/2000/10/swap/log#ForAll")
     while true
         _n3_skip_ws!(p)
         c = _n3_peek(p)
         (c === nothing || c == '.') && break
-        _n3_parse_node!(p)  # consume the variable/term
+        node = _n3_parse_node!(p)
+        if node isa URIRef
+            push!(p.forall_uris, node.value)
+            add!(p.graph, Triple(node, rdf_type, log_ForAll))
+        end
         _n3_skip_ws!(p)
         c = _n3_peek(p)
         c == ',' && (p.pos = nextind(p.input, p.pos))
@@ -510,11 +532,17 @@ end
 function _n3_parse_forsome_directive!(p::_N3Parser)
     _n3_consume_str!(p, "@forSome")
     _n3_skip_ws!(p)
+    rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+    log_ForSome = URIRef("http://www.w3.org/2000/10/swap/log#ForSome")
     while true
         _n3_skip_ws!(p)
         c = _n3_peek(p)
         (c === nothing || c == '.') && break
-        _n3_parse_node!(p)
+        node = _n3_parse_node!(p)
+        if node isa URIRef
+            push!(p.forsome_uris, node.value)
+            add!(p.graph, Triple(node, rdf_type, log_ForSome))
+        end
         _n3_skip_ws!(p)
         c = _n3_peek(p)
         c == ',' && (p.pos = nextind(p.input, p.pos))
@@ -727,6 +755,28 @@ function _n3_parse_verb!(p::_N3Parser, target::RDFGraph)
         end
     end
 
+    # Check for 'is' keyword (N3 "is ... of" syntax: subject is pred of object ≡ object pred subject)
+    if c == 'i' && _n3_at_string(p, "is")
+        is_end = p.pos
+        for _ in 1:2; is_end = nextind(p.input, is_end); end
+        if is_end > lastindex(p.input) || p.input[is_end] in (' ', '\t', '\n', '\r')
+            _n3_consume_str!(p, "is")
+            _n3_skip_ws!(p)
+            predicate = _n3_parse_node!(p, target)
+            _n3_skip_ws!(p)
+            if !_n3_at_string(p, "of")
+                throw(ArgumentError("Expected 'of' after 'is <predicate>' at position $(p.pos)"))
+            end
+            of_end = p.pos
+            for _ in 1:2; of_end = nextind(p.input, of_end); end
+            if !(of_end > lastindex(p.input) || p.input[of_end] in (' ', '\t', '\n', '\r'))
+                throw(ArgumentError("Expected 'of' keyword at position $(p.pos)"))
+            end
+            _n3_consume_str!(p, "of")
+            return (predicate, true)
+        end
+    end
+
     node = _n3_parse_node!(p, target)
     (node, false)
 end
@@ -736,7 +786,11 @@ function _n3_parse_object_list!(p::_N3Parser, target::RDFGraph, subject::Identif
         _n3_skip_ws!(p)
         object = _n3_parse_object!(p, target)
 
-        add!(target, Triple(subject, predicate, object))
+        if swap
+            add!(target, Triple(object, predicate, subject))
+        else
+            add!(target, Triple(subject, predicate, object))
+        end
 
         _n3_skip_ws!(p)
         c = _n3_peek(p)
@@ -1010,6 +1064,14 @@ function _n3_parse_collection!(p::_N3Parser, target::RDFGraph)
         end
     end
     _n3_consume!(p, ')')
+
+    # Mark sets with rdf:type log:Set
+    if is_set
+        rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        log_Set = URIRef("http://www.w3.org/2000/10/swap/log#Set")
+        add!(target, Triple(head, rdf_type, log_Set))
+    end
+
     head
 end
 
@@ -1048,7 +1110,16 @@ function _n3_parse_prefixed_name!(p::_N3Parser)
 
     ns_uri = get(p.prefixes, prefix, nothing)
     if isnothing(ns_uri)
-        throw(ArgumentError("Unknown prefix: '$prefix' at position $(p.pos)"))
+        # Default empty prefix to base URI + "#" (N3/CWM convention)
+        if prefix == "" && !isnothing(p.base)
+            ns_uri = p.base * "#"
+        else
+            # Fallback: well-known N3/Semantic Web prefixes
+            ns_uri = get(_N3_WELL_KNOWN_PREFIXES, prefix, nothing)
+            if isnothing(ns_uri)
+                throw(ArgumentError("Unknown prefix: '$prefix' at position $(p.pos)"))
+            end
+        end
     end
     URIRef(ns_uri * localname)
 end

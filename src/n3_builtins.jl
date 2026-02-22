@@ -744,6 +744,35 @@ function _builtin_string_lowerCase(subject::Identifier, object::Identifier,
     _bind_or_check(object, Literal(lowercase(s.lexical)), bindings)
 end
 
+function _item_to_string(item::Identifier)::Union{String,Nothing}
+    if item isa Literal
+        # For numeric/boolean typed literals, evaluate to canonical string form
+        if item.datatype !== nothing
+            dt = item.datatype.value
+            if dt in ("http://www.w3.org/2001/XMLSchema#integer",
+                       "http://www.w3.org/2001/XMLSchema#decimal",
+                       "http://www.w3.org/2001/XMLSchema#double",
+                       "http://www.w3.org/2001/XMLSchema#float")
+                v = tryparse(Float64, item.lexical)
+                if v !== nothing
+                    if isinteger(v) && isfinite(v)
+                        return string(Int(v))
+                    else
+                        return string(v)
+                    end
+                end
+            elseif dt == "http://www.w3.org/2001/XMLSchema#boolean"
+                return item.lexical in ("true", "1") ? "true" : "false"
+            end
+        end
+        return item.lexical
+    elseif item isa URIRef
+        return item.value
+    else
+        return nothing
+    end
+end
+
 function _builtin_string_concatenation(subject::Identifier, object::Identifier,
                                        bindings::Dict{Variable, Identifier},
                                        graph::Union{RDFGraph, Nothing}=nothing)
@@ -754,8 +783,9 @@ function _builtin_string_concatenation(subject::Identifier, object::Identifier,
         items = _resolve_items(items, bindings)
         strs = String[]
         for item in items
-            item isa Literal || return _failure()
-            push!(strs, item.lexical)
+            str = _item_to_string(item)
+            str === nothing && return _failure()
+            push!(strs, str)
         end
         return _bind_or_check(object, Literal(join(strs, "")), bindings)
     end
@@ -1032,6 +1062,42 @@ function _builtin_string_notContainsRoughly(subject::Identifier, object::Identif
                                             graph::Union{RDFGraph, Nothing}=nothing)
     result = _builtin_string_containsRoughly(subject, object, bindings, graph)
     isempty(result) ? _success(bindings) : _failure()
+end
+
+function _percent_encode(s::String, safe::Set{Char})
+    buf = IOBuffer()
+    for c in s
+        if c in safe
+            write(buf, c)
+        else
+            for b in codeunits(string(c))
+                write(buf, '%', uppercase(string(b; base=16, pad=2)))
+            end
+        end
+    end
+    String(take!(buf))
+end
+
+function _builtin_string_encodeForURI(subject::Identifier, object::Identifier,
+                                      bindings::Dict{Variable, Identifier},
+                                      graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    # RFC 3986: unreserved + sub-delims + :@#? (but NOT /)
+    safe = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~!\$&'()*+,;=:@#?")
+    encoded = _percent_encode(s.lexical, safe)
+    _bind_or_check(object, Literal(encoded), bindings)
+end
+
+function _builtin_string_encodeForFragID(subject::Identifier, object::Identifier,
+                                         bindings::Dict{Variable, Identifier},
+                                         graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    # Fragment ID: alphanumeric + -_./ are safe
+    safe = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_./")
+    encoded = _percent_encode(s.lexical, safe)
+    _bind_or_check(object, Literal(encoded), bindings)
 end
 
 # ─── Log builtins ──────────────────────────────────────────────────
@@ -2789,6 +2855,126 @@ function _builtin_time_day(subject::Identifier, object::Identifier,
     _bind_or_check(object, _from_number(parse(Int, m.captures[1])), bindings)
 end
 
+function _builtin_time_hour(subject::Identifier, object::Identifier,
+                            bindings::Dict{Variable, Identifier},
+                            graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    m = match(r"T(\d{2})", s.lexical)
+    m === nothing && return _failure()
+    _bind_or_check(object, _from_number(parse(Int, m.captures[1])), bindings)
+end
+
+function _builtin_time_minute(subject::Identifier, object::Identifier,
+                              bindings::Dict{Variable, Identifier},
+                              graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    m = match(r"T\d{2}:(\d{2})", s.lexical)
+    m === nothing && return _failure()
+    _bind_or_check(object, _from_number(parse(Int, m.captures[1])), bindings)
+end
+
+function _builtin_time_second(subject::Identifier, object::Identifier,
+                              bindings::Dict{Variable, Identifier},
+                              graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    m = match(r"T\d{2}:\d{2}:(\d{2})", s.lexical)
+    m === nothing && return _failure()
+    _bind_or_check(object, _from_number(parse(Int, m.captures[1])), bindings)
+end
+
+function _builtin_time_timeZone(subject::Identifier, object::Identifier,
+                                bindings::Dict{Variable, Identifier},
+                                graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    m = match(r"([+-]\d{2}:\d{2})$", s.lexical)
+    m === nothing && return _failure()
+    _bind_or_check(object, Literal(m.captures[1]), bindings)
+end
+
+function _parse_datetime_to_unix(datestr::String)
+    # Parse ISO 8601 datetime strings to Unix epoch seconds
+    # Supports: "2002-06-22T22:09:32-05:00", "2002-06-22T12:34Z", "2002-06-22", "2002-06", "2002"
+    tz_offset = 0
+    clean = datestr
+    # Extract timezone
+    m_tz = match(r"([+-])(\d{2}):(\d{2})$", clean)
+    if m_tz !== nothing
+        sign = m_tz.captures[1] == "+" ? 1 : -1
+        tz_offset = sign * (parse(Int, m_tz.captures[2]) * 3600 + parse(Int, m_tz.captures[3]) * 60)
+        clean = clean[1:m_tz.offset-1]
+    elseif endswith(clean, "Z")
+        clean = clean[1:end-1]
+    end
+
+    parts = split(clean, "T")
+    date_part = parts[1]
+    time_part = length(parts) > 1 ? parts[2] : ""
+
+    date_fields = split(date_part, "-")
+    yr = parse(Int, date_fields[1])
+    mo = length(date_fields) >= 2 ? parse(Int, date_fields[2]) : 1
+    dy = length(date_fields) >= 3 ? parse(Int, date_fields[3]) : 1
+
+    hr = 0; mn = 0; sc = 0
+    if !isempty(time_part)
+        time_fields = split(time_part, ":")
+        hr = parse(Int, time_fields[1])
+        mn = length(time_fields) >= 2 ? parse(Int, time_fields[2]) : 0
+        if length(time_fields) >= 3
+            sc_val = tryparse(Float64, time_fields[3])
+            sc = sc_val !== nothing ? floor(Int, sc_val) : 0
+        end
+    end
+
+    dt = Dates.DateTime(yr, mo, dy, hr, mn, sc)
+    epoch = Dates.DateTime(1970, 1, 1)
+    secs = div(Dates.value(dt - epoch), 1000) - tz_offset
+    return secs
+end
+
+function _builtin_time_inSeconds(subject::Identifier, object::Identifier,
+                                 bindings::Dict{Variable, Identifier},
+                                 graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    if s isa Literal
+        secs = _parse_datetime_to_unix(s.lexical)
+        return _bind_or_check(object, _from_number(secs), bindings)
+    elseif o isa Literal
+        # Reverse: given seconds, produce datetime string
+        n = _to_number(o)
+        n === nothing && return _failure()
+        epoch = Dates.DateTime(1970, 1, 1)
+        dt = epoch + Dates.Second(Int(n))
+        dt_str = Dates.format(dt, "yyyy-mm-ddTHH:MM:SSZ")
+        # Remove trailing 'Z' to add as 'Z'
+        return _bind_or_check(subject, Literal(dt_str), bindings)
+    end
+    return _failure()
+end
+
+function _builtin_time_dayOfWeek(subject::Identifier, object::Identifier,
+                                 bindings::Dict{Variable, Identifier},
+                                 graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Literal || return _failure()
+    # Parse date components directly (local time, not UTC-adjusted)
+    m = match(r"^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?", s.lexical)
+    m === nothing && return _failure()
+    yr = parse(Int, m.captures[1])
+    mo = m.captures[2] !== nothing ? parse(Int, m.captures[2]) : 1
+    dy = m.captures[3] !== nothing ? parse(Int, m.captures[3]) : 1
+    dt = Dates.Date(yr, mo, dy)
+    # Julia: Monday=1..Sunday=7; CWM: Sunday=0..Saturday=6
+    dow = Dates.dayofweek(dt)
+    cwm_dow = dow == 7 ? 0 : dow
+    _bind_or_check(object, _from_number(cwm_dow), bindings)
+end
+
 # ─── Registration ──────────────────────────────────────────────────
 
 function _register_n3_builtins!()
@@ -2843,6 +3029,8 @@ function _register_n3_builtins!()
     register_builtin!(str("notEqualIgnoringCase"),  _builtin_string_notEqualIgnoringCase)
     register_builtin!(str("containsRoughly"),       _builtin_string_containsRoughly)
     register_builtin!(str("notContainsRoughly"),    _builtin_string_notContainsRoughly)
+    register_builtin!(str("encodeForURI"),           _builtin_string_encodeForURI)
+    register_builtin!(str("encodeForFragID"),        _builtin_string_encodeForFragID)
 
     log = Namespace(_LOG)
     register_builtin!(log("equalTo"),       _builtin_log_equalTo)
@@ -2927,6 +3115,12 @@ function _register_n3_builtins!()
     register_builtin!(time("year"),      _builtin_time_year)
     register_builtin!(time("month"),     _builtin_time_month)
     register_builtin!(time("day"),       _builtin_time_day)
+    register_builtin!(time("hour"),      _builtin_time_hour)
+    register_builtin!(time("minute"),    _builtin_time_minute)
+    register_builtin!(time("second"),    _builtin_time_second)
+    register_builtin!(time("dayOfWeek"), _builtin_time_dayOfWeek)
+    register_builtin!(time("inSeconds"), _builtin_time_inSeconds)
+    register_builtin!(time("timeZone"),  _builtin_time_timeZone)
 
     nothing
 end
