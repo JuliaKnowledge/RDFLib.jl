@@ -62,7 +62,7 @@ function _match_with_builtins(patterns::Vector{Triple}, graph::RDFGraph, binding
     # This allows builtins and structural checks to find list elements
     if !isempty(list_structure)
         for t in list_structure
-            add!(graph, t)
+            add!(graph, apply_bindings(t, bindings))
         end
     end
 
@@ -78,7 +78,8 @@ function _match_with_builtins(patterns::Vector{Triple}, graph::RDFGraph, binding
     isempty(builtin) && return base_bindings
 
     # Sort builtins so producers come before consumers
-    sorted = _sort_builtins(builtin, isempty(base_bindings) ? bindings : base_bindings[1])
+    sorted = _sort_builtins(builtin, isempty(base_bindings) ? bindings : base_bindings[1];
+                            list_structure=list_structure)
 
     results = Binding[]
     for b in base_bindings
@@ -89,50 +90,119 @@ end
 
 """
 Sort builtins topologically: builtins that produce variables should come before
-builtins that consume those variables.
+builtins that consume those variables.  Uses Kahn's algorithm on a dependency
+graph derived from subject-input / object-output variable analysis.
 """
-function _sort_builtins(builtins::Vector{Triple}, bindings::Binding)
+function _sort_builtins(builtins::Vector{Triple}, bindings::Binding;
+                        list_structure::Vector{Triple}=Triple[])
     length(builtins) <= 1 && return builtins
 
-    # Collect all variables in subject/object of each builtin
+    # Build map: BNode → Variables in its list structure
+    bnode_vars = Dict{BNode, Set{Variable}}()
+    bnode_rest = Dict{BNode, BNode}()
+    for t in list_structure
+        t.subject isa BNode || continue
+        vars = get!(Set{Variable}, bnode_vars, t.subject)
+        t.object isa Variable && push!(vars, t.object)
+        if t.predicate == URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest") && t.object isa BNode
+            bnode_rest[t.subject] = t.object
+        end
+    end
+    # Propagate vars through rdf:rest chains so list heads see all vars
+    changed = true
+    while changed
+        changed = false
+        for (bn, rest_bn) in bnode_rest
+            haskey(bnode_vars, rest_bn) || continue
+            vars = get!(Set{Variable}, bnode_vars, bn)
+            before = length(vars)
+            union!(vars, bnode_vars[rest_bn])
+            length(vars) > before && (changed = true)
+        end
+    end
+
     function _vars(node::Identifier)
         vars = Set{Variable}()
         if node isa Variable
             push!(vars, node)
-        elseif node isa BNode
-            # BNodes in list structure may represent lists with variables
+        elseif node isa BNode && haskey(bnode_vars, node)
+            union!(vars, bnode_vars[node])
         end
         return vars
     end
 
-    bound_vars = Set{Variable}(keys(bindings))
-    remaining = collect(1:length(builtins))
-    sorted = Triple[]
+    n = length(builtins)
+    initially_bound = Set{Variable}(keys(bindings))
 
-    for _round in 1:length(builtins)
-        # Find a builtin where all subject variables are bound (it can produce object vars)
-        best = nothing
-        for i in remaining
-            bt = builtins[i]
-            svars = _vars(bt.subject)
-            ovars = _vars(bt.object)
-            # Prefer builtins whose subject is fully bound (producing mode)
-            if issubset(svars, bound_vars)
-                best = i
-                break
+    # Classify builtins for input/output analysis
+    _LOG_NS = "http://www.w3.org/2000/10/swap/log#"
+    check_only_preds = Set([URIRef(_LOG_NS * "notEqualTo"), URIRef(_LOG_NS * "notIncludes")])
+    equalTo_pred = URIRef(_LOG_NS * "equalTo")
+
+    # Compute input/output vars per builtin
+    input_vars  = Vector{Set{Variable}}(undef, n)
+    output_vars = Vector{Set{Variable}}(undef, n)
+    is_check    = falses(n)
+    for i in 1:n
+        svars = _vars(builtins[i].subject)
+        ovars = _vars(builtins[i].object)
+        if builtins[i].predicate in check_only_preds
+            # Check builtins need ALL vars bound, produce nothing
+            input_vars[i]  = union(svars, ovars)
+            output_vars[i] = Set{Variable}()
+            is_check[i] = true
+        elseif builtins[i].predicate == equalTo_pred
+            # equalTo can bind either side: subject input → object output, or vice versa
+            input_vars[i]  = svars
+            output_vars[i] = union(svars, ovars)
+        else
+            # Standard: subject is input, object is output
+            input_vars[i]  = svars
+            output_vars[i] = ovars
+        end
+    end
+
+    # Build dependency edges: i depends on j if i needs a var that j produces
+    # (and that var is not already bound from the regular-pattern match)
+    deps = [Set{Int}() for _ in 1:n]
+    for i in 1:n
+        needed = setdiff(input_vars[i], initially_bound)
+        for j in 1:n
+            i == j && continue
+            if !isempty(intersect(needed, output_vars[j]))
+                push!(deps[i], j)
             end
         end
-        if best === nothing
-            # Fallback: pick any remaining
-            best = remaining[1]
-        end
+    end
 
-        bt = builtins[best]
-        push!(sorted, bt)
-        filter!(x -> x != best, remaining)
-        # The produced variables are the object variables
-        union!(bound_vars, _vars(bt.object))
-        union!(bound_vars, _vars(bt.subject))
+    # Kahn's algorithm with priority: prefer non-check builtins
+    sorted = Triple[]
+    in_degree = [length(deps[i]) for i in 1:n]
+    ready = [i for i in 1:n if in_degree[i] == 0]
+    processed = Set{Int}()
+
+    while !isempty(ready)
+        # Prefer non-check builtins (producers) over checks
+        cidx = findfirst(i -> !is_check[i], ready)
+        pos = cidx !== nothing ? cidx : 1
+        idx = ready[pos]
+        deleteat!(ready, pos)
+        push!(processed, idx)
+        push!(sorted, builtins[idx])
+        for i in 1:n
+            if i ∉ processed && idx in deps[i]
+                delete!(deps[i], idx)
+                in_degree[i] -= 1
+                if in_degree[i] == 0
+                    push!(ready, i)
+                end
+            end
+        end
+    end
+
+    # Append any remaining (cycles or unresolved)
+    for i in 1:n
+        i ∉ processed && push!(sorted, builtins[i])
     end
 
     return sorted
@@ -372,6 +442,10 @@ function _match_backward_recursive!(results::Vector{Binding}, patterns::Vector{T
     p = pattern.predicate isa Variable ? nothing : pattern.predicate
     o = pattern.object isa Variable ? nothing : pattern.object
 
+    # Widen query for Formula terms (need unification)
+    if s isa Formula; s = nothing; end
+    if o isa Formula; o = nothing; end
+
     # Widen query for BNode list heads
     s_is_list = (s isa BNode && list_graph !== nothing && _resolve_rdf_list(s, list_graph) !== nothing)
     o_is_list = (o isa BNode && list_graph !== nothing && _resolve_rdf_list(o, list_graph) !== nothing)
@@ -395,13 +469,25 @@ function _match_backward_recursive!(results::Vector{Binding}, patterns::Vector{T
             rule.direction == BACKWARD || continue
             length(rule.consequent) >= 1 || continue
 
-            con_pattern = rule.consequent[1]
-            # Freshen rule variables to avoid conflicts
+            # Find the consequent triple matching the pattern's predicate
+            con_idx = findfirst(t -> t.predicate == pattern.predicate, rule.consequent)
+            con_idx === nothing && continue
+            con_pattern = rule.consequent[con_idx]
+            # Freshen rule variables and BNodes to avoid conflicts
             var_map = Dict{Variable, Variable}()
-            fresh_ant = [_freshen_triple(t, var_map) for t in rule.antecedent]
-            fresh_con = _freshen_triple(con_pattern, var_map)
+            bnode_map = Dict{BNode, BNode}()
+            fresh_ant = [_freshen_triple(t, var_map; bnode_map=bnode_map) for t in rule.antecedent]
+            fresh_con_all = [_freshen_triple(t, var_map; bnode_map=bnode_map) for t in rule.consequent]
+            fresh_con = fresh_con_all[con_idx]
 
             unified = unify_triple(fresh_con, pattern, Binding())
+            # If simple unify fails, try structural list unification
+            if unified === nothing
+                rule_list_graph = RDFGraph()
+                for t in fresh_con_all; add!(rule_list_graph, t); end
+                unified = _unify_triple_structural(fresh_con, pattern, Binding(), rule_list_graph, 
+                                                   list_graph !== nothing ? list_graph : graph)
+            end
             unified === nothing && continue
 
             merged = _merge_bindings(unified, bindings)
@@ -432,21 +518,32 @@ function _match_backward_recursive!(results::Vector{Binding}, patterns::Vector{T
     end
 end
 
-"""Freshen variables in a triple to avoid name collisions between rules."""
-function _freshen_triple(t::Triple, var_map::Dict{Variable, Variable})
-    s = _freshen_term(t.subject, var_map)
+"""Freshen variables and BNodes in a triple to avoid name collisions between rules."""
+function _freshen_triple(t::Triple, var_map::Dict{Variable, Variable};
+                         bnode_map::Union{Dict{BNode, BNode}, Nothing}=nothing)
+    s = _freshen_term(t.subject, var_map; bnode_map=bnode_map)
     p = t.predicate  # predicate stays as-is
-    o = _freshen_term(t.object, var_map)
+    o = _freshen_term(t.object, var_map; bnode_map=bnode_map)
     Triple(s, p, o)
 end
 
-function _freshen_term(term::Variable, var_map::Dict{Variable, Variable})
+function _freshen_term(term::Variable, var_map::Dict{Variable, Variable};
+                       bnode_map::Union{Dict{BNode, BNode}, Nothing}=nothing)
     get!(var_map, term) do
         Variable(term.name * "_" * string(objectid(var_map), base=16)[end-3:end])
     end
 end
 
-function _freshen_term(term::Identifier, var_map::Dict{Variable, Variable})
+function _freshen_term(term::BNode, var_map::Dict{Variable, Variable};
+                       bnode_map::Union{Dict{BNode, BNode}, Nothing}=nothing)
+    bnode_map === nothing && return term
+    get!(bnode_map, term) do
+        BNode()
+    end
+end
+
+function _freshen_term(term::Identifier, var_map::Dict{Variable, Variable};
+                       bnode_map::Union{Dict{BNode, BNode}, Nothing}=nothing)
     term
 end
 
@@ -474,6 +571,16 @@ end
 """Check if a triple exists in graph, using structural list comparison for BNode terms."""
 function _triple_exists_structurally(t::Triple, graph::RDFGraph)
     t in graph && return true
+
+    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+
+    # Skip structural dedup for list structure triples (rdf:first/rdf:rest with BNode subject)
+    # These must always be added so BNode list heads can be resolved later
+    if t.subject isa BNode && (t.predicate == rdf_first || t.predicate == rdf_rest)
+        return false
+    end
+
     # If object is a BNode (might be list head), check structurally
     if t.object isa BNode
         for existing in triples(graph, (t.subject, t.predicate, nothing))
@@ -482,11 +589,16 @@ function _triple_exists_structurally(t::Triple, graph::RDFGraph)
             end
         end
     end
-    # If subject is a BNode
+    # If subject is a BNode (existential in consequent), check if a triple with
+    # same predicate and object already exists with any BNode subject
     if t.subject isa BNode
-        for existing in triples(graph, (nothing, t.predicate, t.object))
-            if existing.subject isa BNode && _terms_equal(t.subject, existing.subject, graph)
-                return true
+        for existing in triples(graph, (nothing, t.predicate, nothing))
+            if existing.subject isa BNode
+                if t.object isa BNode && existing.object isa BNode
+                    _terms_equal(t.object, existing.object, graph) && return true
+                elseif _terms_match(t.object, existing.object)
+                    return true
+                end
             end
         end
     end
@@ -495,6 +607,9 @@ end
 
 function eam_step!(reasoner::N3Reasoner)::Bool
     new_facts = false
+
+    _rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    _rdf_rest  = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
 
     for rule in reasoner.ruleset.forward_rules
         bindings_list = _match_with_builtins(rule.antecedent, reasoner.facts, Binding();
@@ -508,14 +623,48 @@ function eam_step!(reasoner::N3Reasoner)::Bool
         end
 
         for bindings in bindings_list
-            # Fresh BNode map per binding set, only for consequent-pattern BNodes
             bnode_map = Dict{BNode, BNode}()
 
+            # Phase 1: Ground and freshen all consequent triples
+            grounded_all = Triple[]
             for con_pattern in rule.consequent
                 grounded = apply_bindings(con_pattern, bindings)
-                # Only freshen BNodes that were in the original consequent pattern
                 grounded = _freshen_bnodes_selective(grounded, bnode_map, consequent_bnodes)
+                push!(grounded_all, grounded)
+            end
 
+            # Phase 2: Build temp graph from list structure triples for BNode list resolution
+            temp_graph = RDFGraph()
+            main_triples = Triple[]
+            for gt in grounded_all
+                if gt.subject isa BNode && (gt.predicate == _rdf_first || gt.predicate == _rdf_rest)
+                    add!(temp_graph, gt)
+                else
+                    push!(main_triples, gt)
+                end
+            end
+
+            # Phase 3: For main triples with BNode list heads, use _build_rdf_list
+            # to reuse existing lists (content-addressed dedup)
+            for (i, gt) in enumerate(main_triples)
+                if gt.object isa BNode
+                    items = _resolve_rdf_list(gt.object, temp_graph)
+                    if items !== nothing
+                        head = _build_rdf_list(items, reasoner.facts)
+                        main_triples[i] = Triple(gt.subject, gt.predicate, head)
+                    end
+                end
+                if gt.subject isa BNode
+                    items = _resolve_rdf_list(gt.subject, temp_graph)
+                    if items !== nothing
+                        head = _build_rdf_list(items, reasoner.facts)
+                        main_triples[i] = Triple(head, main_triples[i].predicate, main_triples[i].object)
+                    end
+                end
+            end
+
+            # Phase 4: Add only main triples (list structure handled by _build_rdf_list)
+            for grounded in main_triples
                 if is_ground(grounded) && !_triple_exists_structurally(grounded, reasoner.facts)
                     path_key = hash((hash(rule), hash(grounded)))
                     path_key in reasoner.euler_path && continue
@@ -526,7 +675,6 @@ function eam_step!(reasoner::N3Reasoner)::Bool
                     reasoner.inference_count += 1
                     new_facts = true
 
-                    # Check if derived triple is itself a rule (nested implication)
                     if grounded.predicate == URIRef("http://www.w3.org/2000/10/swap/log#implies")
                         if grounded.subject isa Formula && grounded.object isa Formula
                             new_rule = N3Rule(
@@ -701,11 +849,14 @@ function reason(data::RDFGraph;
     append!(all_rules, extract_rules(data))
 
     # Remove rule (log:implies and log:impliedBy) triples from working graph
+    # Only remove triples where both subject and object are Formulas (actual rules)
     log_implies = URIRef("http://www.w3.org/2000/10/swap/log#implies")
     log_impliedBy = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
     for pred in (log_implies, log_impliedBy)
         for t in collect(triples(working, (nothing, pred, nothing)))
-            remove!(working, (t.subject, t.predicate, t.object))
+            if t.subject isa Formula && t.object isa Formula
+                remove!(working, (t.subject, t.predicate, t.object))
+            end
         end
     end
 

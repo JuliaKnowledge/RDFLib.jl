@@ -23,42 +23,47 @@ function _terms_match(a::Identifier, b::Identifier)
 end
 
 function unify_term(a::Variable, b::Variable, bindings::Binding)
-    if haskey(bindings, a)
-        if haskey(bindings, b)
-            return _terms_match(bindings[a], bindings[b]) ? copy(bindings) : nothing
-        else
-            result = copy(bindings)
-            result[b] = bindings[a]
-            return result
-        end
-    elseif haskey(bindings, b)
+    ra = _resolve(a, bindings)
+    rb = _resolve(b, bindings)
+    # Both resolved to the same term
+    ra == rb && return copy(bindings)
+    if ra isa Variable && rb isa Variable
+        # Both still unbound — bind a to b
         result = copy(bindings)
-        result[a] = bindings[b]
+        result[ra] = rb
+        return result
+    elseif ra isa Variable
+        result = copy(bindings)
+        result[ra] = rb
+        return result
+    elseif rb isa Variable
+        result = copy(bindings)
+        result[rb] = ra
         return result
     else
-        # Both unbound — bind a to b
-        result = copy(bindings)
-        result[a] = b
-        return result
+        # Both ground — check match
+        return _terms_match(ra, rb) ? copy(bindings) : nothing
     end
 end
 
 function unify_term(a::Variable, b::Identifier, bindings::Binding)
-    if haskey(bindings, a)
-        return _terms_match(bindings[a], b) ? copy(bindings) : nothing
+    ra = _resolve(a, bindings)
+    if ra isa Variable
+        result = copy(bindings)
+        result[ra] = b
+        return result
     end
-    result = copy(bindings)
-    result[a] = b
-    return result
+    return _terms_match(ra, b) ? copy(bindings) : nothing
 end
 
 function unify_term(a::Identifier, b::Variable, bindings::Binding)
-    if haskey(bindings, b)
-        return _terms_match(bindings[b], a) ? copy(bindings) : nothing
+    rb = _resolve(b, bindings)
+    if rb isa Variable
+        result = copy(bindings)
+        result[rb] = a
+        return result
     end
-    result = copy(bindings)
-    result[b] = a
-    return result
+    return _terms_match(rb, a) ? copy(bindings) : nothing
 end
 
 function unify_term(a::Identifier, b::Identifier, bindings::Binding)
@@ -71,7 +76,33 @@ function unify_term(a::Identifier, b::Identifier, bindings::Binding)
             return copy(bindings)
         end
     end
+    # Formula unification: match pattern formula (a) against ground formula (b)
+    if a isa Formula && b isa Formula
+        return _unify_formulas(a, b, bindings)
+    end
     return nothing
+end
+
+# Unify two formulas by matching each triple in `pattern` against triples in `target`.
+function _unify_formulas(pattern::Formula, target::Formula, bindings::Binding)
+    pat_triples = collect(pattern.graph)
+    tgt_triples = collect(target.graph)
+    results = _unify_formula_recursive(pat_triples, tgt_triples, 1, bindings)
+    isempty(results) ? nothing : results[1]
+end
+
+function _unify_formula_recursive(pat::Vector{Triple}, tgt::Vector{Triple},
+                                   idx::Int, bindings::Binding)
+    idx > length(pat) && return [bindings]
+    results = Binding[]
+    for ft in tgt
+        new_b = unify_triple(pat[idx], ft, bindings)
+        if new_b !== nothing
+            sub = _unify_formula_recursive(pat, tgt, idx + 1, new_b)
+            append!(results, sub)
+        end
+    end
+    results
 end
 
 """
@@ -94,14 +125,14 @@ end
 Substitute all bound variables in a triple pattern.
 """
 function apply_bindings(t::Triple, bindings::Binding)
-    s = t.subject isa Variable ? get(bindings, t.subject, t.subject) : t.subject
-    p = t.predicate isa Variable ? get(bindings, t.predicate, t.predicate) : t.predicate
-    o = t.object isa Variable ? get(bindings, t.object, t.object) : t.object
+    s = t.subject isa Variable ? _resolve(t.subject, bindings) : t.subject
+    p = t.predicate isa Variable ? _resolve(t.predicate, bindings) : t.predicate
+    o = t.object isa Variable ? _resolve(t.object, bindings) : t.object
     Triple(s, p, o)
 end
 
 function apply_bindings(term::Variable, bindings::Binding)
-    get(bindings, term, term)
+    _resolve(term, bindings)
 end
 
 function apply_bindings(term::Identifier, bindings::Binding)
@@ -153,6 +184,10 @@ function _match_recursive!(results::Vector{Binding}, patterns::Vector{Triple},
     # Widen store query for numeric literals (decimal vs double etc.)
     if s isa Literal && _to_number(s) !== nothing; s = nothing; end
     if o isa Literal && _to_number(o) !== nothing; o = nothing; end
+
+    # Widen query for Formula terms (they contain variables, need unification)
+    if s isa Formula; s = nothing; end
+    if o isa Formula; o = nothing; end
 
     # If s/o are BNode list heads in the list_graph, widen query to allow structural matching
     s_is_list = (s isa BNode && list_graph !== nothing && _resolve_rdf_list(s, list_graph) !== nothing)

@@ -33,8 +33,15 @@ end
 
 # ─── helpers ────────────────────────────────────────────────────────
 
-_resolve(term::Identifier, bindings::Dict{Variable, Identifier}) =
-    term isa Variable ? get(bindings, term, term) : term
+# Follow variable binding chains to find the ground term (or the last Variable).
+function _resolve(term::Identifier, bindings::Dict{Variable, Identifier})
+    seen = Set{Variable}()
+    while term isa Variable && haskey(bindings, term) && !(term in seen)
+        push!(seen, term)
+        term = bindings[term]
+    end
+    term
+end
 
 function _to_number(lit::Identifier)
     lit isa Literal || return nothing
@@ -864,7 +871,23 @@ function _builtin_log_equalTo(subject::Identifier, object::Identifier,
                               graph::Union{RDFGraph, Nothing}=nothing)
     s = _resolve(subject, bindings)
     o = _resolve(object, bindings)
-    (s isa Variable || o isa Variable) && return _failure()
+    # If both are unbound variables, bind them together (succeed)
+    if s isa Variable && o isa Variable
+        result = copy(bindings)
+        result[s] = o
+        return [result]
+    end
+    # If one is unbound, bind it to the other
+    if s isa Variable
+        result = copy(bindings)
+        result[s] = o
+        return [result]
+    end
+    if o isa Variable
+        result = copy(bindings)
+        result[o] = s
+        return [result]
+    end
     # Handle RDF list equality
     if (s isa BNode || s isa URIRef) && (o isa BNode || o isa URIRef) && graph !== nothing
         s_list = _resolve_rdf_list(s, graph)
@@ -895,6 +918,7 @@ function _builtin_log_notEqualTo(subject::Identifier, object::Identifier,
                                  graph::Union{RDFGraph, Nothing}=nothing)
     s = _resolve(subject, bindings)
     o = _resolve(object, bindings)
+    # If either is an unbound variable, can't determine inequality
     (s isa Variable || o isa Variable) && return _failure()
     # Handle RDF list equality
     if (s isa BNode || s isa URIRef) && (o isa BNode || o isa URIRef) && graph !== nothing
@@ -912,6 +936,12 @@ function _builtin_log_notEqualTo(subject::Identifier, object::Identifier,
             return a != b ? _success(bindings) : _failure()
         end
     end
+    # Formula comparison
+    if s isa Formula && o isa Formula
+        s_triples = Set(collect(s.graph))
+        o_triples = Set(collect(o.graph))
+        return s_triples != o_triples ? _success(bindings) : _failure()
+    end
     s != o ? _success(bindings) : _failure()
 end
 
@@ -921,18 +951,40 @@ function _builtin_log_includes(subject::Identifier, object::Identifier,
     s = _resolve(subject, bindings)
     o = _resolve(object, bindings)
     (s isa Formula && o isa Formula) || return _failure()
-    # Check if all triples in object's graph are included in subject's graph
-    for t in o.graph
-        found = false
-        for ft in triples(s.graph, (nothing, nothing, nothing))
-            if unify_triple(t, ft, Binding()) !== nothing
-                found = true
-                break
+    # Match all triples in object's graph against subject's graph, collecting bindings
+    o_triples = collect(o.graph)
+    isempty(o_triples) && return _success(bindings)
+    match_results = _match_formula_triples(o_triples, collect(s.graph), 1, Dict{Variable, Identifier}())
+    isempty(match_results) && return _failure()
+    # Merge the first successful match into bindings
+    results = Dict{Variable, Identifier}[]
+    for mr in match_results
+        merged = copy(bindings)
+        for (k, v) in mr
+            if haskey(merged, k)
+                merged[k] != v && @goto next_match
+            else
+                merged[k] = v
             end
         end
-        found || return _failure()
+        push!(results, merged)
+        @label next_match
     end
-    _success(bindings)
+    isempty(results) ? _failure() : results
+end
+
+function _match_formula_triples(pat::Vector{Triple}, facts::Vector{Triple},
+                                 idx::Int, bindings::Dict{Variable, Identifier})
+    idx > length(pat) && return [bindings]
+    results = Dict{Variable, Identifier}[]
+    for ft in facts
+        new_b = unify_triple(pat[idx], ft, bindings)
+        if new_b !== nothing
+            sub = _match_formula_triples(pat, facts, idx + 1, new_b)
+            append!(results, sub)
+        end
+    end
+    results
 end
 
 function _builtin_log_notIncludes(subject::Identifier, object::Identifier,
@@ -1062,9 +1114,12 @@ end
 function _builtin_log_outputString(subject::Identifier, object::Identifier,
                                    bindings::Dict{Variable, Identifier},
                                    graph::Union{RDFGraph, Nothing}=nothing)
-    s = _resolve(subject, bindings)
-    s isa Literal || return _failure()
-    _bind_or_check(object, Literal(s.lexical), bindings)
+    # Subject can be anything (even BNode), just used as a label
+    o = _resolve(object, bindings)
+    o isa Literal || (o isa Variable && return _failure())
+    o isa Variable && return _failure()
+    o isa Literal || return _failure()
+    _success(bindings)
 end
 
 function _builtin_log_bound(subject::Identifier, object::Identifier,
@@ -1183,6 +1238,265 @@ function _builtin_log_uuid(subject::Identifier, object::Identifier,
     s = _resolve(subject, bindings)
     uuid_str = string(uuid4())
     _bind_or_check(object, Literal(uuid_str), bindings)
+end
+
+# log:racine — extract base URI without fragment
+function _builtin_log_racine(subject::Identifier, object::Identifier,
+                              bindings::Dict{Variable, Identifier},
+                              graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa URIRef || return _failure()
+    uri = s.value
+    idx = findfirst('#', uri)
+    base = idx !== nothing ? uri[1:prevind(uri, idx)] : uri
+    _bind_or_check(object, URIRef(base), bindings)
+end
+
+# log:n3String — serialize term to N3 string
+function _builtin_log_n3String(subject::Identifier, object::Identifier,
+                                bindings::Dict{Variable, Identifier},
+                                graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Variable && return _failure()
+    n3str = if s isa Formula
+        buf = IOBuffer()
+        for (i, t) in enumerate(s.graph)
+            i > 1 && write(buf, " ")
+            write(buf, _term_to_n3(t.subject), " ", _term_to_n3(t.predicate), " ", _term_to_n3(t.object), " .")
+        end
+        String(take!(buf))
+    else
+        _term_to_n3(s)
+    end
+    _bind_or_check(object, Literal(n3str), bindings)
+end
+
+# log:localN3String — like n3String but with short prefixes
+function _builtin_log_localN3String(subject::Identifier, object::Identifier,
+                                     bindings::Dict{Variable, Identifier},
+                                     graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Variable && return _failure()
+    # Collect prefixes from graph namespace manager if available
+    prefix_map = Dict{String, String}()
+    if graph !== nothing
+        for (prefix, ns_uri) in namespaces(graph)
+            prefix_map[ns_uri] = prefix
+        end
+    end
+    n3str = if s isa Formula
+        buf = IOBuffer()
+        ts = collect(s.graph)
+        for (i, t) in enumerate(ts)
+            i > 1 && write(buf, " . ")
+            write(buf, _term_to_local_n3(t.subject, prefix_map), " ",
+                       _term_to_local_n3(t.predicate, prefix_map), " ",
+                       _term_to_local_n3(t.object, prefix_map))
+        end
+        String(take!(buf))
+    else
+        _term_to_local_n3(s, prefix_map)
+    end
+    _bind_or_check(object, Literal(n3str), bindings)
+end
+
+function _term_to_n3(t::URIRef)
+    "<" * t.value * ">"
+end
+function _term_to_n3(t::BNode)
+    "_:" * t.id
+end
+function _term_to_n3(t::Literal)
+    if t.language !== nothing && t.language != ""
+        "\"" * t.lexical * "\"@" * t.language
+    elseif t.datatype !== nothing && t.datatype != URIRef("http://www.w3.org/2001/XMLSchema#string")
+        "\"" * t.lexical * "\"^^<" * t.datatype.value * ">"
+    else
+        "\"" * t.lexical * "\""
+    end
+end
+function _term_to_n3(t::Variable)
+    "?" * t.name
+end
+function _term_to_n3(t::Identifier)
+    string(t)
+end
+
+function _term_to_local_n3(t::URIRef, prefix_map::Dict{String, String})
+    uri = t.value
+    # Check if rdf:type → a
+    if uri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+        return "a"
+    end
+    for (ns_uri, prefix) in prefix_map
+        if startswith(uri, ns_uri)
+            localname = uri[length(ns_uri)+1:end]
+            if isempty(prefix)
+                return ":" * localname
+            else
+                return prefix * ":" * localname
+            end
+        end
+    end
+    "<" * uri * ">"
+end
+function _term_to_local_n3(t::Identifier, prefix_map::Dict{String, String})
+    _term_to_n3(t)
+end
+
+# log:repeat — generate integers 0..N-1
+function _builtin_log_repeat(subject::Identifier, object::Identifier,
+                              bindings::Dict{Variable, Identifier},
+                              graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    n = _to_number(s)
+    n === nothing && return _failure()
+    n = Int(n)
+    n <= 0 && return _failure()
+    results = Dict{Variable, Identifier}[]
+    for i in 0:(n-1)
+        push!(results, _bind_or_check(object, _from_number(i), bindings)...)
+    end
+    results
+end
+
+# log:satisfiable — check if formula is satisfiable
+function _builtin_log_satisfiable(subject::Identifier, object::Identifier,
+                                   bindings::Dict{Variable, Identifier},
+                                   graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Formula || return _failure()
+    log_implies = URIRef("http://www.w3.org/2000/10/swap/log#implies")
+    false_lit = Literal(false)
+    has_contradiction = false
+    for t in s.graph
+        if t.predicate == log_implies && t.object == false_lit
+            has_contradiction = true
+            break
+        end
+    end
+    result = has_contradiction ? Literal(false) : Literal(true)
+    _bind_or_check(object, result, bindings)
+end
+
+# log:isomorphic — check structural isomorphism
+function _builtin_log_isomorphic(subject::Identifier, object::Identifier,
+                                  bindings::Dict{Variable, Identifier},
+                                  graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    (s isa Variable || o isa Variable) && return _success(bindings)
+    # Same term
+    if s == o
+        return _success(bindings)
+    end
+    # Both BNodes or both Variables — isomorphic (single nodes)
+    if (s isa BNode && o isa BNode) || (s isa Variable && o isa Variable)
+        return _success(bindings)
+    end
+    # Both Formulas — structural isomorphism
+    if s isa Formula && o isa Formula
+        if _formulas_isomorphic(s, o)
+            return _success(bindings)
+        else
+            return _failure()
+        end
+    end
+    # Same type of Literal
+    if s isa Literal && o isa Literal
+        a = _to_number(s)
+        b = _to_number(o)
+        if a !== nothing && b !== nothing
+            return a == b ? _success(bindings) : _failure()
+        end
+        return s == o ? _success(bindings) : _failure()
+    end
+    _failure()
+end
+
+# Check if two formulas are isomorphic (structurally equal modulo BNode/Variable renaming)
+function _formulas_isomorphic(a::Formula, b::Formula)
+    a_triples = collect(a.graph)
+    b_triples = collect(b.graph)
+    length(a_triples) != length(b_triples) && return false
+    # Try to find a mapping from BNodes/Variables in a to BNodes/Variables in b
+    _try_iso_match(a_triples, b_triples, 1, Dict{Identifier, Identifier}(), Dict{Identifier, Identifier}())
+end
+
+function _try_iso_match(a_ts::Vector{Triple}, b_ts::Vector{Triple}, idx::Int,
+                        fwd_map::Dict{Identifier, Identifier},
+                        rev_map::Dict{Identifier, Identifier})
+    idx > length(a_ts) && return true
+    at = a_ts[idx]
+    for bt in b_ts
+        new_fwd = copy(fwd_map)
+        new_rev = copy(rev_map)
+        if _iso_match_terms(at.subject, bt.subject, new_fwd, new_rev) &&
+           _iso_match_terms(at.predicate, bt.predicate, new_fwd, new_rev) &&
+           _iso_match_terms(at.object, bt.object, new_fwd, new_rev)
+            if _try_iso_match(a_ts, b_ts, idx + 1, new_fwd, new_rev)
+                return true
+            end
+        end
+    end
+    false
+end
+
+function _iso_match_terms(a::Identifier, b::Identifier,
+                          fwd::Dict{Identifier, Identifier},
+                          rev::Dict{Identifier, Identifier})
+    a_is_blank = (a isa BNode || a isa Variable)
+    b_is_blank = (b isa BNode || b isa Variable)
+    # If both are blank/variable, create bijective mapping
+    if a_is_blank && b_is_blank
+        if haskey(fwd, a)
+            return fwd[a] == b
+        end
+        if haskey(rev, b)
+            return rev[b] == a
+        end
+        fwd[a] = b
+        rev[b] = a
+        return true
+    end
+    # If only one side is blank, it can match any term (existential semantics)
+    if a_is_blank
+        if haskey(fwd, a)
+            return fwd[a] == b
+        end
+        fwd[a] = b
+        return true
+    end
+    if b_is_blank
+        if haskey(rev, b)
+            return rev[b] == a
+        end
+        rev[b] = a
+        return true
+    end
+    if a isa Formula && b isa Formula
+        return _formulas_isomorphic(a, b)
+    end
+    a == b
+end
+
+# log:becomes — retract subject formula, assert object formula
+function _builtin_log_becomes(subject::Identifier, object::Identifier,
+                               bindings::Dict{Variable, Identifier},
+                               graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    (s isa Formula && o isa Formula && graph !== nothing) || return _failure()
+    # Apply current bindings to formula triples
+    for t in collect(s.graph)
+        grounded = apply_bindings(t, bindings)
+        is_ground(grounded) && remove!(graph, (grounded.subject, grounded.predicate, grounded.object))
+    end
+    for t in o.graph
+        grounded = apply_bindings(t, bindings)
+        is_ground(grounded) && add!(graph, grounded)
+    end
+    _success(bindings)
 end
 
 # ─── Crypto builtins ───────────────────────────────────────────────
@@ -1847,6 +2161,13 @@ function _register_n3_builtins!()
     register_builtin!(log("hasPrefix"),     _builtin_log_hasPrefix)
     register_builtin!(log("skolem"),        _builtin_log_skolem)
     register_builtin!(log("uuid"),          _builtin_log_uuid)
+    register_builtin!(log("racine"),        _builtin_log_racine)
+    register_builtin!(log("n3String"),      _builtin_log_n3String)
+    register_builtin!(log("localN3String"), _builtin_log_localN3String)
+    register_builtin!(log("repeat"),        _builtin_log_repeat)
+    register_builtin!(log("satisfiable"),   _builtin_log_satisfiable)
+    register_builtin!(log("isomorphic"),    _builtin_log_isomorphic)
+    register_builtin!(log("becomes"),       _builtin_log_becomes)
 
     crypto = Namespace(_CRYPTO)
     register_builtin!(crypto("sha"),     _builtin_crypto_sha1)

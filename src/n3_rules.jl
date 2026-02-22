@@ -23,6 +23,77 @@ end
 Find all `log:implies` triples where subject/object are Formulas,
 extract the triple patterns from each Formula's graph, collect Variables.
 """
+# Convert BNodes in rule antecedent patterns to Variables (existential quantifiers).
+# BNodes shared between antecedent and consequent get the same Variable.
+# BNodes only in the consequent stay as BNodes (fresh existentials).
+# BNodes that are part of RDF list structure (rdf:first/rdf:rest) are kept as BNodes.
+function _bnodes_to_vars(ant_triples::Vector{Triple}, con_triples::Vector{Triple})
+    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+
+    # Identify BNodes that form complete collection structure (have BOTH rdf:first and rdf:rest as subject)
+    has_first = Set{BNode}()
+    has_rest = Set{BNode}()
+    for t in ant_triples
+        if t.predicate == rdf_first && t.subject isa BNode
+            push!(has_first, t.subject)
+        end
+        if t.predicate == rdf_rest && t.subject isa BNode
+            push!(has_rest, t.subject)
+        end
+    end
+    # A BNode is a list structure node only if it has BOTH rdf:first and rdf:rest
+    list_bnodes = intersect(has_first, has_rest)
+    # Also add BNodes that appear as rdf:rest objects of list nodes
+    for t in ant_triples
+        if t.predicate == rdf_rest && t.subject isa BNode && t.subject in list_bnodes && t.object isa BNode
+            push!(list_bnodes, t.object)
+        end
+    end
+
+    bnode_map = Dict{BNode, Variable}()
+    function _conv(term::BNode)
+        term in list_bnodes && return term  # Keep list structure BNodes
+        get!(bnode_map, term) do
+            Variable("_bn_" * term.id)
+        end
+    end
+
+    # Recursively convert BNodes in a Formula
+    function _conv_formula(f::Formula)
+        new_f = Formula()
+        for t in f.graph
+            s = t.subject isa BNode ? _conv(t.subject) : t.subject
+            o = t.object isa BNode ? _conv(t.object) : t.object
+            s = s isa Formula ? _conv_formula(s) : s
+            o = o isa Formula ? _conv_formula(o) : o
+            add!(new_f, Triple(s, t.predicate, o))
+        end
+        new_f
+    end
+
+    function _conv_triple_ant(t::Triple)
+        s = t.subject isa BNode ? _conv(t.subject) : t.subject
+        o = t.object isa BNode ? _conv(t.object) : t.object
+        s = s isa Formula ? _conv_formula(s) : s
+        o = o isa Formula ? _conv_formula(o) : o
+        Triple(s, t.predicate, o)
+    end
+
+    new_ant = [_conv_triple_ant(t) for t in ant_triples]
+
+    # Collect all BNodes that were converted (from antecedent)
+    ant_converted = Set(keys(bnode_map))
+
+    function _conv_triple_con(t::Triple)
+        s = (t.subject isa BNode && t.subject in ant_converted) ? _conv(t.subject) : t.subject
+        o = (t.object isa BNode && t.object in ant_converted) ? _conv(t.object) : t.object
+        Triple(s, t.predicate, o)
+    end
+    new_con = [_conv_triple_con(t) for t in con_triples]
+    return new_ant, new_con
+end
+
 function extract_rules(g::RDFGraph)
     rules = N3Rule[]
     log_implies = URIRef("http://www.w3.org/2000/10/swap/log#implies")
@@ -33,6 +104,7 @@ function extract_rules(g::RDFGraph)
         if t.subject isa Formula && t.object isa Formula
             ant_triples = collect(t.subject.graph)
             con_triples = collect(t.object.graph)
+            ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
             vars = Set{Variable}()
             for tt in vcat(ant_triples, con_triples)
                 _collect_vars!(vars, tt)
@@ -46,6 +118,7 @@ function extract_rules(g::RDFGraph)
         if t.subject isa Formula && t.object isa Formula
             ant_triples = collect(t.object.graph)    # object is antecedent
             con_triples = collect(t.subject.graph)   # subject is consequent
+            ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
             vars = Set{Variable}()
             for tt in vcat(ant_triples, con_triples)
                 _collect_vars!(vars, tt)

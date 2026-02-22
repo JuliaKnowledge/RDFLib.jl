@@ -338,10 +338,11 @@ mutable struct _N3Parser
     prefixes::Dict{String, String}
     base::Union{String, Nothing}
     bnodecounter::Int
+    formula_scope::Int  # incremented when entering a formula to scope _:label BNodes
 end
 
 function _N3Parser(g::RDFGraph, input::String)
-    _N3Parser(g, input, 1, Dict{String,String}(), nothing, 0)
+    _N3Parser(g, input, 1, Dict{String,String}(), nothing, 0, 0)
 end
 
 # ─── Shared parser utilities ────────────────────────────────────────
@@ -586,6 +587,45 @@ function _n3_parse_subject!(p::_N3Parser, target::RDFGraph)::Identifier
     _n3_parse_node!(p, target)
 end
 
+# Resolve an RDF list from graph — used for predicate list expansion
+function _n3_resolve_list(node::Identifier, graph::RDFGraph)
+    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+    rdf_nil = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+    node isa BNode || return nothing
+    items = Identifier[]
+    current = node
+    seen = Set{Identifier}()
+    while current != rdf_nil
+        current in seen && return nothing
+        push!(seen, current)
+        first_val = nothing; rest_val = nothing
+        for t in triples(graph, (current, rdf_first, nothing)); first_val = t.object; break; end
+        for t in triples(graph, (current, rdf_rest, nothing)); rest_val = t.object; break; end
+        first_val === nothing && return nothing
+        rest_val === nothing && return nothing
+        push!(items, first_val)
+        current = rest_val
+    end
+    items
+end
+
+# Remove RDF list structure triples from graph
+function _n3_remove_list!(node::Identifier, graph::RDFGraph)
+    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+    rdf_nil = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+    current = node
+    while current isa BNode
+        next = nothing
+        for t in triples(graph, (current, rdf_rest, nothing)); next = t.object; break; end
+        for t in collect(triples(graph, (current, nothing, nothing)))
+            remove!(graph, (t.subject, t.predicate, t.object))
+        end
+        current = next
+    end
+end
+
 function _n3_parse_predicate_object_list!(p::_N3Parser, target::RDFGraph, subject::Identifier)
     while true
         _n3_skip_ws!(p)
@@ -595,7 +635,38 @@ function _n3_parse_predicate_object_list!(p::_N3Parser, target::RDFGraph, subjec
         # Check for N3 operators: =>, <=, =
         predicate, swap = _n3_parse_verb!(p, target)
         _n3_skip_ws!(p)
-        _n3_parse_object_list!(p, target, subject, predicate, swap)
+
+        # If predicate is a BNode list head, expand into multiple predicates
+        if predicate isa BNode
+            preds = _n3_resolve_list(predicate, target)
+            if preds !== nothing && !isempty(preds)
+                # Remove the list structure triples for the predicate list
+                _n3_remove_list!(predicate, target)
+                # Parse objects once, then add triples for each predicate
+                objects = Identifier[]
+                while true
+                    _n3_skip_ws!(p)
+                    obj = _n3_parse_object!(p, target)
+                    push!(objects, obj)
+                    _n3_skip_ws!(p)
+                    c2 = _n3_peek(p)
+                    if c2 == ','
+                        p.pos = nextind(p.input, p.pos)
+                    else
+                        break
+                    end
+                end
+                for pred in preds
+                    for obj in objects
+                        add!(target, Triple(subject, pred, obj))
+                    end
+                end
+            else
+                _n3_parse_object_list!(p, target, subject, predicate, swap)
+            end
+        else
+            _n3_parse_object_list!(p, target, subject, predicate, swap)
+        end
 
         _n3_skip_ws!(p)
         c = _n3_peek(p)
@@ -786,6 +857,10 @@ function _n3_parse_formula!(p::_N3Parser)
         bind!(f.graph, prefix, Namespace(uri))
     end
 
+    # Scope named BNodes to this formula level
+    p.formula_scope += 1
+    saved_scope = p.formula_scope
+
     _n3_skip_ws!(p)
     while true
         _n3_skip_ws!(p)
@@ -797,6 +872,7 @@ function _n3_parse_formula!(p::_N3Parser)
         _n3_skip_ws!(p)
     end
 
+    # Restore scope (formula_scope keeps incrementing, never decremented)
     _n3_consume!(p, '}')
     f
 end
@@ -818,7 +894,12 @@ function _n3_parse_blank_node_label!(p::_N3Parser)
     end
     label = String(take!(buf))
     label = rstrip(label, '.')
-    BNode(label)
+    # Scope named BNodes per formula to avoid collisions across { } blocks
+    if p.formula_scope > 0
+        BNode("$(label)_scope$(p.formula_scope)")
+    else
+        BNode(label)
+    end
 end
 
 function _n3_parse_blank_node_property_list!(p::_N3Parser, target::RDFGraph)

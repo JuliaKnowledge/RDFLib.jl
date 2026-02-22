@@ -172,7 +172,7 @@ using Test, RDFLib
         # unregistered builtin
         @test isempty(evaluate_builtin(URIRef("http://example.org/fake"), lit(1), lit(2), bindings))
 
-        # unresolved variables in log:equalTo
-        @test isempty(evaluate_builtin(LOG("equalTo"), Variable("a"), Variable("b"), bindings))
+        # unresolved variables in log:equalTo — now binds them (BNode existential semantics)
+        @test !isempty(evaluate_builtin(LOG("equalTo"), Variable("a"), Variable("b"), bindings))
     end
 end
