@@ -25,13 +25,15 @@ mutable struct MemoryStore <: AbstractStore
     pos::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     osp::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     count::Int
+    insertion_order::Vector{Triple}  # Preserve insertion order for deterministic iteration
 end
 
 MemoryStore() = MemoryStore(
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
-    0
+    0,
+    Triple[]
 )
 
 function add!(store::MemoryStore, t::Triple)
@@ -69,6 +71,7 @@ function add!(store::MemoryStore, t::Triple)
     end
     push!(store.osp[o][s], p)
 
+    push!(store.insertion_order, t)
     store.count += 1
     store
 end
@@ -101,6 +104,7 @@ function remove!(store::MemoryStore, pattern::TriplePattern)
 
         store.count -= 1
     end
+    filter!(t -> !any(r -> r.subject == t.subject && r.predicate == t.predicate && r.object == t.object, to_remove), store.insertion_order)
     store
 end
 
@@ -118,66 +122,50 @@ end
 
 function _triples_inner(store::MemoryStore, s, p, o, ch::Channel{Triple})
     if !isnothing(s) && !isnothing(p) && !isnothing(o)
-        # Fully bound — just check existence
+        # Fully bound — just check existence via index
         if haskey(store.spo, s) && haskey(store.spo[s], p) && o in store.spo[s][p]
             put!(ch, Triple(s, p, o))
         end
     elseif !isnothing(s) && !isnothing(p)
-        # S P ? — look up in SPO
+        # S P ? — check index exists, then iterate in insertion order
         if haskey(store.spo, s) && haskey(store.spo[s], p)
-            for obj in store.spo[s][p]
-                put!(ch, Triple(s, p, obj))
+            for t in store.insertion_order
+                t.subject == s && t.predicate == p && put!(ch, t)
             end
         end
     elseif !isnothing(s) && !isnothing(o)
-        # S ? O — look up in OSP
         if haskey(store.osp, o) && haskey(store.osp[o], s)
-            for pred in store.osp[o][s]
-                put!(ch, Triple(s, pred, o))
+            for t in store.insertion_order
+                t.subject == s && t.object == o && put!(ch, t)
             end
         end
     elseif !isnothing(p) && !isnothing(o)
-        # ? P O — look up in POS
         if haskey(store.pos, p) && haskey(store.pos[p], o)
-            for subj in store.pos[p][o]
-                put!(ch, Triple(subj, p, o))
+            for t in store.insertion_order
+                t.predicate == p && t.object == o && put!(ch, t)
             end
         end
     elseif !isnothing(s)
-        # S ? ? — iterate SPO[s]
         if haskey(store.spo, s)
-            for (pred, objs) in store.spo[s]
-                for obj in objs
-                    put!(ch, Triple(s, pred, obj))
-                end
+            for t in store.insertion_order
+                t.subject == s && put!(ch, t)
             end
         end
     elseif !isnothing(p)
-        # ? P ? — iterate POS[p]
         if haskey(store.pos, p)
-            for (obj, subjs) in store.pos[p]
-                for subj in subjs
-                    put!(ch, Triple(subj, p, obj))
-                end
+            for t in store.insertion_order
+                t.predicate == p && put!(ch, t)
             end
         end
     elseif !isnothing(o)
-        # ? ? O — iterate OSP[o]
         if haskey(store.osp, o)
-            for (subj, preds) in store.osp[o]
-                for pred in preds
-                    put!(ch, Triple(subj, pred, o))
-                end
+            for t in store.insertion_order
+                t.object == o && put!(ch, t)
             end
         end
     else
-        # ? ? ? — iterate everything
-        for (subj, po) in store.spo
-            for (pred, objs) in po
-                for obj in objs
-                    put!(ch, Triple(subj, pred, obj))
-                end
-            end
+        for t in store.insertion_order
+            put!(ch, t)
         end
     end
 end

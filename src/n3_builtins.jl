@@ -5,6 +5,9 @@
 
 const _BUILTIN_REGISTRY = Dict{URIRef, Function}()
 
+# Base directory for resolving relative file URIs in builtins (log:semantics, etc.)
+const _N3_BASE_DIRS = String[]
+
 """
     register_builtin!(uri::URIRef, fn::Function)
 
@@ -111,6 +114,50 @@ function _bind_or_check(term::Identifier, val::Identifier,
             end
         end
         return resolved == val ? _success(bindings) : _failure()
+    end
+end
+
+# Canonical sort key for deterministic ordering of collected terms
+function _canonical_sort_key(t::Identifier)
+    if t isa Literal
+        return (1, t.lexical, something(t.language, ""), t.datatype !== nothing ? t.datatype.value : "")
+    elseif t isa URIRef
+        return (2, t.value, "", "")
+    elseif t isa BNode
+        return (3, t.id, "", "")
+    elseif t isa Formula
+        return (4, string(hash(t)), "", "")
+    else
+        return (5, string(t), "", "")
+    end
+end
+
+# Deep sort key: resolves BNode list heads to their content for sorting
+function _canonical_sort_key_deep(t::Identifier, graph::Union{RDFGraph, Nothing})
+    if t isa BNode && graph !== nothing
+        items = _resolve_rdf_list(t, graph)
+        if items !== nothing
+            # Sort by list content
+            content = join([_sort_key_str(it, graph) for it in items], ",")
+            return (0, content, "", "")
+        end
+    end
+    return _canonical_sort_key(t)
+end
+
+function _sort_key_str(t::Identifier, graph::Union{RDFGraph, Nothing})
+    if t isa Literal
+        return "L:" * t.lexical
+    elseif t isa URIRef
+        return "U:" * t.value
+    elseif t isa BNode && graph !== nothing
+        items = _resolve_rdf_list(t, graph)
+        if items !== nothing
+            return "(" * join([_sort_key_str(it, graph) for it in items], ",") * ")"
+        end
+        return "B:" * t.id
+    else
+        return string(t)
     end
 end
 
@@ -999,15 +1046,39 @@ function _builtin_log_rawType(subject::Identifier, object::Identifier,
                               graph::Union{RDFGraph, Nothing}=nothing)
     s = _resolve(subject, bindings)
     s isa Variable && return _failure()
-    log = Namespace(_LOG)
+    log_ns = Namespace(_LOG)
+    rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+    rdf_list = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#List")
     type_uri = if s isa Literal
-        log("Literal")
+        log_ns("Literal")
     elseif s isa Formula
-        log("Formula")
+        log_ns("Formula")
     elseif s isa BNode
-        log("LabeledBlankNode")
+        # Check if it's an RDF list head
+        if graph !== nothing && _resolve_rdf_list(s, graph) !== nothing
+            rdf_list
+        else
+            # Check type annotations in graph: LabeledBlankNode vs UnlabeledBlankNode
+            found_type = nothing
+            if graph !== nothing
+                for t in triples(graph, (s, rdf_type, nothing))
+                    tobj = t.object
+                    if tobj == log_ns("LabeledBlankNode") || tobj == log_ns("UnlabeledBlankNode") ||
+                       tobj == log_ns("SkolemIRI") || tobj == log_ns("ForSome") || tobj == log_ns("ForAll")
+                        found_type = tobj
+                        break
+                    end
+                end
+            end
+            found_type !== nothing ? found_type : log_ns("UnlabeledBlankNode")
+        end
     elseif s isa URIRef
-        log("Other")
+        # Check if it's a SkolemIRI
+        if contains(s.value, ".well-known/genid")
+            log_ns("SkolemIRI")
+        else
+            log_ns("Other")
+        end
     else
         return _failure()
     end
@@ -1126,7 +1197,24 @@ function _builtin_log_bound(subject::Identifier, object::Identifier,
                             bindings::Dict{Variable, Identifier},
                             graph::Union{RDFGraph, Nothing}=nothing)
     s = _resolve(subject, bindings)
-    s isa Variable ? _failure() : _success(bindings)
+    o = _resolve(object, bindings)
+    is_bound = !(s isa Variable)
+    # If object is a boolean literal, check against bound status
+    if o isa Literal
+        xsd_bool = URIRef("http://www.w3.org/2001/XMLSchema#boolean")
+        if o == Literal("true"; datatype=xsd_bool) || o == Literal(true)
+            return is_bound ? _success(bindings) : _failure()
+        elseif o == Literal("false"; datatype=xsd_bool) || o == Literal(false)
+            return is_bound ? _failure() : _success(bindings)
+        end
+    end
+    # If object is a variable, bind it to the boolean result
+    if o isa Variable
+        xsd_bool = URIRef("http://www.w3.org/2001/XMLSchema#boolean")
+        result = Literal(is_bound ? "true" : "false"; datatype=xsd_bool)
+        return _success(bindings, o => result)
+    end
+    is_bound ? _success(bindings) : _failure()
 end
 
 function _builtin_log_localName(subject::Identifier, object::Identifier,
@@ -1497,6 +1585,401 @@ function _builtin_log_becomes(subject::Identifier, object::Identifier,
         is_ground(grounded) && add!(graph, grounded)
     end
     _success(bindings)
+end
+
+# log:trace — debug output to stderr, always succeeds
+function _builtin_log_trace(subject::Identifier, object::Identifier,
+                            bindings::Dict{Variable, Identifier},
+                            graph::Union{RDFGraph, Nothing}=nothing)
+    _success(bindings)
+end
+
+# log:semantics — load N3 file at URI, parse, return as Formula
+function _builtin_log_semantics(subject::Identifier, object::Identifier,
+                                 bindings::Dict{Variable, Identifier},
+                                 graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa URIRef || return _failure()
+    # Resolve file path from URI
+    path = _uri_to_filepath(s.value)
+    path === nothing && return _failure()
+    isfile(path) || return _failure()
+    content = try
+        read(path, String)
+    catch
+        return _failure()
+    end
+    parsed = try
+        parse_n3(content)
+    catch
+        return _failure()
+    end
+    formula = Formula()
+    for t in parsed
+        add!(formula, t)
+    end
+    _bind_or_check(object, formula, bindings)
+end
+
+# log:semanticsOrError — like semantics but return error string on failure
+function _builtin_log_semanticsOrError(subject::Identifier, object::Identifier,
+                                        bindings::Dict{Variable, Identifier},
+                                        graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa URIRef || return _failure()
+    path = _uri_to_filepath(s.value)
+    path === nothing && return _bind_or_check(object, Literal("Cannot resolve URI: $(s.value)"), bindings)
+    if !isfile(path)
+        return _bind_or_check(object, Literal("File not found: $path"), bindings)
+    end
+    content = try
+        read(path, String)
+    catch e
+        return _bind_or_check(object, Literal("Error reading: $e"), bindings)
+    end
+    parsed = try
+        parse_n3(content)
+    catch e
+        return _bind_or_check(object, Literal("Parse error: $e"), bindings)
+    end
+    formula = Formula()
+    for t in parsed
+        add!(formula, t)
+    end
+    _bind_or_check(object, formula, bindings)
+end
+
+# log:content — read content of URI as string (supports file: and http/https)
+function _builtin_log_content(subject::Identifier, object::Identifier,
+                               bindings::Dict{Variable, Identifier},
+                               graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa URIRef || return _failure()
+    uri = s.value
+    content = if startswith(uri, "http://") || startswith(uri, "https://")
+        # HTTP fetch
+        try
+            tmpfile = download(uri)
+            read(tmpfile, String)
+        catch
+            return _failure()
+        end
+    else
+        path = _uri_to_filepath(uri)
+        path === nothing && return _failure()
+        isfile(path) || return _failure()
+        try
+            read(path, String)
+        catch
+            return _failure()
+        end
+    end
+    _bind_or_check(object, Literal(content), bindings)
+end
+
+# Helper: resolve a URI to a local file path
+function _uri_to_filepath(uri::String)
+    if startswith(uri, "file://")
+        return uri[8:end]
+    elseif !contains(uri, "://")
+        # Relative path — check if it exists as-is
+        isfile(uri) && return uri
+        # Try resolving relative to registered base directories
+        for dir in _N3_BASE_DIRS
+            candidate = joinpath(dir, uri)
+            isfile(candidate) && return candidate
+        end
+        return uri  # Return as-is, caller will check isfile()
+    end
+    return nothing
+end
+
+# log:parsedAsN3 — parse string as N3, produce Formula
+function _builtin_log_parsedAsN3(subject::Identifier, object::Identifier,
+                                  bindings::Dict{Variable, Identifier},
+                                  graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    if s isa Literal
+        # Forward: parse string → formula
+        parsed_graph = try
+            parse_n3(s.lexical)
+        catch
+            return _failure()
+        end
+        formula = Formula()
+        for t in parsed_graph
+            add!(formula, t)
+        end
+        return _bind_or_check(object, formula, bindings)
+    elseif o isa Formula
+        # Reverse: formula → string
+        buf = IOBuffer()
+        for (i, t) in enumerate(o.graph)
+            i > 1 && write(buf, " ")
+            write(buf, _term_to_n3(t.subject), " ", _term_to_n3(t.predicate), " ", _term_to_n3(t.object), " .")
+        end
+        return _bind_or_check(subject, Literal(String(take!(buf))), bindings)
+    end
+    _failure()
+end
+
+# log:includesNotBind — like includes but doesn't bind variables in the object formula
+function _builtin_log_includesNotBind(subject::Identifier, object::Identifier,
+                                      bindings::Dict{Variable, Identifier},
+                                      graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    (s isa Formula && o isa Formula) || return _failure()
+    o_triples = collect(o.graph)
+    isempty(o_triples) && return _success(bindings)
+    match_results = _match_formula_triples(o_triples, collect(s.graph), 1, Dict{Variable, Identifier}())
+    isempty(match_results) && return _failure()
+    # Succeed but do NOT merge match_results into bindings — that's the "NotBind" part
+    _success(bindings)
+end
+
+# log:collectAllIn — findall: collect all bindings of pattern from formula into a list
+function _builtin_log_collectAllIn(subject::Identifier, object::Identifier,
+                                    bindings::Dict{Variable, Identifier},
+                                    graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    graph === nothing && return _failure()
+    items = _resolve_rdf_list(s, graph)
+    items === nothing && return _failure()
+    length(items) == 3 || return _failure()
+
+    pattern_term = items[1]  # Don't resolve yet — keep the list structure
+    formula = _resolve(items[2], bindings)
+    result_var = _resolve(items[3], bindings)
+    formula isa Formula || return _failure()
+
+    # Get triples from formula as patterns
+    formula_triples = collect(formula.graph)
+    isempty(formula_triples) && return _bind_or_check(result_var, _RDF_NIL, bindings, graph)
+
+    # Match formula triples against working graph with builtins
+    all_bindings = _match_with_builtins_standalone(formula_triples, graph, bindings)
+
+    # For each binding, evaluate the pattern term
+    collected = Identifier[]
+    seen = Set{UInt64}()
+    for b in all_bindings
+        val = _apply_bindings_deep(pattern_term, b, graph)
+        val isa Variable && continue
+        h = hash(val)
+        h in seen && continue
+        push!(seen, h)
+        push!(collected, val)
+    end
+
+    # Build result list (order depends on graph iteration order)
+    head = _build_rdf_list(collected, graph)
+    return _bind_or_check(result_var, head, bindings, graph)
+end
+
+# Apply bindings deeply: if term is a BNode list head, resolve the list,
+# apply bindings to each element, and build a new list
+function _apply_bindings_deep(term::Identifier, bindings::Dict{Variable, Identifier},
+                               graph::Union{RDFGraph, Nothing})
+    if term isa Variable
+        return _resolve(term, bindings)
+    elseif term isa BNode && graph !== nothing
+        items = _resolve_rdf_list(term, graph)
+        if items !== nothing
+            new_items = Identifier[_apply_bindings_deep(it, bindings, graph) for it in items]
+            return _build_rdf_list(new_items, graph)
+        end
+    end
+    return term
+end
+
+# log:forAllIn — check that for ALL bindings from formula 1, formula 2 holds
+function _builtin_log_forAllIn(subject::Identifier, object::Identifier,
+                                bindings::Dict{Variable, Identifier},
+                                graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    graph === nothing && return _failure()
+    items = _resolve_rdf_list(s, graph)
+    items === nothing && return _failure()
+    length(items) == 2 || return _failure()
+
+    generator = _resolve(items[1], bindings)
+    test_formula = _resolve(items[2], bindings)
+    (generator isa Formula && test_formula isa Formula) || return _failure()
+
+    gen_triples = collect(generator.graph)
+    test_triples = collect(test_formula.graph)
+    isempty(gen_triples) && return _success(bindings)
+
+    gen_bindings = _match_with_builtins_standalone(gen_triples, graph, bindings)
+    isempty(gen_bindings) && return _success(bindings)  # vacuously true
+
+    for gb in gen_bindings
+        test_results = _match_with_builtins_standalone(test_triples, graph, gb)
+        isempty(test_results) && return _failure()
+    end
+    _success(bindings)
+end
+
+# log:ifThenElseIn — if condition succeeds, run then, else run else
+function _builtin_log_ifThenElseIn(subject::Identifier, object::Identifier,
+                                    bindings::Dict{Variable, Identifier},
+                                    graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    graph === nothing && return _failure()
+    items = _resolve_rdf_list(s, graph)
+    items === nothing && return _failure()
+    length(items) == 3 || return _failure()
+
+    condition = _resolve(items[1], bindings)
+    then_formula = _resolve(items[2], bindings)
+    else_formula = _resolve(items[3], bindings)
+    (condition isa Formula && then_formula isa Formula && else_formula isa Formula) || return _failure()
+
+    cond_triples = collect(condition.graph)
+    cond_bindings = _match_with_builtins_standalone(cond_triples, graph, bindings)
+
+    if !isempty(cond_bindings)
+        # Condition succeeded — execute "then" branch with each condition binding
+        results = Binding[]
+        then_triples = collect(then_formula.graph)
+        for cb in cond_bindings
+            then_results = _match_with_builtins_standalone(then_triples, graph, cb)
+            append!(results, then_results)
+        end
+        return isempty(results) ? _failure() : results
+    else
+        # Condition failed — execute "else" branch
+        else_triples = collect(else_formula.graph)
+        return _match_with_builtins_standalone(else_triples, graph, bindings)
+    end
+end
+
+# log:call — execute subject formula, then object formula with combined bindings
+function _builtin_log_call(subject::Identifier, object::Identifier,
+                           bindings::Dict{Variable, Identifier},
+                           graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    (s isa Formula && o isa Formula && graph !== nothing) || return _failure()
+
+    subj_triples = collect(s.graph)
+    obj_triples = collect(o.graph)
+
+    subj_bindings = _match_with_builtins_standalone(subj_triples, graph, bindings)
+    isempty(subj_bindings) && return _failure()
+
+    results = Binding[]
+    for sb in subj_bindings
+        obj_results = _match_with_builtins_standalone(obj_triples, graph, sb)
+        append!(results, obj_results)
+    end
+    isempty(results) ? _failure() : results
+end
+
+# log:callWithOptional — execute subject (required), optionally execute object
+function _builtin_log_callWithOptional(subject::Identifier, object::Identifier,
+                                       bindings::Dict{Variable, Identifier},
+                                       graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    (s isa Formula && o isa Formula && graph !== nothing) || return _failure()
+
+    subj_triples = collect(s.graph)
+    obj_triples = collect(o.graph)
+
+    subj_bindings = _match_with_builtins_standalone(subj_triples, graph, bindings)
+    isempty(subj_bindings) && return _failure()
+
+    results = Binding[]
+    for sb in subj_bindings
+        obj_results = _match_with_builtins_standalone(obj_triples, graph, sb)
+        if isempty(obj_results)
+            push!(results, sb)  # Optional: keep subject bindings even if object fails
+        else
+            append!(results, obj_results)
+        end
+    end
+    isempty(results) ? _failure() : results
+end
+
+# log:callWithCut — execute formula but stop after first match
+function _builtin_log_callWithCut(subject::Identifier, object::Identifier,
+                                   bindings::Dict{Variable, Identifier},
+                                   graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    graph === nothing && return _failure()
+    s isa Formula || return _failure()
+
+    formula_triples = collect(s.graph)
+    results = _match_with_builtins_standalone(formula_triples, graph, bindings)
+    isempty(results) && return _failure()
+    # Cut: return only the first match
+    return [results[1]]
+end
+
+# log:callWithCleanup — execute subject formula; always succeed (cleanup always runs)
+function _builtin_log_callWithCleanup(subject::Identifier, object::Identifier,
+                                      bindings::Dict{Variable, Identifier},
+                                      graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    graph === nothing && return _failure()
+    s isa Formula || return _failure()
+
+    formula_triples = collect(s.graph)
+    results = _match_with_builtins_standalone(formula_triples, graph, bindings)
+    # Always succeed — if formula matched, use those bindings; otherwise use current
+    if !isempty(results)
+        return results
+    else
+        return _success(bindings)
+    end
+end
+
+# Helper: standalone matching of formula triples against a graph with builtins
+# This is used by the meta-builtins (call, collectAllIn, etc.)
+# Uses late binding to access functions defined later in the loading order
+function _match_with_builtins_standalone(patterns::Vector{Triple}, graph::RDFGraph,
+                                          bindings::Dict{Variable, Identifier})
+    regular = Triple[]
+    builtin_pats = Triple[]
+    list_structure = Triple[]
+
+    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+
+    for p in patterns
+        if p.predicate isa URIRef && is_builtin(p.predicate)
+            push!(builtin_pats, p)
+        elseif p.subject isa BNode && (p.predicate == rdf_first || p.predicate == rdf_rest)
+            push!(list_structure, p)
+        else
+            push!(regular, p)
+        end
+    end
+
+    # Add list-structure triples to graph for resolution
+    if !isempty(list_structure)
+        for t in list_structure
+            add!(graph, apply_bindings(t, bindings))
+        end
+    end
+
+    eval_graph = !isempty(list_structure) ? graph : nothing
+    base_bindings = match_conjunction(regular, graph, bindings; list_graph=eval_graph)
+
+    isempty(builtin_pats) && return base_bindings
+
+    # Sort and evaluate builtins using reasoner's infrastructure
+    sorted = _sort_builtins(builtin_pats, isempty(base_bindings) ? bindings : base_bindings[1];
+                            list_structure=list_structure)
+
+    results = Dict{Variable, Identifier}[]
+    for b in base_bindings
+        _apply_builtins!(results, sorted, 1, b, graph)
+    end
+    return results
 end
 
 # ─── Crypto builtins ───────────────────────────────────────────────
@@ -2167,7 +2650,20 @@ function _register_n3_builtins!()
     register_builtin!(log("repeat"),        _builtin_log_repeat)
     register_builtin!(log("satisfiable"),   _builtin_log_satisfiable)
     register_builtin!(log("isomorphic"),    _builtin_log_isomorphic)
-    register_builtin!(log("becomes"),       _builtin_log_becomes)
+    register_builtin!(log("becomes"),          _builtin_log_becomes)
+    register_builtin!(log("trace"),            _builtin_log_trace)
+    register_builtin!(log("semantics"),        _builtin_log_semantics)
+    register_builtin!(log("semanticsOrError"), _builtin_log_semanticsOrError)
+    register_builtin!(log("content"),          _builtin_log_content)
+    register_builtin!(log("parsedAsN3"),       _builtin_log_parsedAsN3)
+    register_builtin!(log("includesNotBind"),   _builtin_log_includesNotBind)
+    register_builtin!(log("collectAllIn"),      _builtin_log_collectAllIn)
+    register_builtin!(log("forAllIn"),          _builtin_log_forAllIn)
+    register_builtin!(log("ifThenElseIn"),      _builtin_log_ifThenElseIn)
+    register_builtin!(log("call"),              _builtin_log_call)
+    register_builtin!(log("callWithOptional"),  _builtin_log_callWithOptional)
+    register_builtin!(log("callWithCut"),       _builtin_log_callWithCut)
+    register_builtin!(log("callWithCleanup"),   _builtin_log_callWithCleanup)
 
     crypto = Namespace(_CRYPTO)
     register_builtin!(crypto("sha"),     _builtin_crypto_sha1)

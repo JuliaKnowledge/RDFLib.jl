@@ -3,6 +3,7 @@ module RDFLib
 using UUIDs
 using Dates
 using EzXML
+using Downloads: download
 import JSON3
 import SHA
 import MD5

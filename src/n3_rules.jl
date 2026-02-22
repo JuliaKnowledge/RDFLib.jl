@@ -124,6 +124,19 @@ function extract_rules(g::RDFGraph)
                 _collect_vars!(vars, tt)
             end
             push!(rules, N3Rule(ant_triples, con_triples, BACKWARD, nothing, vars))
+        elseif t.subject isa Formula && t.object isa Literal
+            # Unconditional backward rule: { head } <= true
+            xsd_bool = URIRef("http://www.w3.org/2001/XMLSchema#boolean")
+            if t.object == Literal("true"; datatype=xsd_bool) || t.object == Literal(true)
+                con_triples = collect(t.subject.graph)
+                ant_triples = Triple[]
+                _, con_triples = _bnodes_to_vars(ant_triples, con_triples)
+                vars = Set{Variable}()
+                for tt in con_triples
+                    _collect_vars!(vars, tt)
+                end
+                push!(rules, N3Rule(ant_triples, con_triples, BACKWARD, nothing, vars))
+            end
         end
     end
 

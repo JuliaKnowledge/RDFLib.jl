@@ -321,12 +321,20 @@ function parse_n3(source)
 end
 
 """
-    parse_n3!(g::RDFGraph, input::AbstractString) -> RDFGraph
+    parse_n3!(g::RDFGraph, input::AbstractString; base=nothing) -> RDFGraph
 
 Parse Notation3 (N3) format from a string and add triples to the graph.
 """
-function parse_n3!(g::RDFGraph, input::AbstractString)
+function parse_n3!(g::RDFGraph, input::AbstractString; base::Union{String,Nothing}=nothing)
     parser = _N3Parser(g, String(input))
+    if base !== nothing
+        parser.base = base
+        # Register base directory for file-loading builtins (log:semantics, etc.)
+        base_dir = dirname(base)
+        if !isempty(base_dir)
+            push!(_N3_BASE_DIRS, base_dir)
+        end
+    end
     _n3_parse_document!(parser)
     g
 end
@@ -782,11 +790,32 @@ function _n3_parse_node!(p::_N3Parser, target::RDFGraph=p.graph)::Identifier
     return node
 end
 
+# RDF-star << S P O >> — parse as a Formula containing a single triple
+function _n3_parse_quoted_triple!(p::_N3Parser, target::RDFGraph=p.graph)::Identifier
+    _n3_consume_str!(p, "<<")
+    _n3_skip_ws!(p)
+    s = _n3_parse_node!(p, target)
+    _n3_skip_ws!(p)
+    pred = _n3_parse_node!(p, target)
+    _n3_skip_ws!(p)
+    o = _n3_parse_node!(p, target)
+    _n3_skip_ws!(p)
+    _n3_consume_str!(p, ">>")
+    f = Formula()
+    add!(f, Triple(s, pred, o))
+    return f
+end
+
 function _n3_parse_base_node!(p::_N3Parser, target::RDFGraph=p.graph)::Identifier
     c = _n3_peek(p)
     c === nothing && throw(ArgumentError("Unexpected end of input"))
 
     if c == '<'
+        # Check for RDF-star << ... >> quoted triple
+        next_pos = nextind(p.input, p.pos)
+        if next_pos <= lastindex(p.input) && p.input[next_pos] == '<'
+            return _n3_parse_quoted_triple!(p, target)
+        end
         return URIRef(_n3_parse_iriref!(p))
     elseif c == '_'
         return _n3_parse_blank_node_label!(p)

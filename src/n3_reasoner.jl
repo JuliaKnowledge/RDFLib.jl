@@ -829,7 +829,13 @@ function reason(data::RDFGraph;
                 query::Union{RDFGraph, Nothing}=nothing,
                 max_iterations::Int=1000,
                 max_inferences::Int=1000000,
-                pass_only_new::Bool=false)
+                pass_only_new::Bool=false,
+                base_dir::Union{String, Nothing}=nothing)
+    # Set base directory for file-loading builtins
+    if base_dir !== nothing
+        push!(_N3_BASE_DIRS, base_dir)
+    end
+    
     working = RDFGraph()
     # Copy namespaces from input graph
     for (prefix, ns_uri) in namespaces(data)
@@ -864,6 +870,11 @@ function reason(data::RDFGraph;
                           max_iterations=max_iterations,
                           max_inferences=max_inferences)
     eam_loop!(reasoner)
+
+    # Clean up base directory
+    if base_dir !== nothing
+        filter!(d -> d != base_dir, _N3_BASE_DIRS)
+    end
 
     if query !== nothing
         return _apply_query(reasoner, query)
