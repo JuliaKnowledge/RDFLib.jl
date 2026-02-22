@@ -582,26 +582,11 @@ function _n3_parse_triples!(p::_N3Parser, target::RDFGraph)
     # In formulas, the '.' may be omitted before '}'
 end
 
-function _n3_parse_subject!(p::_N3Parser, target::RDFGraph)::Node
-    c = _n3_peek(p)
-    if c == '<'
-        return URIRef(_n3_parse_iriref!(p))
-    elseif c == '_'
-        return _n3_parse_blank_node_label!(p)
-    elseif c == '['
-        return _n3_parse_blank_node_property_list!(p, target)
-    elseif c == '('
-        return _n3_parse_collection!(p, target)
-    elseif c == '{'
-        return _n3_parse_formula!(p)
-    elseif c == '?'
-        return _n3_parse_variable!(p)
-    else
-        return _n3_parse_prefixed_name!(p)
-    end
+function _n3_parse_subject!(p::_N3Parser, target::RDFGraph)::Identifier
+    _n3_parse_node!(p, target)
 end
 
-function _n3_parse_predicate_object_list!(p::_N3Parser, target::RDFGraph, subject::Node)
+function _n3_parse_predicate_object_list!(p::_N3Parser, target::RDFGraph, subject::Identifier)
     while true
         _n3_skip_ws!(p)
         c = _n3_peek(p)
@@ -637,10 +622,11 @@ function _n3_parse_verb!(p::_N3Parser, target::RDFGraph)
         return (log_implies, false)
     end
 
-    # Check for <= (reverse implies)
+    # Check for <= (log:impliedBy — backward chaining)
     if s2 == "<="
         _n3_consume_str!(p, "<=")
-        return (log_implies, true)  # swap subject and object
+        log_impliedBy = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
+        return (log_impliedBy, false)  # keep original order: consequent <= antecedent
     end
 
     # Check for = (owl:sameAs) — but not == or =>
@@ -663,20 +649,15 @@ function _n3_parse_verb!(p::_N3Parser, target::RDFGraph)
     end
 
     node = _n3_parse_node!(p, target)
-    (node::URIRef, false)
+    (node, false)
 end
 
-function _n3_parse_object_list!(p::_N3Parser, target::RDFGraph, subject::Node, predicate::URIRef, swap::Bool)
+function _n3_parse_object_list!(p::_N3Parser, target::RDFGraph, subject::Identifier, predicate::Identifier, swap::Bool)
     while true
         _n3_skip_ws!(p)
         object = _n3_parse_object!(p, target)
 
-        if swap
-            # For <=, swap subject and object for log:implies
-            add!(target, Triple(object::Node, predicate, subject))
-        else
-            add!(target, Triple(subject, predicate, object))
-        end
+        add!(target, Triple(subject, predicate, object))
 
         _n3_skip_ws!(p)
         c = _n3_peek(p)
@@ -695,6 +676,42 @@ end
 # ─── Node parsing ───────────────────────────────────────────────────
 
 function _n3_parse_node!(p::_N3Parser, target::RDFGraph=p.graph)::Identifier
+    c = _n3_peek(p)
+    c === nothing && throw(ArgumentError("Unexpected end of input"))
+
+    node = _n3_parse_base_node!(p, target)
+
+    # Handle N3 resource path syntax: node!pred (forward) or node^pred (reverse)
+    while p.pos <= lastindex(p.input)
+        c = p.input[p.pos]
+        if c == '!'
+            p.pos = nextind(p.input, p.pos)
+            pred = _n3_parse_base_node!(p, target)
+            pred isa URIRef || throw(ArgumentError("Path predicate must be a URI at position $(p.pos)"))
+            bn = BNode()
+            add!(target, Triple(node, pred, bn))
+            node = bn
+        elseif c == '^'
+            # Make sure it's not ^^ (datatype)
+            next_pos = nextind(p.input, p.pos)
+            if next_pos <= lastindex(p.input) && p.input[next_pos] == '^'
+                break  # ^^ is datatype indicator, not path
+            end
+            p.pos = nextind(p.input, p.pos)
+            pred = _n3_parse_base_node!(p, target)
+            pred isa URIRef || throw(ArgumentError("Path predicate must be a URI at position $(p.pos)"))
+            bn = BNode()
+            add!(target, Triple(bn, pred, node))
+            node = bn
+        else
+            break
+        end
+    end
+
+    return node
+end
+
+function _n3_parse_base_node!(p::_N3Parser, target::RDFGraph=p.graph)::Identifier
     c = _n3_peek(p)
     c === nothing && throw(ArgumentError("Unexpected end of input"))
 
@@ -830,13 +847,26 @@ function _n3_parse_collection!(p::_N3Parser, target::RDFGraph)
     _n3_consume!(p, '(')
     _n3_skip_ws!(p)
 
+    # Handle ($ ... $) set syntax — treat as regular list
+    is_set = false
+    c = _n3_peek(p)
+    if c == '\$'
+        is_set = true
+        p.pos = nextind(p.input, p.pos)
+        _n3_skip_ws!(p)
+    end
+
     rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
     rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
     rdf_nil = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
 
     c = _n3_peek(p)
-    if c == ')'
-        p.pos = nextind(p.input, p.pos)
+    if c == ')' || (is_set && c == '\$')
+        if is_set && c == '\$'
+            p.pos = nextind(p.input, p.pos)
+            _n3_skip_ws!(p)
+        end
+        _n3_consume!(p, ')')
         return rdf_nil
     end
 
@@ -846,14 +876,14 @@ function _n3_parse_collection!(p::_N3Parser, target::RDFGraph)
     while true
         _n3_skip_ws!(p)
         c = _n3_peek(p)
-        c == ')' && break
+        (c == ')' || (is_set && c == '\$')) && break
 
         item = _n3_parse_node!(p, target)
         add!(target, Triple(current, rdf_first, item))
 
         _n3_skip_ws!(p)
         c = _n3_peek(p)
-        if c == ')'
+        if c == ')' || (is_set && c == '\$')
             add!(target, Triple(current, rdf_rest, rdf_nil))
         else
             next_node = _n3_new_bnode!(p)
@@ -862,6 +892,13 @@ function _n3_parse_collection!(p::_N3Parser, target::RDFGraph)
         end
     end
 
+    if is_set
+        c = _n3_peek(p)
+        if c == '\$'
+            p.pos = nextind(p.input, p.pos)
+            _n3_skip_ws!(p)
+        end
+    end
     _n3_consume!(p, ')')
     head
 end
@@ -887,7 +924,7 @@ function _n3_parse_prefixed_name!(p::_N3Parser)
     local_buf = IOBuffer()
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
-        if c in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}', '#')
+        if c in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}', '#', '!', '^')
             break
         elseif c == '\\'
             p.pos = nextind(p.input, p.pos)

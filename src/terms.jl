@@ -316,8 +316,8 @@ Subject must be a Node (URIRef or BNode), predicate must be a URIRef,
 object can be any Identifier.
 """
 struct Triple
-    subject::Node
-    predicate::URIRef
+    subject::Identifier
+    predicate::Identifier  # URIRef normally; Variable in N3 rules
     object::Identifier
 end
 
@@ -348,4 +348,4 @@ end
 """
 A pattern for matching triples. `nothing` in any position is a wildcard.
 """
-const TriplePattern = Tuple{Union{Node, Nothing}, Union{URIRef, Nothing}, Union{Identifier, Nothing}}
+const TriplePattern = Tuple{Union{Identifier, Nothing}, Union{Identifier, Nothing}, Union{Identifier, Nothing}}

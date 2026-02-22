@@ -5,6 +5,11 @@ using Dates
 using EzXML
 import JSON3
 import SHA
+import MD5
+import XML
+import JSON
+import CSV
+import Tables
 
 # Core term types
 include("terms.jl")
@@ -12,6 +17,7 @@ include("terms.jl")
 # Namespace management
 include("namespaces.jl")
 include("extra_namespaces.jl")
+include("more_namespaces.jl")
 
 # Store interface and implementations
 include("store.jl")
@@ -34,6 +40,7 @@ include("turtle.jl")
 include("rdfxml.jl")
 include("trig.jl")
 include("jsonld.jl")
+include("jsonld_processing.jl")
 
 # High-level serialize/parse API
 include("io.jl")
@@ -47,6 +54,12 @@ include("nquads.jl")
 # Collections & Containers
 include("collections.jl")
 
+# Collection indexing support
+include("collection_indexing.jl")
+
+# RDF-specific exception types
+include("exceptions.jl")
+
 # Resource abstraction
 include("resource.jl")
 
@@ -59,6 +72,9 @@ include("visualization.jl")
 # RDFGraph isomorphism
 include("isomorphism.jl")
 
+# RDFGraph extras (transitive, skolemize, etc.)
+include("graph_extras.jl")
+
 # RDFGraph utilities (merge, diff, stats, CBD, connected components)
 include("graphutils.jl")
 
@@ -68,17 +84,92 @@ include("shacl.jl")
 # Notation3 (N3) format
 include("n3.jl")
 
+# N3 builtin predicates (math, string, log, crypto)
+include("n3_builtins.jl")
+
+# N3 reasoning: rule extraction and unification
+include("n3_rules.jl")
+include("n3_unifier.jl")
+
+# N3 proof trace generation
+include("n3_proof.jl")
+
+# N3 reasoner (Euler Abstract Machine)
+include("n3_reasoner.jl")
+
+# Additional formats
+include("trix.jl")
+include("hextuples.jl")
+include("longturtle.jl")
+include("rdfpatch.jl")
+include("sparql_tsv.jl")
+include("sparql_results_parser.jl")
+
+# Store wrappers
+include("auditablestore.jl")
+include("concurrentstore.jl")
+
+# Event system
+include("events.jl")
+
+# Plugin system
+include("plugin.jl")
+
+# InfixOWL
+include("infixowl.jl")
+
+# VoID metadata
+include("void.jl")
+
+# Namespace creator
+include("namespace_creator.jl")
+
+# Graph describer
+include("describer.jl")
+
+# ConjunctiveGraph, ReadOnlyGraphAggregate, BatchAddGraph, IsomorphicGraph
+include("conjunctivegraph.jl")
+include("readonlyaggregate.jl")
+include("batchaddgraph.jl")
+include("isomorphicgraph.jl")
+
+# Inference engine (RDFS/OWL forward chaining)
+include("inference.jl")
+
+# RDFS/OWL schema DOT visualization
+include("rdfs2dot.jl")
+
+# GraphViz.jl rendering integration
+include("graphviz_render.jl")
+
+# Chunked serialization/parsing
+include("chunk_serializer.jl")
+
+# HEXT (Hextuples) compatibility aliases
+include("hext.jl")
+
+# N3 term parser
+include("from_n3.jl")
+
+# XSD datetime utilities
+include("xsd_datetime.jl")
+
+# CLI tools
+include("cli.jl")
+
 export
     # Term types
     Identifier, Node, IdentifiedNode,
     URIRef, BNode, Literal, Variable, Triple, TripleTerm,
     n3, datatype, lang, value, toPython,
     defrag, fragment,
+    from_n3, to_term,
 
     # Namespaces
     Namespace, DefinedNamespace,
     RDF, RDFS, XSD, OWL, SKOS,
     FOAF, DC, DCTERMS, DCAT, PROV, SDO, SH, VANN, VOID, DOAP, ORG, GEO,
+    BRICK, CSVW, DCAM, DCMITYPE, ODRL2, PROF, QB, SOSA, SSN, TIME, WGS,
     NamespaceManager, bind!, expand_curie, compute_qname,
 
     # Store
@@ -95,6 +186,7 @@ export
     NQuadsFormat, RDFXMLFormat, TriGFormat, JSONLDFormat,
     SerializationFormat,
     serialize, parse_rdf, parse_rdf!,
+    parse_rdf_with_base, parse_rdf_with_base!,
 
     # Content negotiation & loading
     mime_type, format_from_mime, accept_header,
@@ -118,9 +210,16 @@ export
     Collection, add_collection!, collect_list,
     add_container!, collect_container,
     container_membership_property,
+    CollectionView, collection_view,
+
+    # Exceptions
+    RDFError, ParserError, UniquenessError, SPARQLError,
+    SerializationError, NamespaceError, StoreError,
+    unique_value,
 
     # Visualization
-    to_dot,
+    to_dot, rdfs2dot,
+    render_dot, render_graph, render_schema, save_visualization,
 
     # Isomorphism
     isomorphic, graph_hash, to_simple_graph, from_simple_graph,
@@ -128,10 +227,101 @@ export
     # RDFGraph utilities
     merge_graphs, graph_diff, graph_stats, cbd, connected_components,
 
+    # RDFGraph extras
+    transitive_objects, transitive_subjects, all_nodes, triples_choices,
+    skolemize, de_skolemize, parse_into!, graph_n3,
+
     # SHACL
     validate, ValidationReport, ValidationResult,
 
     # N3
-    Formula, N3Format, serialize_n3, parse_n3, parse_n3!, LOG, MATH
+    Formula, N3Format, serialize_n3, parse_n3, parse_n3!, LOG, MATH,
+
+    # N3 builtins
+    register_builtin!, is_builtin, evaluate_builtin,
+
+    # N3 reasoning
+    RuleDirection, FORWARD, BACKWARD,
+    N3Rule, extract_rules, RuleSet,
+    Binding, unify_term, unify_triple, apply_bindings, is_ground, match_conjunction,
+
+    # N3 proof
+    StepType, EXTRACTION, INFERENCE,
+    ProofStep, extraction_step, inference_step,
+    ProofTrace, record_extraction!, record_inference!,
+    proof_to_n3, proof_to_graph,
+
+    # N3 reasoner
+    N3Reasoner, eam_step!, eam_loop!, reason,
+
+    # Additional formats
+    serialize_trix, parse_trix, parse_trix!,
+    serialize_hextuples, parse_hextuples, parse_hextuples!,
+    serialize_hext, parse_hext, parse_hext!,
+    serialize_longturtle,
+    serialize_rdfpatch, parse_rdfpatch, apply_rdfpatch!,
+    sparql_results_tsv,
+    parse_sparql_results_json, parse_sparql_results_xml,
+    parse_sparql_results_csv, parse_sparql_results_tsv,
+    parse_sparql_ask_json, parse_sparql_ask_xml,
+
+    # Chunked serialization
+    serialize_chunked, parse_chunked,
+
+    # Store wrappers
+    AuditableStore, undo!, clear_journal!,
+    ConcurrentStore,
+
+    # Event system
+    RDFEvent, TripleAdded, TripleRemoved, GraphCleared,
+    EventDispatcher, on!, off!, emit!,
+    ObservableGraph,
+
+    # Plugin system
+    register_parser!, register_serializer!, register_store!,
+    unregister_parser!, unregister_serializer!, unregister_store!,
+    get_parser, get_serializer, get_store,
+    list_parsers, list_serializers, list_stores,
+
+    # InfixOWL
+    OWLClass, OWLProperty, OWLObjectProperty, OWLDatatypeProperty,
+    subclass_of!, owl_restriction, owl_ontology!, owl_individual,
+    owl_union, owl_intersection, owl_complement,
+
+    # VoID
+    generate_void,
+
+    # Namespace creator
+    create_namespace,
+
+    # Graph describer
+    Describer, describe, rdf_type!, property!, properties!,
+    label!, comment!, related!, sub_describe!,
+
+    # Inference
+    rdfs_closure, rdfs_closure!, owl_closure, owl_closure!, infer, entails,
+
+    # CLI tools
+    rdfpipe, csv2rdf,
+
+    # XSD datetime utilities
+    parse_xsd_datetime, parse_xsd_date, parse_xsd_time,
+    format_xsd_datetime, format_xsd_date, format_xsd_time,
+    xsd_literal,
+
+    # ConjunctiveGraph
+    ConjunctiveGraph, get_context, remove_context!,
+
+    # ReadOnlyGraphAggregate
+    ReadOnlyGraphAggregate,
+
+    # BatchAddGraph
+    BatchAddGraph, flush!, close!,
+
+    # IsomorphicGraph
+    IsomorphicGraph, to_isomorphic,
+
+    # JSON-LD Processing
+    jsonld_expand, jsonld_compact, jsonld_frame, jsonld_flatten
 
 end # module

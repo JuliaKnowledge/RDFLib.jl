@@ -44,6 +44,7 @@ end
 Add a triple from individual components.
 """
 add!(g::RDFGraph, s::Node, p::URIRef, o::Identifier) = add!(g, Triple(s, p, o))
+add!(g::RDFGraph, s::Identifier, p::Identifier, o::Identifier) = add!(g, Triple(s, p, o))
 
 """
     remove!(g::RDFGraph, pattern::TriplePattern)

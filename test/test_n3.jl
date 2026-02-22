@@ -89,9 +89,9 @@ const G = RDFLib.RDFGraph
         { ?X :p ?Y } <= { ?X :q ?Y } .
         """
         g = parse_n3(input)
-        rules = collect(triples(g, (nothing, URIRef("http://www.w3.org/2000/10/swap/log#implies"), nothing)))
+        rules = collect(triples(g, (nothing, URIRef("http://www.w3.org/2000/10/swap/log#impliedBy"), nothing)))
         @test length(rules) == 1
-        # For <=, the subject/object are swapped: {q} => {p}
+        # For <=, subject is consequent, object is antecedent (log:impliedBy)
     end
 
     @testset "N3 parsing - owl:sameAs shorthand" begin

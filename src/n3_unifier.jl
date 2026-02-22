@@ -10,10 +10,22 @@ const Binding = Dict{Variable, Identifier}
 Unify two terms. Variables in `a` can bind to values in `b`.
 Returns updated bindings on success, `nothing` on failure.
 """
+
+# Compare two Identifiers, using numeric comparison for numeric Literals.
+function _terms_match(a::Identifier, b::Identifier)
+    a == b && return true
+    if a isa Literal && b isa Literal
+        na = _to_number(a)
+        nb = _to_number(b)
+        na !== nothing && nb !== nothing && na == nb && return true
+    end
+    return false
+end
+
 function unify_term(a::Variable, b::Variable, bindings::Binding)
     if haskey(bindings, a)
         if haskey(bindings, b)
-            return bindings[a] == bindings[b] ? copy(bindings) : nothing
+            return _terms_match(bindings[a], bindings[b]) ? copy(bindings) : nothing
         else
             result = copy(bindings)
             result[b] = bindings[a]
@@ -33,7 +45,7 @@ end
 
 function unify_term(a::Variable, b::Identifier, bindings::Binding)
     if haskey(bindings, a)
-        return bindings[a] == b ? copy(bindings) : nothing
+        return _terms_match(bindings[a], b) ? copy(bindings) : nothing
     end
     result = copy(bindings)
     result[a] = b
@@ -42,7 +54,7 @@ end
 
 function unify_term(a::Identifier, b::Variable, bindings::Binding)
     if haskey(bindings, b)
-        return bindings[b] == a ? copy(bindings) : nothing
+        return _terms_match(bindings[b], a) ? copy(bindings) : nothing
     end
     result = copy(bindings)
     result[b] = a
@@ -50,7 +62,16 @@ function unify_term(a::Identifier, b::Variable, bindings::Binding)
 end
 
 function unify_term(a::Identifier, b::Identifier, bindings::Binding)
-    a == b ? copy(bindings) : nothing
+    a == b && return copy(bindings)
+    # Numeric comparison for Literals with different datatypes
+    if a isa Literal && b isa Literal
+        na = _to_number(a)
+        nb = _to_number(b)
+        if na !== nothing && nb !== nothing && na == nb
+            return copy(bindings)
+        end
+    end
+    return nothing
 end
 
 """
@@ -124,9 +145,14 @@ function _match_recursive!(results::Vector{Binding}, patterns::Vector{Triple},
     pattern = apply_bindings(patterns[idx], bindings)
 
     # Convert to store lookup pattern — Variables become nothing (wildcard)
+    # Numeric literals also become wildcards to support cross-datatype matching
     s = pattern.subject isa Variable ? nothing : pattern.subject
     p = pattern.predicate isa Variable ? nothing : pattern.predicate
     o = pattern.object isa Variable ? nothing : pattern.object
+
+    # Widen store query for numeric literals (decimal vs double etc.)
+    if s isa Literal && _to_number(s) !== nothing; s = nothing; end
+    if o isa Literal && _to_number(o) !== nothing; o = nothing; end
 
     # If s/o are BNode list heads in the list_graph, widen query to allow structural matching
     s_is_list = (s isa BNode && list_graph !== nothing && _resolve_rdf_list(s, list_graph) !== nothing)
@@ -160,8 +186,24 @@ function _unify_term_structural(a::Identifier, b::Identifier, bindings::Binding,
                                 pattern_graph::RDFGraph, fact_graph::RDFGraph)
     result = unify_term(a, b, bindings)
     result !== nothing && return result
-    # If both are ground BNodes, try structural list comparison
+    # If both are BNodes, try structural list unification
     if a isa BNode && b isa BNode
+        la = _resolve_rdf_list(a, pattern_graph)
+        lb = _resolve_rdf_list(b, fact_graph)
+        if la !== nothing && lb !== nothing && length(la) == length(lb)
+            # Unify element-by-element, binding variables
+            merged = copy(bindings)
+            ok = true
+            for (ea, eb) in zip(la, lb)
+                u = _unify_term_structural(ea, eb, merged, pattern_graph, fact_graph)
+                if u === nothing
+                    ok = false; break
+                end
+                merged = u
+            end
+            ok && return merged
+        end
+        # Non-list structural equality
         if _terms_equal_cross(a, b, pattern_graph, fact_graph)
             return copy(bindings)
         end

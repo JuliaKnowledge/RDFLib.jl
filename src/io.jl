@@ -106,3 +106,42 @@ function parse_rdf(filename::AbstractString)
     end
     g
 end
+
+# ─── Base URI (publicID) support ─────────────────────────────────────
+# Wraps existing format-specific parsers, setting a base URI on the
+# graph's namespace manager before parsing.
+
+"""
+    parse_rdf_with_base!(g::RDFGraph, source, fmt::SerializationFormat, base_uri::AbstractString) -> RDFGraph
+
+Parse RDF from `source` into an existing graph, binding `base_uri` as the
+default namespace (empty prefix) before parsing. This mirrors Python rdflib's
+`publicID` parameter.
+"""
+function parse_rdf_with_base!(g::RDFGraph, source, fmt::SerializationFormat, base_uri::AbstractString)
+    bind!(g, "", base_uri)
+    parse_rdf!(g, source, fmt)
+    g
+end
+
+"""
+    parse_rdf_with_base(source, fmt::SerializationFormat, base_uri::AbstractString) -> RDFGraph
+
+Parse RDF from `source` into a new graph with `base_uri` bound as the default
+namespace (empty prefix).
+"""
+function parse_rdf_with_base(source, fmt::SerializationFormat, base_uri::AbstractString)
+    g = RDFGraph()
+    parse_rdf_with_base!(g, source, fmt, base_uri)
+end
+
+# ─── Alternative arg order for serialize ─────────────────────────────
+
+"""
+    serialize(g::RDFGraph, fmt::SerializationFormat, filename::AbstractString)
+
+Serialize a graph to a file (alternative argument order).
+"""
+function serialize(g::RDFGraph, fmt::SerializationFormat, filename::AbstractString)
+    serialize(filename, g, fmt)
+end

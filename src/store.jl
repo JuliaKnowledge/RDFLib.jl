@@ -21,16 +21,16 @@ efficient pattern matching.
 """
 mutable struct MemoryStore <: AbstractStore
     # Three indices for efficient lookup on any combination of S, P, O
-    spo::Dict{Identifier, Dict{URIRef, Set{Identifier}}}
-    pos::Dict{URIRef, Dict{Identifier, Set{Identifier}}}
-    osp::Dict{Identifier, Dict{Identifier, Set{URIRef}}}
+    spo::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
+    pos::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
+    osp::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     count::Int
 end
 
 MemoryStore() = MemoryStore(
-    Dict{Identifier, Dict{URIRef, Set{Identifier}}}(),
-    Dict{URIRef, Dict{Identifier, Set{Identifier}}}(),
-    Dict{Identifier, Dict{Identifier, Set{URIRef}}}(),
+    Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
+    Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
+    Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     0
 )
 
@@ -44,7 +44,7 @@ function add!(store::MemoryStore, t::Triple)
 
     # SPO index
     if !haskey(store.spo, s)
-        store.spo[s] = Dict{URIRef, Set{Identifier}}()
+        store.spo[s] = Dict{Identifier, Set{Identifier}}()
     end
     if !haskey(store.spo[s], p)
         store.spo[s][p] = Set{Identifier}()
@@ -62,10 +62,10 @@ function add!(store::MemoryStore, t::Triple)
 
     # OSP index
     if !haskey(store.osp, o)
-        store.osp[o] = Dict{Identifier, Set{URIRef}}()
+        store.osp[o] = Dict{Identifier, Set{Identifier}}()
     end
     if !haskey(store.osp[o], s)
-        store.osp[o][s] = Set{URIRef}()
+        store.osp[o][s] = Set{Identifier}()
     end
     push!(store.osp[o][s], p)
 
