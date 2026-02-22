@@ -334,6 +334,8 @@ function parse_n3!(g::RDFGraph, input::AbstractString; base::Union{String,Nothin
         if !isempty(base_dir)
             push!(_N3_BASE_DIRS, base_dir)
         end
+        # Track current document base URI for builtins like log:parsedAsN3
+        push!(_N3_DOC_BASE_URIS, base)
     end
     _n3_parse_document!(parser)
     g
@@ -777,6 +779,18 @@ function _n3_parse_verb!(p::_N3Parser, target::RDFGraph)
         end
     end
 
+    # Check for 'has' keyword (N3 explicit forward: S has P O ≡ S P O)
+    if c == 'h' && _n3_at_string(p, "has")
+        has_end = p.pos
+        for _ in 1:3; has_end = nextind(p.input, has_end); end
+        if has_end > lastindex(p.input) || p.input[has_end] in (' ', '\t', '\n', '\r')
+            _n3_consume_str!(p, "has")
+            _n3_skip_ws!(p)
+            predicate = _n3_parse_node!(p, target)
+            return (predicate, false)
+        end
+    end
+
     node = _n3_parse_node!(p, target)
     (node, false)
 end
@@ -813,6 +827,13 @@ function _n3_parse_node!(p::_N3Parser, target::RDFGraph=p.graph)::Identifier
     c === nothing && throw(ArgumentError("Unexpected end of input"))
 
     node = _n3_parse_base_node!(p, target)
+
+    # @forAll URIs become Variables (universal quantification)
+    if node isa URIRef && node.value in p.forall_uris
+        i = findlast('#', node.value)
+        local_name = i !== nothing ? node.value[i+1:end] : basename(node.value)
+        node = Variable(local_name)
+    end
 
     # Handle N3 resource path syntax: node!pred (forward) or node^pred (reverse)
     while p.pos <= lastindex(p.input)

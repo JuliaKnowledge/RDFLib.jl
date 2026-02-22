@@ -8,6 +8,17 @@ const _BUILTIN_REGISTRY = Dict{URIRef, Function}()
 # Base directory for resolving relative file URIs in builtins (log:semantics, etc.)
 const _N3_BASE_DIRS = String[]
 
+# URI prefix → local directory path mapping for resolving remote URIs to local files
+const _N3_URI_PATH_MAP = Dict{String, String}()
+
+# Current document base URIs (stack, for nested parsing)
+const _N3_DOC_BASE_URIS = String[]
+
+"""Register a mapping from a URI prefix to a local directory path."""
+function register_uri_path_mapping!(uri_prefix::String, local_prefix::String)
+    _N3_URI_PATH_MAP[uri_prefix] = local_prefix
+end
+
 """
     register_builtin!(uri::URIRef, fn::Function)
 
@@ -1189,12 +1200,40 @@ function _builtin_log_includes(subject::Identifier, object::Identifier,
     s = _resolve(subject, bindings)
     o = _resolve(object, bindings)
     (s isa Formula && o isa Formula) || return _failure()
-    # Match all triples in object's graph against subject's graph, collecting bindings
+
+    # Convert existential Variables (from _bnodes_to_vars) to BNodes in the subject formula
+    # so they can be matched as ground terms by pattern variables
+    s_triples = _existentials_to_bnodes(collect(s.graph))
+
+    # Collect object formula triples
     o_triples = collect(o.graph)
     isempty(o_triples) && return _success(bindings)
-    match_results = _match_formula_triples(o_triples, collect(s.graph), 1, Dict{Variable, Identifier}())
+
+    # Build fact base: subject formula triples + object formula's own list structure triples
+    # This handles cases like `{} log:includes {(1 2) rdf:first []}` where the list
+    # structure in the pattern formula provides data for self-matching.
+    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+    rdf_rest  = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+    o_bnodes_with_first = Set{String}()
+    o_bnodes_with_rest = Set{String}()
+    for t in o_triples
+        sid = _existential_id(t.subject)
+        sid === nothing && continue
+        t.predicate == rdf_first && push!(o_bnodes_with_first, sid)
+        t.predicate == rdf_rest && push!(o_bnodes_with_rest, sid)
+    end
+    list_bnodes = intersect(o_bnodes_with_first, o_bnodes_with_rest)
+    if !isempty(list_bnodes)
+        # Add object formula's list structure triples (with existentials→BNodes) as facts
+        list_facts = _existentials_to_bnodes(o_triples)
+        facts = vcat(s_triples, list_facts)
+    else
+        facts = s_triples
+    end
+
+    match_results = _match_formula_triples(o_triples, facts, 1, Dict{Variable, Identifier}())
     isempty(match_results) && return _failure()
-    # Merge the first successful match into bindings
+    # Merge successful matches into bindings
     results = Dict{Variable, Identifier}[]
     for mr in match_results
         merged = copy(bindings)
@@ -1209,6 +1248,33 @@ function _builtin_log_includes(subject::Identifier, object::Identifier,
         @label next_match
     end
     isempty(results) ? _failure() : results
+end
+
+"""Get the ID string for an existential Variable (those from _bnodes_to_vars), or nothing."""
+function _existential_id(term::Identifier)
+    term isa Variable || return nothing
+    startswith(term.name, "_bn_") && return term.name
+    return nothing
+end
+
+"""Convert existential Variables (starting with `_bn_`) to BNodes in a list of triples."""
+function _existentials_to_bnodes(triples::Vector{Triple})
+    bnode_map = Dict{String, BNode}()
+    function conv(term::Identifier)
+        if term isa Variable && startswith(term.name, "_bn_")
+            get!(bnode_map, term.name) do; BNode(); end
+        elseif term isa Formula
+            # Recursively convert inside formulas
+            f = Formula()
+            for t in term.graph
+                add!(f, Triple(conv(t.subject), t.predicate, conv(t.object)))
+            end
+            f
+        else
+            term
+        end
+    end
+    [Triple(conv(t.subject), t.predicate, conv(t.object)) for t in triples]
 end
 
 function _match_formula_triples(pat::Vector{Triple}, facts::Vector{Triple},
@@ -1230,6 +1296,45 @@ function _builtin_log_notIncludes(subject::Identifier, object::Identifier,
                                   graph::Union{RDFGraph, Nothing}=nothing)
     result = _builtin_log_includes(subject, object, bindings, graph)
     isempty(result) ? _success(bindings) : _failure()
+end
+
+# log:supports — like log:includes but applies forward-chaining rules first
+function _builtin_log_supports(subject::Identifier, object::Identifier,
+                               bindings::Dict{Variable, Identifier},
+                               graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    (s isa Formula && o isa Formula) || return _failure()
+    # Build a graph from the subject formula and run the reasoner
+    input_graph = RDFGraph()
+    for t in s.graph
+        add!(input_graph, t)
+    end
+    result_graph = try
+        reason(input_graph; max_iterations=100, pass_only_new=false)
+    catch
+        return _failure()
+    end
+    # Check whether all triples in the object formula are in the reasoned result
+    o_triples = collect(o.graph)
+    isempty(o_triples) && return _success(bindings)
+    result_triples = collect(result_graph)
+    match_results = _match_formula_triples(o_triples, result_triples, 1, Dict{Variable, Identifier}())
+    isempty(match_results) && return _failure()
+    results = Dict{Variable, Identifier}[]
+    for mr in match_results
+        merged = copy(bindings)
+        for (k, v) in mr
+            if haskey(merged, k)
+                merged[k] != v && @goto next_supports_match
+            else
+                merged[k] = v
+            end
+        end
+        push!(results, merged)
+        @label next_supports_match
+    end
+    isempty(results) ? _failure() : results
 end
 
 function _builtin_log_rawType(subject::Identifier, object::Identifier,
@@ -1829,7 +1934,9 @@ function _builtin_log_semantics(subject::Identifier, object::Identifier,
         return _failure()
     end
     parsed = try
-        parse_n3(content)
+        g = RDFGraph()
+        parse_n3!(g, content; base=s.value)
+        g
     catch
         return _failure()
     end
@@ -1885,10 +1992,19 @@ function _builtin_log_conclusion(subject::Identifier, object::Identifier,
     catch
         return _failure()
     end
-    # Collect all triples into a result Formula
+    # Collect all triples into a result Formula (including original rule triples)
     result_formula = Formula()
+    log_implies_uri = URIRef("http://www.w3.org/2000/10/swap/log#implies")
+    log_impliedBy_uri = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
     for t in result_graph
         add!(result_formula, t)
+    end
+    # Re-add rule triples that reason() removes from working graph
+    for t in s.graph
+        if (t.predicate == log_implies_uri || t.predicate == log_impliedBy_uri) &&
+           t.subject isa Formula && t.object isa Formula
+            add!(result_formula, t)
+        end
     end
     _bind_or_check(object, result_formula, bindings)
 end
@@ -1965,7 +2081,16 @@ end
 function _uri_to_filepath(uri::String)
     if startswith(uri, "file://")
         return uri[8:end]
-    elseif !contains(uri, "://")
+    end
+    # Check URI-to-path mappings (e.g., https://example.org/path/ → /local/path/)
+    for (uri_prefix, local_prefix) in _N3_URI_PATH_MAP
+        if startswith(uri, uri_prefix)
+            relative = uri[length(uri_prefix)+1:end]
+            candidate = joinpath(local_prefix, relative)
+            isfile(candidate) && return candidate
+        end
+    end
+    if !contains(uri, "://")
         # Relative path — check if it exists as-is
         isfile(uri) && return uri
         # Try resolving relative to registered base directories
@@ -1985,9 +2110,12 @@ function _builtin_log_parsedAsN3(subject::Identifier, object::Identifier,
     s = _resolve(subject, bindings)
     o = _resolve(object, bindings)
     if s isa Literal
-        # Forward: parse string → formula
+        # Forward: parse string → formula, using current document base for relative URIs
+        doc_base = isempty(_N3_DOC_BASE_URIS) ? nothing : _N3_DOC_BASE_URIS[end]
         parsed_graph = try
-            parse_n3(s.lexical)
+            g = RDFGraph()
+            parse_n3!(g, s.lexical; base=doc_base)
+            g
         catch
             return _failure()
         end
@@ -3037,6 +3165,7 @@ function _register_n3_builtins!()
     register_builtin!(log("notEqualTo"),    _builtin_log_notEqualTo)
     register_builtin!(log("includes"),      _builtin_log_includes)
     register_builtin!(log("notIncludes"),   _builtin_log_notIncludes)
+    register_builtin!(log("supports"),      _builtin_log_supports)
     register_builtin!(log("rawType"),       _builtin_log_rawType)
     register_builtin!(log("uri"),           _builtin_log_uri)
     register_builtin!(log("langlit"),       _builtin_log_langlit)
