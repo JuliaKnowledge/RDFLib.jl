@@ -1,0 +1,158 @@
+---
+title: "Datasets and Named Graphs"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+While an RDF Graph is a set of triples, real-world applications often need multiple graphs with different provenance. An RDF **Dataset** holds a default graph plus named graphs, each identified by a URI.
+
+```{julia}
+using RDFLib
+ex = Namespace("http://example.org/")
+```
+
+## Creating a Dataset
+
+```{julia}
+ds = Dataset()
+
+# Add triples to named graphs
+add!(ds, Triple(ex("alice"), RDF.type, FOAF("Person")), ex("graph/alice"))
+add!(ds, Triple(ex("alice"), FOAF("name"), Literal("Alice")), ex("graph/alice"))
+add!(ds, Triple(ex("alice"), FOAF("mbox"), URIRef("mailto:alice@example.org")), ex("graph/alice"))
+
+add!(ds, Triple(ex("bob"), RDF.type, FOAF("Person")), ex("graph/bob"))
+add!(ds, Triple(ex("bob"), FOAF("name"), Literal("Bob")), ex("graph/bob"))
+
+# Add to the default graph
+add!(ds, Triple(ex("graph/alice"), DCTERMS("creator"), Literal("System A")))
+add!(ds, Triple(ex("graph/bob"), DCTERMS("creator"), Literal("System B")))
+
+println("Dataset has $(length(collect(graphs(ds)))) graphs (including default)")
+```
+
+## Accessing Named Graphs
+
+```{julia}
+# Retrieve a specific named graph
+alice_g = get_graph(ds, ex("graph/alice"))
+println("Alice's graph: $(length(alice_g)) triples")
+for t in alice_g
+    println("  ", t)
+end
+```
+
+## Quads
+
+In a dataset, triples carry a fourth component — the graph name (context):
+
+```{julia}
+println("All quads:")
+for q in quads(ds)
+    ctx = q.graph === nothing ? "default" : string(q.graph)
+    println("  [$(ctx)] $(q.subject) $(q.predicate) $(q.object)")
+end
+```
+
+## Serializing Datasets
+
+### TriG Format
+
+TriG extends Turtle with named graph blocks:
+
+```{julia}
+trig = serialize_trig(ds)
+println(trig)
+```
+
+### N-Quads Format
+
+One quad per line:
+
+```{julia}
+nq = serialize_nquads(ds)
+println(nq)
+```
+
+## Conjunctive Graphs
+
+A `ConjunctiveGraph` provides a unified view over all graphs in a dataset:
+
+```{julia}
+cg = ConjunctiveGraph()
+
+# Add triples to different contexts
+ctx1 = ex("context/weather")
+ctx2 = ex("context/geography")
+
+add!(cg, Triple(ex("london"), ex("temp"), Literal(15)), ctx1)
+add!(cg, Triple(ex("paris"), ex("temp"), Literal(18)), ctx1)
+add!(cg, Triple(ex("london"), RDF.type, ex("City")), ctx2)
+add!(cg, Triple(ex("paris"), RDF.type, ex("City")), ctx2)
+
+# Query across all contexts
+println("All triples across contexts:")
+for t in cg
+    println("  ", t)
+end
+```
+
+```{julia}
+# Get a specific context
+weather = get_context(cg, ctx1)
+println("\nWeather context:")
+for t in weather
+    println("  ", t)
+end
+```
+
+## Read-Only Aggregate
+
+Combine multiple graphs into a single read-only view:
+
+```{julia}
+g1 = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+    ex:a ex:p "1" .
+""", TurtleFormat())
+
+g2 = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+    ex:b ex:q "2" .
+""", TurtleFormat())
+
+agg = ReadOnlyGraphAggregate([g1, g2])
+println("Aggregate has $(length(agg)) triples:")
+for t in agg
+    println("  ", t)
+end
+```
+
+## Use Case: Provenance Tracking
+
+Named graphs are commonly used to track where data came from:
+
+```{julia}
+ds2 = Dataset()
+prov = Namespace("http://www.w3.org/ns/prov#")
+
+# Data from a sensor
+sensor_g = add_graph(ds2, ex("graph/sensor"))
+add!(sensor_g, Triple(ex("reading1"), ex("temperature"), Literal(22.5)))
+add!(sensor_g, Triple(ex("reading1"), ex("humidity"), Literal(65)))
+
+# Record provenance in the default graph
+add!(ds2.default_graph, Triple(ex("graph/sensor"), RDF.type, prov("Entity")))
+add!(ds2.default_graph, Triple(ex("graph/sensor"), prov("wasGeneratedBy"), ex("sensorProcess")))
+add!(ds2.default_graph, Triple(ex("graph/sensor"), prov("generatedAtTime"),
+    Literal("2025-01-15T10:30:00"; datatype=XSD.dateTime)))
+
+println("Dataset with provenance:")
+for t in ds2.default_graph
+    println("  ", t)
+end
+```

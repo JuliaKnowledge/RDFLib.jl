@@ -1,0 +1,332 @@
+---
+title: "Real-World Example: Modelling an Epidemiological Knowledge Graph"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+This vignette demonstrates a complete, practical application of RDFLib.jl: building a knowledge graph for infectious disease epidemiology. We model diseases, pathogens, hosts, transmission routes, and interventions — then query, validate, reason, and serialize the data.
+
+```{julia}
+using RDFLib
+
+# Define namespaces
+epi = Namespace("http://example.org/epi/")
+obo = Namespace("http://purl.obolibrary.org/obo/")
+
+g = RDFGraph()
+bind!(g, "epi", epi)
+bind!(g, "rdfs", Namespace("http://www.w3.org/2000/01/rdf-schema#"))
+bind!(g, "xsd", Namespace("http://www.w3.org/2001/XMLSchema#"))
+```
+
+## Step 1: Define the Ontology
+
+```{julia}
+# Classes
+for cls in ["Disease", "Pathogen", "Host", "TransmissionRoute", "Intervention",
+            "Virus", "Bacterium", "Parasite", "Vaccine", "Drug"]
+    add!(g, Triple(epi(cls), RDF.type, OWL("Class")))
+end
+
+# Class hierarchy
+add!(g, Triple(epi("Virus"), RDFS("subClassOf"), epi("Pathogen")))
+add!(g, Triple(epi("Bacterium"), RDFS("subClassOf"), epi("Pathogen")))
+add!(g, Triple(epi("Parasite"), RDFS("subClassOf"), epi("Pathogen")))
+add!(g, Triple(epi("Vaccine"), RDFS("subClassOf"), epi("Intervention")))
+add!(g, Triple(epi("Drug"), RDFS("subClassOf"), epi("Intervention")))
+
+# Properties
+add!(g, Triple(epi("causedBy"), RDF.type, OWL("ObjectProperty")))
+add!(g, Triple(epi("causedBy"), RDFS("domain"), epi("Disease")))
+add!(g, Triple(epi("causedBy"), RDFS("range"), epi("Pathogen")))
+
+add!(g, Triple(epi("transmittedVia"), RDF.type, OWL("ObjectProperty")))
+add!(g, Triple(epi("infects"), RDF.type, OWL("ObjectProperty")))
+add!(g, Triple(epi("preventedBy"), RDF.type, OWL("ObjectProperty")))
+add!(g, Triple(epi("treatedBy"), RDF.type, OWL("ObjectProperty")))
+
+add!(g, Triple(epi("R0"), RDF.type, OWL("DatatypeProperty")))
+add!(g, Triple(epi("caseFatalityRate"), RDF.type, OWL("DatatypeProperty")))
+add!(g, Triple(epi("incubationDays"), RDF.type, OWL("DatatypeProperty")))
+
+println("Ontology: $(length(g)) triples")
+```
+
+## Step 2: Populate with Disease Data
+
+```{julia}
+diseases = [
+    (id="COVID19", name="COVID-19", pathogen="SARSCoV2", pathogen_type="Virus",
+     r0=2.5, cfr=0.02, incubation=5,
+     routes=["Airborne", "Droplet", "Contact"],
+     hosts=["Human"],
+     vaccines=["BNT162b2", "mRNA1273"],
+     treatments=["Paxlovid", "Remdesivir"]),
+
+    (id="Malaria", name="Malaria", pathogen="PlasmodiumFalciparum", pathogen_type="Parasite",
+     r0=100.0, cfr=0.003, incubation=12,
+     routes=["VectorBorne"],
+     hosts=["Human", "Mosquito"],
+     vaccines=["RTS_S"],
+     treatments=["Artemisinin", "Chloroquine"]),
+
+    (id="Tuberculosis", name="Tuberculosis", pathogen="MycobacteriumTB", pathogen_type="Bacterium",
+     r0=4.0, cfr=0.15, incubation=28,
+     routes=["Airborne"],
+     hosts=["Human"],
+     vaccines=["BCG"],
+     treatments=["Isoniazid", "Rifampicin"]),
+
+    (id="Influenza", name="Influenza", pathogen="InfluenzaA", pathogen_type="Virus",
+     r0=1.5, cfr=0.001, incubation=2,
+     routes=["Airborne", "Droplet"],
+     hosts=["Human", "Bird", "Pig"],
+     vaccines=["FluVax"],
+     treatments=["Oseltamivir"]),
+]
+
+for d in diseases
+    disease = epi(d.id)
+    add!(g, Triple(disease, RDF.type, epi("Disease")))
+    add!(g, Triple(disease, RDFS("label"), Literal(d.name)))
+    add!(g, Triple(disease, epi("R0"), Literal(d.r0)))
+    add!(g, Triple(disease, epi("caseFatalityRate"), Literal(d.cfr)))
+    add!(g, Triple(disease, epi("incubationDays"), Literal(d.incubation)))
+
+    # Pathogen
+    pathogen = epi(d.pathogen)
+    add!(g, Triple(pathogen, RDF.type, epi(d.pathogen_type)))
+    add!(g, Triple(pathogen, RDFS("label"), Literal(d.pathogen)))
+    add!(g, Triple(disease, epi("causedBy"), pathogen))
+
+    # Routes
+    for r in d.routes
+        route = epi(r)
+        add!(g, Triple(route, RDF.type, epi("TransmissionRoute")))
+        add!(g, Triple(disease, epi("transmittedVia"), route))
+    end
+
+    # Hosts
+    for h in d.hosts
+        host = epi(h)
+        add!(g, Triple(host, RDF.type, epi("Host")))
+        add!(g, Triple(pathogen, epi("infects"), host))
+    end
+
+    # Interventions
+    for v in d.vaccines
+        vax = epi(v)
+        add!(g, Triple(vax, RDF.type, epi("Vaccine")))
+        add!(g, Triple(vax, RDFS("label"), Literal(v)))
+        add!(g, Triple(disease, epi("preventedBy"), vax))
+    end
+    for t in d.treatments
+        drug = epi(t)
+        add!(g, Triple(drug, RDF.type, epi("Drug")))
+        add!(g, Triple(drug, RDFS("label"), Literal(t)))
+        add!(g, Triple(disease, epi("treatedBy"), drug))
+    end
+end
+
+println("Knowledge graph: $(length(g)) triples")
+```
+
+## Step 3: Query the Knowledge Graph
+
+### Find Airborne Diseases
+
+```{julia}
+results = sparql_query(g, """
+    PREFIX epi: <http://example.org/epi/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+    SELECT ?disease ?name ?r0 WHERE {
+        ?disease a epi:Disease ;
+                 rdfs:label ?name ;
+                 epi:R0 ?r0 ;
+                 epi:transmittedVia epi:Airborne .
+    }
+    ORDER BY DESC(?r0)
+""")
+
+println("Airborne diseases (by R0):")
+for row in results
+    println("  $(row["name"]): R0=$(row["r0"])")
+end
+```
+
+### Find Diseases with Vaccines
+
+```{julia}
+results = sparql_query(g, """
+    PREFIX epi: <http://example.org/epi/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+    SELECT ?disease ?vaccine WHERE {
+        ?d a epi:Disease ;
+           rdfs:label ?disease ;
+           epi:preventedBy ?v .
+        ?v rdfs:label ?vaccine .
+    }
+    ORDER BY ?disease
+""")
+
+println("Diseases and their vaccines:")
+for row in results
+    println("  $(row["disease"]): $(row["vaccine"])")
+end
+```
+
+### Aggregation: Treatments per Disease
+
+```{julia}
+results = sparql_query(g, """
+    PREFIX epi: <http://example.org/epi/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+    SELECT ?disease (COUNT(?treatment) AS ?num_treatments) WHERE {
+        ?d a epi:Disease ;
+           rdfs:label ?disease ;
+           epi:treatedBy ?treatment .
+    }
+    GROUP BY ?disease
+    ORDER BY DESC(?num_treatments)
+""")
+
+println("Treatment options per disease:")
+for row in results
+    println("  $(row["disease"]): $(row["num_treatments"]) treatments")
+end
+```
+
+## Step 4: Validate with SHACL
+
+```{julia}
+shapes = parse_rdf("""
+    @prefix sh: <http://www.w3.org/ns/shacl#> .
+    @prefix epi: <http://example.org/epi/> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+    epi:DiseaseShape a sh:NodeShape ;
+        sh:targetClass epi:Disease ;
+        sh:property [
+            sh:path epi:causedBy ;
+            sh:minCount 1 ;
+            sh:class epi:Pathogen ;
+            sh:name "causative agent" ;
+        ] ;
+        sh:property [
+            sh:path epi:R0 ;
+            sh:minCount 1 ;
+            sh:name "basic reproduction number" ;
+        ] .
+""", TurtleFormat())
+
+report = validate(g, shapes)
+println("SHACL validation: $(report.conforms ? "✅ PASS" : "❌ FAIL")")
+if !report.conforms
+    for r in report.results
+        println("  $(r.focus_node): $(r.message)")
+    end
+end
+```
+
+## Step 5: Reason with N3
+
+Use N3 rules to infer new knowledge:
+
+```{julia}
+rules_n3 = """
+@prefix epi: <http://example.org/epi/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# High-risk: R0 > 3 and CFR > 0.01
+{
+    ?D a epi:Disease .
+    ?D epi:R0 ?R .
+    ?D epi:caseFatalityRate ?CFR .
+    ?R math:greaterThan 3 .
+    ?CFR math:greaterThan 0.01 .
+}
+=>
+{
+    ?D epi:riskLevel "HIGH" .
+} .
+
+# Zoonotic: has non-human hosts
+{
+    ?D a epi:Disease .
+    ?D epi:causedBy ?P .
+    ?P epi:infects ?H .
+    ?H log:notEqualTo epi:Human .
+}
+=>
+{
+    ?D epi:isZoonotic true .
+} .
+"""
+
+g_n3 = parse_n3(rules_n3)
+# Add our data to the N3 graph
+for t in g
+    add!(g_n3, t)
+end
+
+result = reason(g_n3; max_iterations=50)
+
+println("Risk levels:")
+for t in triples(result, (nothing, epi("riskLevel"), nothing))
+    name_t = collect(triples(result, (t.subject, RDFS("label"), nothing)))
+    name = isempty(name_t) ? string(t.subject) : string(name_t[1].object)
+    println("  $name: $(t.object)")
+end
+
+println("\nZoonotic diseases:")
+for t in triples(result, (nothing, epi("isZoonotic"), nothing))
+    name_t = collect(triples(result, (t.subject, RDFS("label"), nothing)))
+    name = isempty(name_t) ? string(t.subject) : string(name_t[1].object)
+    println("  $name")
+end
+```
+
+## Step 6: Serialize and Export
+
+```{julia}
+# Export as Turtle
+ttl = serialize(g, TurtleFormat())
+println("Turtle output: $(length(ttl)) characters")
+println(first(ttl, 500), "\n...")
+```
+
+```{julia}
+# Export as JSON-LD for web APIs
+jsonld = serialize(g, JSONLDFormat())
+println("\nJSON-LD output: $(length(jsonld)) characters")
+println(first(jsonld, 500), "\n...")
+```
+
+```{julia}
+# Generate dataset metadata
+void_g = generate_void(g, epi("epidemiology-kg"))
+println("\nVoID metadata:")
+println(serialize(void_g, TurtleFormat()))
+```
+
+## Summary
+
+This vignette demonstrated a complete RDF workflow:
+
+1. **Ontology design** — classes, properties, and hierarchies
+2. **Data population** — structured facts about diseases
+3. **SPARQL queries** — filtering, aggregation, pattern matching
+4. **SHACL validation** — ensuring data quality
+5. **N3 reasoning** — deriving new knowledge from rules
+6. **Serialization** — exporting in multiple formats
+
+RDFLib.jl provides all the tools needed for building production knowledge graphs in Julia.

@@ -1,0 +1,224 @@
+---
+title: "Serialization Formats"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+RDFLib.jl supports reading and writing RDF data in many formats. This vignette demonstrates each format with the same sample graph.
+
+```{julia}
+using RDFLib
+
+# Build a sample graph
+g = RDFGraph()
+ex = Namespace("http://example.org/")
+bind!(g, "ex", ex)
+
+add!(g, Triple(ex("earth"), RDF.type, ex("Planet")))
+add!(g, Triple(ex("earth"), RDFS("label"), Literal("Earth"; lang="en")))
+add!(g, Triple(ex("earth"), RDFS("label"), Literal("Terre"; lang="fr")))
+add!(g, Triple(ex("earth"), ex("radius_km"), Literal(6371)))
+add!(g, Triple(ex("earth"), ex("hasMoon"), ex("moon")))
+add!(g, Triple(ex("moon"), RDF.type, ex("Moon")))
+add!(g, Triple(ex("moon"), RDFS("label"), Literal("The Moon")))
+```
+
+## Turtle
+
+Turtle is the most human-readable RDF format. It supports prefixes, abbreviations, and multi-value shorthand.
+
+```{julia}
+ttl = serialize(g, TurtleFormat())
+println(ttl)
+```
+
+```{julia}
+# Round-trip: parse back
+g2 = parse_rdf(ttl, TurtleFormat())
+println("Round-trip: $(length(g2)) triples (original: $(length(g)))")
+```
+
+## N-Triples
+
+N-Triples is the simplest line-based format — one triple per line, fully expanded URIs.
+
+```{julia}
+nt = serialize(g, NTriplesFormat())
+println(nt)
+```
+
+```{julia}
+g3 = parse_rdf(nt, NTriplesFormat())
+println("Parsed: $(length(g3)) triples")
+```
+
+## N3 (Notation3)
+
+N3 extends Turtle with formulas (quoted graphs), variables, and implications — the foundation for N3 reasoning.
+
+```{julia}
+n3_str = serialize_n3(g)
+println(n3_str)
+```
+
+## RDF/XML
+
+The original RDF serialization format, based on XML.
+
+```{julia}
+rdfxml = serialize(g, RDFXMLFormat())
+println(rdfxml)
+```
+
+```{julia}
+g4 = parse_rdf(rdfxml, RDFXMLFormat())
+println("Parsed: $(length(g4)) triples")
+```
+
+## JSON-LD
+
+JSON-LD embeds RDF in JSON, making it web-developer friendly.
+
+```{julia}
+jsonld = serialize(g, JSONLDFormat())
+println(jsonld)
+```
+
+```{julia}
+# Parse JSON-LD
+g5 = parse_rdf(jsonld, JSONLDFormat())
+println("Parsed: $(length(g5)) triples")
+```
+
+### JSON-LD Processing
+
+```{julia}
+# Expand — remove context, show full URIs
+expanded = jsonld_expand(jsonld)
+println("Expanded:")
+println(expanded)
+```
+
+```{julia}
+# Compact — apply a context to shorten URIs
+context = Dict{String,Any}("@context" => Dict{String,Any}("ex" => "http://example.org/", "label" => "http://www.w3.org/2000/01/rdf-schema#label"))
+compacted = jsonld_compact(jsonld, context)
+println("Compacted:")
+println(compacted)
+```
+
+## N-Quads
+
+N-Quads extend N-Triples with a fourth element for named graphs.
+
+```{julia}
+ds = Dataset()
+for t in g
+    add!(ds, t)
+end
+nq = serialize_nquads(ds)
+println(nq)
+```
+
+## TriG
+
+TriG extends Turtle with named graph support.
+
+```{julia}
+trig = serialize_trig(ds)
+println(trig)
+```
+
+## TriX
+
+TriX is an XML-based format for named graphs.
+
+```{julia}
+trix = serialize_trix(g)
+println(trix)
+```
+
+## HexTuples (HEXT)
+
+A line-based JSON format, one array per triple.
+
+```{julia}
+hext = serialize_hextuples(g)
+println(hext)
+```
+
+## Long Turtle
+
+Verbose Turtle with one triple per line (useful for diffs).
+
+```{julia}
+lt = serialize(g, TurtleFormat())
+println(lt)
+```
+
+## RDF Patch
+
+RDF Patch represents changes (additions/deletions) to a graph.
+
+```{julia}
+# serialize_rdfpatch takes additions and deletions vectors
+additions = collect(g)
+deletions = Triple[]
+patch = serialize_rdfpatch(additions, deletions)
+println(first(patch, 500))
+```
+
+## File I/O
+
+### Saving to Files
+
+```{julia}
+#| eval: false
+# Format is auto-detected from file extension
+save_rdf(g, "planets.ttl")          # Turtle
+save_rdf(g, "planets.nt")           # N-Triples
+save_rdf(g, "planets.jsonld")       # JSON-LD
+save_rdf(g, "planets.rdf")          # RDF/XML
+
+# Or specify format explicitly
+save_rdf(g, "planets.dat"; format=NTriplesFormat())
+```
+
+### Loading from Files
+
+```{julia}
+#| eval: false
+# Format auto-detected from extension
+g = load_rdf_file("planets.ttl")
+
+# Explicit format
+g = load_rdf_file("planets.dat"; format=NTriplesFormat())
+```
+
+## Content Negotiation
+
+```{julia}
+# Get MIME types for formats
+println("Turtle:    ", mime_type(TurtleFormat()))
+println("JSON-LD:   ", mime_type(JSONLDFormat()))
+println("RDF/XML:   ", mime_type(RDFXMLFormat()))
+println("N-Triples: ", mime_type(NTriplesFormat()))
+```
+
+## Format Comparison
+
+| Format | Human Readable | Compact | Named Graphs | Standard |
+|--------|:---:|:---:|:---:|:---:|
+| Turtle | ✅ | ✅ | ❌ | W3C |
+| N-Triples | ⚠️ | ❌ | ❌ | W3C |
+| N3 | ✅ | ✅ | ✅ (formulas) | W3C |
+| RDF/XML | ❌ | ⚠️ | ❌ | W3C |
+| JSON-LD | ✅ | ✅ | ✅ | W3C |
+| TriG | ✅ | ✅ | ✅ | W3C |
+| N-Quads | ⚠️ | ❌ | ✅ | W3C |
+| TriX | ❌ | ❌ | ✅ | W3C |
+| HexTuples | ⚠️ | ❌ | ✅ | Community |

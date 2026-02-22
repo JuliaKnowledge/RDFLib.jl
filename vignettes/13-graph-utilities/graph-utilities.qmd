@@ -1,0 +1,276 @@
+---
+title: "Graph Utilities and Visualization"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+RDFLib.jl provides utility functions for analyzing, transforming, and visualizing RDF graphs. This vignette covers graph statistics, connected components, VoID metadata, event handling, and DOT export.
+
+```{julia}
+using RDFLib
+ex = Namespace("http://example.org/")
+```
+
+## Graph Statistics
+
+```{julia}
+g = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+    ex:alice a ex:Person ;
+        rdfs:label "Alice" ;
+        ex:knows ex:bob, ex:carol .
+
+    ex:bob a ex:Person ;
+        rdfs:label "Bob" ;
+        ex:knows ex:carol .
+
+    ex:carol a ex:Person ;
+        rdfs:label "Carol" .
+
+    ex:project1 a ex:Project ;
+        rdfs:label "RDFLib.jl" ;
+        ex:contributor ex:alice, ex:bob .
+""", TurtleFormat())
+
+stats = graph_stats(g)
+for k in keys(stats)
+    println("  $k: $(stats[k])")
+end
+```
+
+## All Nodes
+
+```{julia}
+nodes = all_nodes(g)
+println("Unique nodes in graph:")
+for n in nodes
+    println("  ", n)
+end
+```
+
+## Connected Components
+
+Find disconnected subgraphs:
+
+```{julia}
+g2 = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+
+    # Component 1: Social network
+    ex:alice ex:knows ex:bob .
+    ex:bob ex:knows ex:carol .
+
+    # Component 2: Isolated
+    ex:sun ex:type "Star" .
+    ex:earth ex:orbits ex:sun .
+""", TurtleFormat())
+
+components = connected_components(g2)
+println("Found $(length(components)) connected components:")
+for (i, comp) in enumerate(components)
+    println("  Component $i: $(length(comp)) triples")
+    for t in comp
+        println("    ", t)
+    end
+end
+```
+
+## VoID (Vocabulary of Interlinked Datasets)
+
+Generate metadata about your dataset:
+
+```{julia}
+void_graph = generate_void(g, ex("myDataset"))
+println(serialize(void_graph, TurtleFormat()))
+```
+
+## Visualization with DOT
+
+Export graphs as Graphviz DOT format for visualization:
+
+```{julia}
+small_g = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+    ex:alice ex:knows ex:bob .
+    ex:bob ex:knows ex:carol .
+    ex:carol ex:knows ex:alice .
+""", TurtleFormat())
+
+dot = to_dot(small_g)
+println(dot)
+```
+
+```{julia}
+#| eval: false
+# Render to SVG (requires Graphviz installed)
+svg = render_dot(dot)
+
+# Save visualization directly
+save_visualization(g, "my_graph.svg")
+save_visualization(g, "my_graph.png")
+```
+
+## Schema Visualization
+
+Visualize class hierarchies and property relationships:
+
+```{julia}
+schema_g = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+    ex:Animal a owl:Class .
+    ex:Mammal a owl:Class ; rdfs:subClassOf ex:Animal .
+    ex:Dog a owl:Class ; rdfs:subClassOf ex:Mammal .
+    ex:Cat a owl:Class ; rdfs:subClassOf ex:Mammal .
+
+    ex:hasName a owl:DatatypeProperty ;
+        rdfs:domain ex:Animal .
+    ex:hasOwner a owl:ObjectProperty ;
+        rdfs:domain ex:Animal ;
+        rdfs:range ex:Person .
+""", TurtleFormat())
+
+schema_dot = rdfs2dot(schema_g)
+println(schema_dot)
+```
+
+## Event System
+
+Monitor graph changes with the event system:
+
+```{julia}
+g3 = RDFGraph()
+dispatcher = EventDispatcher()
+obs = ObservableGraph(g3, dispatcher)
+
+# Register event handlers
+global additions = 0
+on!(dispatcher, TripleAdded, event -> (global additions += 1))
+
+# Changes trigger events
+add!(obs, Triple(ex("a"), ex("p"), Literal("1")))
+add!(obs, Triple(ex("b"), ex("q"), Literal("2")))
+add!(obs, Triple(ex("c"), ex("r"), Literal("3")))
+
+println("Additions tracked: $additions")
+```
+
+## Plugin System
+
+Register custom parsers and serializers:
+
+```{julia}
+# List available parsers and serializers
+println("Registered parsers:")
+for p in list_parsers()
+    println("  ", p)
+end
+
+println("\nRegistered serializers:")
+for s in list_serializers()
+    println("  ", s)
+end
+```
+
+```{julia}
+# Register a custom serializer
+my_serializer = function(graph)
+    buf = IOBuffer()
+    for t in graph
+        write(buf, "FACT: $(n3(t.subject)) --[$(n3(t.predicate))]--> $(n3(t.object))\n")
+    end
+    String(take!(buf))
+end
+register_serializer!("text/x-myformat", my_serializer)
+
+# Use it
+g4 = parse_rdf("""
+    @prefix ex: <http://example.org/> .
+    ex:a ex:likes ex:b .
+    ex:b ex:likes ex:c .
+""", TurtleFormat())
+
+custom = get_serializer("text/x-myformat")
+println(custom(g4))
+
+# Clean up
+unregister_serializer!("text/x-myformat")
+```
+
+## Chunked Processing
+
+Process large graphs in chunks:
+
+```{julia}
+# Create a moderately large graph
+g5 = RDFGraph()
+for i in 1:100
+    add!(g5, Triple(ex("item$i"), RDF.type, ex("Thing")))
+    add!(g5, Triple(ex("item$i"), RDFS("label"), Literal("Item $i")))
+end
+
+# Serialize in chunks to an IOBuffer
+buf = IOBuffer()
+serialize_chunked(g5, NTriplesFormat(), buf; chunk_size=50)
+output = String(take!(buf))
+lines = split(output, '\n')
+println("Serialized $(length(lines)-1) triples")
+println("First 200 chars preview:")
+println(first(output, 200), "...")
+```
+
+## XSD Date/Time Utilities
+
+```{julia}
+using Dates
+
+# Format Julia dates as XSD literals
+d = Date(2025, 3, 15)
+dt = DateTime(2025, 3, 15, 10, 30, 0)
+t = Time(14, 30, 0)
+
+println("XSD date:     ", n3(xsd_literal(d)))
+println("XSD dateTime: ", n3(xsd_literal(dt)))
+
+# Parse XSD strings
+parsed_dt = parse_xsd_datetime("2025-03-15T10:30:00")
+println("Parsed: ", parsed_dt)
+```
+
+## CLI Utilities
+
+RDFLib.jl includes command-line style utilities:
+
+```{julia}
+# Convert between formats (rdfpipe)
+turtle_input = """
+    @prefix ex: <http://example.org/> .
+    ex:a ex:p "hello" .
+    ex:b ex:q "world" .
+"""
+
+nt_output = rdfpipe(turtle_input, TurtleFormat(), NTriplesFormat())
+println("Converted to N-Triples:")
+println(nt_output)
+```
+
+```{julia}
+# CSV to RDF conversion
+csv_data = """name,age,city
+Alice,30,London
+Bob,25,Paris
+Carol,35,Tokyo
+"""
+
+csv_rdf = csv2rdf(csv_data, "http://example.org/person/")
+println("CSV as RDF ($(length(csv_rdf)) triples):")
+println(serialize(csv_rdf, TurtleFormat()))
+```

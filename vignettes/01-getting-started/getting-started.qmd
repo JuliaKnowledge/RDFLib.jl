@@ -1,0 +1,163 @@
+---
+title: "Getting Started with RDFLib.jl"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Introduction
+
+RDFLib.jl is a comprehensive Julia package for working with [RDF](https://www.w3.org/RDF/) (Resource Description Framework) data — the foundational data model for the Semantic Web and Linked Data. It provides tools for creating, querying, serializing, and reasoning over RDF graphs.
+
+This vignette walks through the basics: installing the package, creating your first graph, and performing simple operations.
+
+## Installation
+
+```{julia}
+#| eval: false
+using Pkg
+Pkg.add(url="https://github.com/your-org/RDFLib.jl")
+```
+
+## Loading the Package
+
+```{julia}
+using RDFLib
+```
+
+## Your First RDF Graph
+
+An RDF graph is a set of *triples* — statements of the form **subject → predicate → object**. Let's model some facts about a person.
+
+```{julia}
+# Create an empty graph
+g = RDFGraph()
+
+# Define a namespace for our vocabulary
+ex = Namespace("http://example.org/")
+
+# Add triples about Alice
+add!(g, Triple(ex("alice"), RDF.type, FOAF("Person")))
+add!(g, Triple(ex("alice"), FOAF("name"), Literal("Alice")))
+add!(g, Triple(ex("alice"), FOAF("age"), Literal(30)))
+add!(g, Triple(ex("alice"), FOAF("knows"), ex("bob")))
+
+# Add triples about Bob
+add!(g, Triple(ex("bob"), RDF.type, FOAF("Person")))
+add!(g, Triple(ex("bob"), FOAF("name"), Literal("Bob")))
+
+println("Graph has $(length(g)) triples")
+```
+
+## Querying the Graph
+
+You can query the graph by matching triple patterns. Use `nothing` as a wildcard.
+
+```{julia}
+# Find all people
+println("People in the graph:")
+for t in triples(g, (nothing, RDF.type, FOAF("Person")))
+    println("  ", t.subject)
+end
+```
+
+```{julia}
+# Find everything about Alice
+println("\nFacts about Alice:")
+for t in triples(g, (ex("alice"), nothing, nothing))
+    println("  ", t.predicate, " → ", t.object)
+end
+```
+
+```{julia}
+# Use convenience functions
+println("\nAlice knows:")
+for obj in objects(g, ex("alice"), FOAF("knows"))
+    println("  ", obj)
+end
+```
+
+## Serialization
+
+RDFLib.jl supports many RDF serialization formats. Let's output our graph in Turtle format:
+
+```{julia}
+ttl = serialize(g, TurtleFormat())
+println(ttl)
+```
+
+And in N-Triples format (one triple per line, fully explicit):
+
+```{julia}
+nt = serialize(g, NTriplesFormat())
+println(nt)
+```
+
+## Parsing RDF Data
+
+You can parse RDF data from strings:
+
+```{julia}
+turtle_data = """
+@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+ex:carol a foaf:Person ;
+    foaf:name "Carol" ;
+    foaf:knows ex:alice .
+"""
+
+g2 = parse_rdf(turtle_data, TurtleFormat())
+println("Parsed $(length(g2)) triples about Carol")
+```
+
+## Merging Graphs
+
+Combine graphs easily:
+
+```{julia}
+merged = merge_graphs(g, g2)
+println("Merged graph has $(length(merged)) triples")
+
+# Find all people in the merged graph
+println("\nAll people:")
+for t in triples(merged, (nothing, RDF.type, FOAF("Person")))
+    name_triples = collect(triples(merged, (t.subject, FOAF("name"), nothing)))
+    name = isempty(name_triples) ? "unknown" : name_triples[1].object
+    println("  $(t.subject) — $name")
+end
+```
+
+## SPARQL Queries
+
+RDFLib.jl includes a built-in SPARQL query engine:
+
+```{julia}
+results = sparql_query(merged, """
+    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+    SELECT ?person ?name WHERE {
+        ?person a foaf:Person .
+        ?person foaf:name ?name .
+    }
+    ORDER BY ?name
+""")
+
+for row in results
+    println("$(row["name"]) — $(row["person"])")
+end
+```
+
+## What's Next?
+
+This was a quick taste of RDFLib.jl. Subsequent vignettes cover:
+
+- **RDF Terms** — URIs, literals, blank nodes, and data types in depth
+- **Building Graphs** — advanced graph construction patterns
+- **Namespaces** — managing and creating vocabularies
+- **Serialization** — all supported formats (Turtle, JSON-LD, RDF/XML, N3, etc.)
+- **SPARQL** — full query and update support
+- **N3 Reasoning** — forward/backward chaining with the built-in reasoner
+- **SHACL Validation** — validating graphs against shape constraints
+- **Store Backends** — SQLite, DuckDB, and remote SPARQL endpoints
+- **Real-World Examples** — biomedical data, knowledge graphs, and more
