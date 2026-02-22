@@ -49,15 +49,52 @@ end
 function _to_number(lit::Identifier)
     lit isa Literal || return nothing
     v = tryparse(Float64, lit.lexical)
-    v !== nothing && isinteger(v) ? Int(v) : v
+    v === nothing && return nothing
+    # Convert integer-valued floats to Int, but preserve float zeros (-0.0, 0.0e0)
+    if isinteger(v) && isfinite(v) && !iszero(v)
+        return Int(v)
+    elseif iszero(v) && _is_integer_input(lit)
+        return Int(0)
+    end
+    return v
 end
+
+const _XSD_INTEGER = URIRef("http://www.w3.org/2001/XMLSchema#integer")
+const _XSD_DECIMAL = URIRef("http://www.w3.org/2001/XMLSchema#decimal")
+const _XSD_DOUBLE  = URIRef("http://www.w3.org/2001/XMLSchema#double")
 
 function _from_number(n)
     if n isa Integer
-        Literal(string(n); datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
+        Literal(string(n); datatype=_XSD_INTEGER)
+    elseif isnan(n)
+        Literal("NaN"; datatype=_XSD_DOUBLE)
+    elseif isinf(n)
+        Literal(n > 0 ? "INF" : "-INF"; datatype=_XSD_DOUBLE)
+    elseif isinteger(n) && isfinite(n)
+        Literal(string(Int(n)); datatype=_XSD_INTEGER)
     else
-        Literal(string(Float64(n)); datatype=URIRef("http://www.w3.org/2001/XMLSchema#double"))
+        Literal(string(Float64(n)); datatype=_XSD_DECIMAL)
     end
+end
+
+"""Check if a literal represents an integer (by datatype or lexical form)."""
+function _is_integer_input(lit::Identifier)
+    lit isa Literal || return false
+    dt = lit.datatype
+    if dt !== nothing
+        dtval = dt.value
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        if startswith(dtval, xsd)
+            t = dtval[length(xsd)+1:end]
+            return t in ("integer", "int", "long", "short", "byte",
+                         "nonNegativeInteger", "positiveInteger",
+                         "negativeInteger", "nonPositiveInteger",
+                         "unsignedInt", "unsignedLong", "unsignedShort", "unsignedByte")
+        end
+    end
+    lex = lit.lexical
+    return !occursin('.', lex) && !occursin('e', lex) && !occursin('E', lex) &&
+           tryparse(Int, lex) !== nothing
 end
 
 function _success(bindings, extra::Pair{Variable, <:Identifier}...)
@@ -104,7 +141,8 @@ function _bind_or_check(term::Identifier, val::Identifier,
             a = _to_number(resolved)
             b = _to_number(val)
             if a !== nothing && b !== nothing
-                return a == b ? _success(bindings) : _failure()
+                eq = (a isa Integer && b isa Integer) ? (a == b) : isapprox(Float64(a), Float64(b))
+                return eq ? _success(bindings) : _failure()
             end
         end
         # Structural list comparison for BNodes
@@ -292,8 +330,7 @@ const _MATH = "http://www.w3.org/2000/10/swap/math#"
 # --- comparisons ---
 
 for (name, op) in [(:greaterThan, :>), (:lessThan, :<),
-                    (:notGreaterThan, :<=), (:notLessThan, :>=),
-                    (:equalTo, :(==)), (:notEqualTo, :(!=))]
+                    (:notGreaterThan, :<=), (:notLessThan, :>=)]
     fname = Symbol("_builtin_math_", name)
     @eval function $fname(subject::Identifier, object::Identifier,
                           bindings::Dict{Variable, Identifier},
@@ -306,12 +343,36 @@ for (name, op) in [(:greaterThan, :>), (:lessThan, :<),
     end
 end
 
+# equalTo / notEqualTo use isapprox for float tolerance
+function _builtin_math_equalTo(subject::Identifier, object::Identifier,
+                               bindings::Dict{Variable, Identifier},
+                               graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    a = _to_number(s)
+    b = _to_number(o)
+    (a !== nothing && b !== nothing) || return _failure()
+    eq = (a isa Integer && b isa Integer) ? (a == b) : isapprox(Float64(a), Float64(b))
+    eq ? _success(bindings) : _failure()
+end
+
+function _builtin_math_notEqualTo(subject::Identifier, object::Identifier,
+                                  bindings::Dict{Variable, Identifier},
+                                  graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    a = _to_number(s)
+    b = _to_number(o)
+    (a !== nothing && b !== nothing) || return _failure()
+    eq = (a isa Integer && b isa Integer) ? (a == b) : isapprox(Float64(a), Float64(b))
+    !eq ? _success(bindings) : _failure()
+end
+
 # --- unary functions (subject → object) ---
 
-for (name, fn) in [(:negation, :(-)), (:absoluteValue, :abs),
-                    (:floor, :floor), (:ceiling, :ceil), (:rounded, :round),
+for (name, fn) in [(:absoluteValue, :abs),
+                    (:floor, :floor), (:ceiling, :ceil),
                     (:sqrt, :sqrt),
-                    (:sin, :sin), (:cos, :cos), (:tan, :tan),
                     (:asin, :asin), (:acos, :acos), (:atan, :atan),
                     (:sinh, :sinh), (:cosh, :cosh), (:tanh, :tanh),
                     (:asinh, :asinh), (:acosh, :acosh), (:atanh, :atanh)]
@@ -320,6 +381,54 @@ for (name, fn) in [(:negation, :(-)), (:absoluteValue, :abs),
                           bindings::Dict{Variable, Identifier},
                           graph::Union{RDFGraph, Nothing}=nothing)
         s = _resolve(subject, bindings)
+        a = _to_number(s)
+        a === nothing && return _failure()
+        result = $fn(a)
+        _bind_or_check(object, _from_number(result), bindings)
+    end
+end
+
+# negation: supports inverse (?x math:negation 3 → ?x = -3)
+function _builtin_math_negation(subject::Identifier, object::Identifier,
+                                bindings::Dict{Variable, Identifier},
+                                graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    o = _resolve(object, bindings)
+    if s isa Variable
+        b = _to_number(o)
+        b === nothing && return _failure()
+        return _success(bindings, s => _from_number(-b))
+    end
+    a = _to_number(s)
+    a === nothing && return _failure()
+    _bind_or_check(object, _from_number(-a), bindings)
+end
+
+# rounded: uses RoundNearestTiesUp (W3C spec: 0.5 → 1, 2.5 → 3)
+function _builtin_math_rounded(subject::Identifier, object::Identifier,
+                               bindings::Dict{Variable, Identifier},
+                               graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    a = _to_number(s)
+    a === nothing && return _failure()
+    result = round(a, RoundNearestTiesUp)
+    _bind_or_check(object, _from_number(result), bindings)
+end
+
+# sin/cos/tan: support inverse mode (?y math:sin val → ?y = asin(val))
+for (name, fn, inv_fn) in [(:sin, :sin, :asin), (:cos, :cos, :acos), (:tan, :tan, :atan)]
+    fname = Symbol("_builtin_math_", name)
+    @eval function $fname(subject::Identifier, object::Identifier,
+                          bindings::Dict{Variable, Identifier},
+                          graph::Union{RDFGraph, Nothing}=nothing)
+        s = _resolve(subject, bindings)
+        if s isa Variable
+            o = _resolve(object, bindings)
+            b = _to_number(o)
+            b === nothing && return _failure()
+            inv_result = $inv_fn(b)
+            return _success(bindings, s => _from_number(inv_result))
+        end
         a = _to_number(s)
         a === nothing && return _failure()
         result = $fn(a)
@@ -348,6 +457,9 @@ function _builtin_math_sum_list(subject::Identifier, object::Identifier,
     items = _resolve_rdf_list(s, graph)
     if items !== nothing
         items = _resolve_items(items, bindings)
+        if isempty(items)
+            return _bind_or_check(object, _from_number(0), bindings)
+        end
         nums = [_to_number(x) for x in items]
         any(isnothing, nums) && return _failure()
         return _bind_or_check(object, _from_number(sum(nums)), bindings)
@@ -368,6 +480,9 @@ function _builtin_math_product_list(subject::Identifier, object::Identifier,
     items = _resolve_rdf_list(s, graph)
     if items !== nothing
         items = _resolve_items(items, bindings)
+        if isempty(items)
+            return _bind_or_check(object, _from_number(1), bindings)
+        end
         nums = [_to_number(x) for x in items]
         any(isnothing, nums) && return _failure()
         return _bind_or_check(object, _from_number(prod(nums)), bindings)
@@ -405,13 +520,18 @@ function _builtin_math_quotient(subject::Identifier, object::Identifier,
         items = _resolve_items(items, bindings)
         a = _to_number(items[1])
         b = _to_number(items[2])
-        (a !== nothing && b !== nothing && b != 0) || return _failure()
-        return _bind_or_check(object, _from_number(a / b), bindings)
+        (a !== nothing && b !== nothing) || return _failure()
+        if b == 0
+            # Allow float division by zero when either operand is non-integer
+            (items[1] isa Literal && !_is_integer_input(items[1])) ||
+            (items[2] isa Literal && !_is_integer_input(items[2])) || return _failure()
+        end
+        return _bind_or_check(object, _from_number(Float64(a) / Float64(b)), bindings)
     end
     return _failure()
 end
 
-# math:remainder: (a b) math:remainder result  (a % b)
+# math:remainder: (a b) math:remainder result  — integer only, uses mod (sign of divisor)
 function _builtin_math_remainder(subject::Identifier, object::Identifier,
                                  bindings::Dict{Variable, Identifier},
                                  graph::Union{RDFGraph, Nothing}=nothing)
@@ -419,10 +539,11 @@ function _builtin_math_remainder(subject::Identifier, object::Identifier,
     items = _resolve_rdf_list(s, graph)
     if items !== nothing && length(items) == 2
         items = _resolve_items(items, bindings)
+        _is_integer_input(items[1]) && _is_integer_input(items[2]) || return _failure()
         a = _to_number(items[1])
         b = _to_number(items[2])
         (a !== nothing && b !== nothing && b != 0) || return _failure()
-        return _bind_or_check(object, _from_number(rem(a, b)), bindings)
+        return _bind_or_check(object, _from_number(mod(a, b)), bindings)
     end
     return _failure()
 end
@@ -441,7 +562,11 @@ function _builtin_math_exponentiation(subject::Identifier, object::Identifier,
         b = _to_number(resolved_b)
         if a !== nothing && b !== nothing
             # Forward: (base, exp) → result
-            return _bind_or_check(object, _from_number(a^b), bindings)
+            if a isa Integer && b isa Integer && b >= 0
+                return _bind_or_check(object, _from_number(a^b), bindings)
+            else
+                return _bind_or_check(object, _from_number(Float64(a)^Float64(b)), bindings)
+            end
         elseif a !== nothing && b === nothing && resolved_b isa Variable
             # Inverse: (base, ?exp) with known result → find exp
             r = _to_number(o)
@@ -1049,30 +1174,58 @@ function _builtin_log_rawType(subject::Identifier, object::Identifier,
     log_ns = Namespace(_LOG)
     rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
     rdf_list = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#List")
+    log_set = log_ns("Set")
     type_uri = if s isa Literal
         log_ns("Literal")
     elseif s isa Formula
         log_ns("Formula")
     elseif s isa BNode
-        # Check if it's an RDF list head
-        if graph !== nothing && _resolve_rdf_list(s, graph) !== nothing
-            rdf_list
-        else
-            # Check type annotations in graph: LabeledBlankNode vs UnlabeledBlankNode
-            found_type = nothing
-            if graph !== nothing
-                for t in triples(graph, (s, rdf_type, nothing))
-                    tobj = t.object
-                    if tobj == log_ns("LabeledBlankNode") || tobj == log_ns("UnlabeledBlankNode") ||
-                       tobj == log_ns("SkolemIRI") || tobj == log_ns("ForSome") || tobj == log_ns("ForAll")
-                        found_type = tobj
-                        break
-                    end
+        # Check type annotations in graph first
+        found_type = nothing
+        if graph !== nothing
+            for t in triples(graph, (s, rdf_type, nothing))
+                tobj = t.object
+                if tobj == log_ns("LabeledBlankNode") || tobj == log_ns("UnlabeledBlankNode") ||
+                   tobj == log_ns("SkolemIRI") || tobj == log_ns("ForSome") || tobj == log_ns("ForAll") ||
+                   tobj == log_set
+                    found_type = tobj
+                    break
                 end
             end
-            found_type !== nothing ? found_type : log_ns("UnlabeledBlankNode")
+        end
+        if found_type == log_set
+            log_set
+        elseif found_type !== nothing
+            found_type
+        else
+            # Determine if this is an auto-generated BNode
+            is_uuid = startswith(s.id, "N") && length(s.id) == 33 && all(c -> c in "0123456789abcdef", s.id[2:end])
+            is_parser_gen = !is_uuid && match(r"^b\d+$", s.id) !== nothing
+            if is_uuid || is_parser_gen
+                # Auto-generated BNode — check if it's a list/set head
+                if graph !== nothing && _resolve_rdf_list(s, graph) !== nothing
+                    rdf_list
+                elseif is_uuid
+                    log_ns("UnlabeledBlankNode")
+                else
+                    log_ns("UnlabeledBlankNode")
+                end
+            else
+                log_ns("LabeledBlankNode")  # user-defined _:name BNode
+            end
         end
     elseif s isa URIRef
+        # Check if it has ForSome/ForAll type annotations in graph
+        if graph !== nothing
+            for t in triples(graph, (s, rdf_type, nothing))
+                tobj = t.object
+                if tobj == log_ns("ForSome")
+                    return _bind_or_check(object, log_ns("ForSome"), bindings)
+                elseif tobj == log_ns("ForAll")
+                    return _bind_or_check(object, log_ns("ForAll"), bindings)
+                end
+            end
+        end
         # Check if it's a SkolemIRI
         if contains(s.value, ".well-known/genid")
             log_ns("SkolemIRI")
@@ -1647,6 +1800,71 @@ function _builtin_log_semanticsOrError(subject::Identifier, object::Identifier,
         add!(formula, t)
     end
     _bind_or_check(object, formula, bindings)
+end
+
+# log:conclusion — run reasoner on a formula and return all conclusions
+function _builtin_log_conclusion(subject::Identifier, object::Identifier,
+                                  bindings::Dict{Variable, Identifier},
+                                  graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Formula || return _failure()
+    # Build a graph from the formula's triples
+    input_graph = RDFGraph()
+    for t in s.graph
+        add!(input_graph, t)
+    end
+    # Run the reasoner on this sub-graph
+    result_graph = try
+        reason(input_graph; max_iterations=100, pass_only_new=false)
+    catch
+        return _failure()
+    end
+    # Collect all triples into a result Formula
+    result_formula = Formula()
+    for t in result_graph
+        add!(result_formula, t)
+    end
+    _bind_or_check(object, result_formula, bindings)
+end
+
+# log:inferences — check if triples are inferred from a formula
+function _builtin_log_inferences(subject::Identifier, object::Identifier,
+                                  bindings::Dict{Variable, Identifier},
+                                  graph::Union{RDFGraph, Nothing}=nothing)
+    s = _resolve(subject, bindings)
+    s isa Formula || return _failure()
+    o = _resolve(object, bindings)
+    # Run the reasoner to get conclusions
+    input_graph = RDFGraph()
+    for t in s.graph
+        add!(input_graph, t)
+    end
+    result_graph = try
+        reason(input_graph; max_iterations=100, pass_only_new=false)
+    catch
+        return _failure()
+    end
+    if o isa Formula
+        # Check if all triples in the object formula are in the result
+        for t in o.graph
+            found = false
+            for rt in result_graph
+                if rt.subject == t.subject && rt.predicate == t.predicate && rt.object == t.object
+                    found = true; break
+                end
+            end
+            found || return _failure()
+        end
+        return _success(bindings)
+    elseif o isa Variable
+        # Bind to all conclusions
+        result_formula = Formula()
+        for t in result_graph
+            add!(result_formula, t)
+        end
+        return _bind_or_check(object, result_formula, bindings)
+    end
+    _failure()
 end
 
 # log:content — read content of URI as string (supports file: and http/https)
@@ -2664,6 +2882,8 @@ function _register_n3_builtins!()
     register_builtin!(log("callWithOptional"),  _builtin_log_callWithOptional)
     register_builtin!(log("callWithCut"),       _builtin_log_callWithCut)
     register_builtin!(log("callWithCleanup"),   _builtin_log_callWithCleanup)
+    register_builtin!(log("conclusion"),         _builtin_log_conclusion)
+    register_builtin!(log("inferences"),         _builtin_log_inferences)
 
     crypto = Namespace(_CRYPTO)
     register_builtin!(crypto("sha"),     _builtin_crypto_sha1)
