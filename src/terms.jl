@@ -195,12 +195,19 @@ Return the datatype URI, or `nothing`.
 datatype(lit::Literal) = lit.datatype
 
 """
-    toPython(lit::Literal)
+    convert(Any, lit::Literal)
+    convert(Int, lit::Literal)
+    convert(Float64, lit::Literal)
+    convert(Bool, lit::Literal)
+    convert(DateTime, lit::Literal)
+    convert(Date, lit::Literal)
+    convert(String, lit::Literal)
 
-Convert a Literal to a native Julia value based on its datatype.
-Returns the lexical string if the datatype is unrecognized.
+Convert a Literal to a native Julia value. `convert(Any, lit)` auto-detects
+the target type from the literal's XSD datatype. Returns the lexical string
+if the datatype is unrecognized.
 """
-function toPython(lit::Literal)
+function _literal_to_julia(lit::Literal)
     dt = lit.datatype
     isnothing(dt) && return lit.lexical
     dtval = dt.value
@@ -211,7 +218,7 @@ function toPython(lit::Literal)
     elseif dtval == _XSD * "boolean"
         return lit.lexical in ("true", "1")
     elseif dtval == _XSD * "dateTime"
-        return DateTime(lit.lexical, dateformat"yyyy-mm-ddTHH:MM:SS")
+        return parse_xsd_datetime(lit.lexical)
     elseif dtval == _XSD * "date"
         return Date(lit.lexical, dateformat"yyyy-mm-dd")
     elseif dtval == _XSD * "string"
@@ -220,6 +227,14 @@ function toPython(lit::Literal)
         return lit.lexical
     end
 end
+
+Base.convert(::Type{Any}, lit::Literal) = _literal_to_julia(lit)
+Base.convert(::Type{Int}, lit::Literal) = parse(Int, lit.lexical)
+Base.convert(::Type{Float64}, lit::Literal) = parse(Float64, lit.lexical)
+Base.convert(::Type{Bool}, lit::Literal) = lit.lexical in ("true", "1")
+Base.convert(::Type{DateTime}, lit::Literal) = parse_xsd_datetime(lit.lexical)
+Base.convert(::Type{Date}, lit::Literal) = Date(lit.lexical, dateformat"yyyy-mm-dd")
+Base.convert(::Type{String}, lit::Literal) = lit.lexical
 
 """
     n3(lit::Literal) -> String
@@ -349,3 +364,100 @@ end
 A pattern for matching triples. `nothing` in any position is a wildcard.
 """
 const TriplePattern = Tuple{Union{Identifier, Nothing}, Union{Identifier, Nothing}, Union{Identifier, Nothing}}
+
+# ─── IRI Validation (RFC 3986) ──────────────────────────────────────
+
+const _IRI_SCHEME_RE = r"^[A-Za-z][A-Za-z0-9+\-.]*$"
+const _IRI_SPLIT_RE = r"^(([A-Za-z][A-Za-z0-9+\-.]*):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?$"
+const _BAD_PERCENT_RE = r"%(?![0-9A-Fa-f]{2})"
+
+"""
+    validate_iri(iri::AbstractString) -> Bool
+
+Validate an IRI string according to RFC 3986.
+Checks for valid scheme, no spaces/illegal characters, and proper percent-encoding.
+"""
+function validate_iri(iri::AbstractString)::Bool
+    isempty(iri) && return false
+    occursin(' ', iri) && return false
+    m = match(_IRI_SPLIT_RE, iri)
+    isnothing(m) && return false
+    scheme = m.captures[2]
+    isnothing(scheme) && return false
+    isempty(scheme) && return false
+    !occursin(_IRI_SCHEME_RE, scheme) && return false
+    occursin(_BAD_PERCENT_RE, iri) && return false
+    for ch in iri
+        (ch < ' ' || ch == '\x7f') && return false
+        ch in ('<', '>', '{', '}', '|', '\\', '^', '`') && return false
+    end
+    return true
+end
+
+"""
+    validate_iri!(iri::AbstractString)
+
+Validate an IRI string, throwing `ArgumentError` if invalid.
+"""
+function validate_iri!(iri::AbstractString)
+    validate_iri(iri) || throw(ArgumentError("Invalid IRI: $iri"))
+    nothing
+end
+
+"""
+    parse_iri(iri::AbstractString) -> NamedTuple
+
+Parse an IRI into components: `(scheme, authority, path, query, fragment)`.
+Any component not present is `nothing`.
+"""
+function parse_iri(iri::AbstractString)
+    m = match(_IRI_SPLIT_RE, iri)
+    isnothing(m) && return (scheme=nothing, authority=nothing, path="", query=nothing, fragment=nothing)
+    (
+        scheme    = m.captures[2],
+        authority = m.captures[4],
+        path      = something(m.captures[5], ""),
+        query     = m.captures[7],
+        fragment  = m.captures[9],
+    )
+end
+
+# ─── BCP 47 Language Tag Validation (RFC 5646) ─────────────────────
+
+const _LANGTAG_RE = r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+const _LANGTAG_FULL_RE = r"^(?<language>[A-Za-z]{2,3})(-(?<script>[A-Za-z]{4}))?(-(?<region>[A-Za-z]{2}|[0-9]{3}))?(-(?<variant>[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*$"
+
+"""
+    validate_langtag(tag::AbstractString) -> Bool
+
+Validate a BCP 47 language tag per RFC 5646.
+"""
+function validate_langtag(tag::AbstractString)::Bool
+    isempty(tag) && return false
+    !occursin(_LANGTAG_RE, tag) && return false
+    !isnothing(match(_LANGTAG_FULL_RE, tag))
+end
+
+"""
+    normalize_langtag(tag::AbstractString) -> String
+
+Normalize a BCP 47 language tag: language lowercase, script titlecase, region uppercase.
+"""
+function normalize_langtag(tag::AbstractString)::String
+    parts = split(tag, '-')
+    isempty(parts) && return tag
+    result = String[lowercase(parts[1])]
+    for i in 2:length(parts)
+        p = parts[i]
+        if length(p) == 4 && all(isletter, p)
+            push!(result, titlecase(p))
+        elseif length(p) == 2 && all(isletter, p)
+            push!(result, uppercase(p))
+        elseif length(p) == 3 && all(isdigit, p)
+            push!(result, p)
+        else
+            push!(result, lowercase(p))
+        end
+    end
+    join(result, "-")
+end

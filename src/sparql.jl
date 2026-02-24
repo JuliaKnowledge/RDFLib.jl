@@ -72,17 +72,25 @@ results = sparql_query(g, \"\"\"
 ```
 """
 function sparql_query(g::RDFGraph, query::AbstractString)
-    parsed = _sparql_parse(String(query), g)
-    _sparql_evaluate(g, parsed)
+    # Try the new recursive-descent parser + AST evaluator first
+    try
+        ast = sparql_parse(String(query))
+        return _ast_evaluate(g, ast)
+    catch e
+        # Fall back to legacy regex-based parser
+        parsed = _sparql_parse(String(query), g)
+        return _sparql_evaluate(g, parsed)
+    end
 end
 
 # ─── Query types ────────────────────────────────────────────────────
 
 struct _Aggregate
-    func::String       # "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP_CONCAT", "SAMPLE"
+    func::String       # "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP_CONCAT", "SAMPLE", "MEDIAN", "MODE"
     var::String        # variable being aggregated
     alias::String      # AS alias
     distinct::Bool     # COUNT(DISTINCT ?x)
+    separator::String  # GROUP_CONCAT separator (default " ")
 end
 
 struct _SelectExpr
@@ -239,6 +247,17 @@ struct _Service
     silent::Bool
 end
 
+struct _LateralJoin
+    patterns::Vector{Any}
+end
+
+struct _TripleTermPattern
+    subject::Any
+    predicate::Any
+    object::Any
+    annotation::Any
+end
+
 # ─── Parser ─────────────────────────────────────────────────────────
 
 function _sparql_parse(query::AbstractString, g::RDFGraph)
@@ -305,7 +324,7 @@ end
 
 function _sparql_parse_select(q::AbstractString, prefixes::Dict{String,String})
     # Parse SELECT [DISTINCT|REDUCED] vars WHERE { patterns } [GROUP BY] [HAVING] [ORDER BY] [LIMIT] [OFFSET]
-    m = match(r"SELECT\s+(DISTINCT\s+|REDUCED\s+)?(.*?)\s*WHERE\s*\{(.*)\}\s*(GROUP\s+BY\s+((?:\?\w+\s*)+))?\s*(HAVING\s*\((.+)\))?\s*(ORDER\s+BY\s+(.*?))?\s*(LIMIT\s+(\d+))?\s*(OFFSET\s+(\d+))?\s*$"is, q)
+    m = match(r"SELECT\s+(DISTINCT\s+|REDUCED\s+)?(.*?)\s*WHERE\s*\{(.*)\}\s*(GROUP\s+BY\s+((?:\?\w+\s*)+))?\s*(HAVING\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\))?\s*(ORDER\s+BY\s+(.*?))?\s*(LIMIT\s+(\d+))?\s*(OFFSET\s+(\d+))?\s*$"is, q)
     isnothing(m) && throw(ArgumentError("Invalid SELECT query"))
 
     modifier = isnothing(m.captures[1]) ? "" : uppercase(strip(m.captures[1]))
@@ -316,13 +335,15 @@ function _sparql_parse_select(q::AbstractString, prefixes::Dict{String,String})
     vars_str = strip(m.captures[2])
     aggregates = _Aggregate[]
     select_exprs = _SelectExpr[]
-    agg_regex = r"\(\s*(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT|SAMPLE)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*\)"i
+    agg_regex = r"\(\s*(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT|SAMPLE|MEDIAN|MODE)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*(?:;\s*separator\s*=\s*\"([^\"]*)\"\s*)?\)\s+AS\s+\?(\w+)\s*\)"i
     for m_agg in eachmatch(agg_regex, vars_str)
+        sep = isnothing(m_agg.captures[4]) ? " " : String(m_agg.captures[4])
         push!(aggregates, _Aggregate(
             uppercase(String(m_agg.captures[1])),
             String(m_agg.captures[3]),
-            String(m_agg.captures[4]),
-            !isnothing(m_agg.captures[2])
+            String(m_agg.captures[5]),
+            !isnothing(m_agg.captures[2]),
+            sep
         ))
     end
     # Parse general select expressions: (expr AS ?alias) that are NOT aggregates
@@ -332,7 +353,7 @@ function _sparql_parse_select(q::AbstractString, prefixes::Dict{String,String})
         inner = strip(m_se.captures[1])
         alias = String(m_se.captures[2])
         # Skip if it's an aggregate (already captured)
-        if !isnothing(match(r"^\s*(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT|SAMPLE)\s*\("i, inner))
+        if !isnothing(match(r"^\s*(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT|SAMPLE|MEDIAN|MODE)\s*\("i, inner))
             continue
         end
         push!(select_exprs, _SelectExpr(_sparql_expand_prefixes_in_expr(inner, prefixes), alias))
@@ -379,7 +400,7 @@ function _sparql_parse_select(q::AbstractString, prefixes::Dict{String,String})
 end
 
 function _sparql_parse_ask(q::AbstractString, prefixes::Dict{String,String})
-    m = match(r"ASK\s*\{(.*)\}\s*$"is, q)
+    m = match(r"ASK\s*(?:WHERE\s*)?\{(.*)\}\s*$"is, q)
     isnothing(m) && throw(ArgumentError("Invalid ASK query"))
     patterns = _sparql_parse_patterns(m.captures[1], prefixes)
     _SPARQLAsk(patterns, prefixes)
@@ -449,8 +470,8 @@ end
 function _sparql_expand_keywords!(out::Vector{String}, stmt::AbstractString)
     s = strip(stmt)
     isempty(s) && return
-    # Split on keyword boundaries: BIND, FILTER, OPTIONAL, MINUS, VALUES at start of line
-    # but not inside nested {} or strings
+    # Split on keyword boundaries: BIND, FILTER, OPTIONAL, MINUS, VALUES
+    # both at newlines and inline, but not inside nested {} or strings
     parts = String[]
     buf = IOBuffer()
     in_string = false
@@ -472,21 +493,22 @@ function _sparql_expand_keywords!(out::Vector{String}, stmt::AbstractString)
                 in_string = true; quote_char = c; write(buf, c)
             elseif c == '{'; depth += 1; write(buf, c)
             elseif c == '}'; depth -= 1; write(buf, c)
-            elseif depth == 0 && c == '\n'
+            elseif depth == 0 && (c == '\n' || (c == ' ' || c == '\t'))
                 # Check if next non-whitespace is a keyword
                 rest = lstrip(String(chars[i+1:end]))
                 kw = uppercase(rest)
-                is_kw = startswith(kw, "BIND") || startswith(kw, "FILTER") ||
+                is_kw = startswith(kw, "FILTER") || startswith(kw, "BIND") ||
                          startswith(kw, "OPTIONAL") || startswith(kw, "MINUS") ||
                          startswith(kw, "VALUES") || startswith(kw, "GRAPH") ||
-                         startswith(kw, "SERVICE") ||
-                         startswith(kw, "{")
-                # Don't split before '{' if buffer ends with UNION (part of { } UNION { } construct)
-                if is_kw && startswith(kw, "{") && position(buf) > 0
-                    buf_content = String(take!(buf))
-                    write(buf, buf_content)
-                    if endswith(rstrip(uppercase(buf_content)), "UNION")
-                        is_kw = false
+                         startswith(kw, "SERVICE") || startswith(kw, "LATERAL")
+                if c == '\n'
+                    is_kw = is_kw || startswith(kw, "{") || startswith(kw, "<<")
+                    if is_kw && startswith(kw, "{") && position(buf) > 0
+                        buf_content = String(take!(buf))
+                        write(buf, buf_content)
+                        if endswith(rstrip(uppercase(buf_content)), "UNION")
+                            is_kw = false
+                        end
                     end
                 end
                 if is_kw && position(buf) > 0
@@ -617,6 +639,26 @@ function _sparql_parse_patterns(body::AbstractString, prefixes::Dict{String,Stri
             svc_patterns = _sparql_parse_patterns(m.captures[3], prefixes)
             push!(patterns, _Service(endpoint, svc_patterns, silent))
             continue
+        end
+
+        # Check for LATERAL { ... } — correlated subquery
+        m = match(r"^LATERAL\s*\{(.*)\}\s*$"is, stmt)
+        if !isnothing(m)
+            push!(patterns, _LateralJoin(_sparql_parse_patterns(m.captures[1], prefixes)))
+            continue
+        end
+
+        # Check for << s p o >> triple term pattern
+        m = match(r"^<<\s*(.+?)\s*>>\s*$"s, stmt)
+        if !isnothing(m)
+            inner_tokens = _sparql_tokenize(strip(m.captures[1]))
+            if length(inner_tokens) >= 3
+                s = _sparql_parse_term(inner_tokens[1], prefixes)
+                p = _sparql_parse_term(inner_tokens[2], prefixes)
+                o = _sparql_parse_term(join(inner_tokens[3:end], " "), prefixes)
+                push!(patterns, _TripleTermPattern(s, p, o, nothing))
+                continue
+            end
         end
 
         # Parse as triple pattern
@@ -1051,7 +1093,13 @@ function _sparql_evaluate(g::RDFGraph, q::_SPARQLSelect)
         end
 
         if !isnothing(q.having)
-            new_bindings = filter(b -> _sparql_eval_filter_expr(q.having, b, g), new_bindings)
+            # Replace aggregate function calls in HAVING with their computed alias variables
+            having_expr = q.having
+            for agg in q.aggregates
+                agg_pattern = Regex("$(agg.func)\\s*\\(\\s*(?:DISTINCT\\s+)?\\?$(agg.var)\\s*\\)", "i")
+                having_expr = replace(having_expr, agg_pattern => "?$(agg.alias)")
+            end
+            new_bindings = filter(b -> _sparql_eval_filter_expr(having_expr, b, g), new_bindings)
         end
 
         bindings = new_bindings
@@ -1301,6 +1349,19 @@ function _sparql_eval_patterns(g::RDFGraph, patterns::Vector{Any}, bindings::Vec
             catch e
                 pattern.silent || rethrow(e)
             end
+        elseif pattern isa _LateralJoin
+            new_bindings = Dict{String, Identifier}[]
+            for b in bindings
+                sub_bindings = [copy(b)]
+                for sub_pat in pattern.patterns
+                    sub_bindings = _sparql_eval_patterns(g, Any[sub_pat], sub_bindings)
+                end
+                append!(new_bindings, sub_bindings)
+            end
+            bindings = new_bindings
+        elseif pattern isa _TripleTermPattern
+            bgp = _BGPTriple(pattern.subject, pattern.predicate, pattern.object)
+            bindings = _sparql_eval_bgp(g, bgp, bindings)
         end
     end
 
@@ -1459,7 +1520,7 @@ function _eval_path_closure(g::RDFGraph, path::_PathExpr, start::Union{Node,Noth
     results = Set{Tuple{Node, Identifier}}()
     if !isnothing(start)
         include_zero && push!(results, (start, start))
-        visited = Set{Identifier}([start])
+        visited = Set{Identifier}()
         queue = Node[start]
         while !isempty(queue)
             current = popfirst!(queue)
@@ -1656,6 +1717,24 @@ function _sparql_eval_filter_expr(expr::AbstractString, binding::Dict{String, Id
         val = get(binding, m.captures[1], nothing)
         isnothing(val) && return false
         return occursin(m.captures[2], val isa Literal ? val.lexical : string(val))
+    end
+
+    # Handle CONTAINS_TEXT(?var, "query") — full-text search using TextIndex
+    m = match(r"^CONTAINS_TEXT\s*\(\s*\?(\w+)\s*,\s*\"([^\"]*)\"\s*\)$"i, expr)
+    if !isnothing(m)
+        val = get(binding, m.captures[1], nothing)
+        isnothing(val) && return false
+        val isa Literal || return false
+        query_str = lowercase(m.captures[2])
+        text = lowercase(val.lexical)
+        is_prefix = endswith(query_str, '*')
+        if is_prefix
+            prefix_str = query_str[1:end-1]
+            tokens = _text_tokenize(text)
+            return any(t -> startswith(t, prefix_str), tokens)
+        else
+            return occursin(query_str, text)
+        end
     end
 
     # Handle STRSTARTS(?var, "str")
@@ -1943,10 +2022,21 @@ function _sparql_compute_aggregate(agg::_Aggregate, group::Vector{Dict{String, I
         isempty(values) && return Literal("")
         return reduce((a, b) -> string(a) > string(b) ? a : b, values)
     elseif agg.func == "GROUP_CONCAT"
-        return Literal(join([v isa Literal ? v.lexical : string(v) for v in values], " "))
+        return Literal(join([v isa Literal ? v.lexical : string(v) for v in values], agg.separator))
     elseif agg.func == "SAMPLE"
         isempty(values) && return Literal("")
         return first(values)
+    elseif agg.func == "MEDIAN"
+        nums = sort([_sparql_numeric_value(v) for v in values if v isa Literal && !isnothing(_sparql_numeric_value(v))])
+        isempty(nums) && return Literal(0)
+        n = length(nums)
+        median_val = isodd(n) ? nums[(n+1)÷2] : (nums[n÷2] + nums[n÷2+1]) / 2
+        return Literal(isinteger(median_val) ? Int(median_val) : median_val)
+    elseif agg.func == "MODE"
+        isempty(values) && return Literal("")
+        counts = Dict{Identifier, Int}()
+        for v in values; counts[v] = get(counts, v, 0) + 1; end
+        return reduce((a, b) -> counts[a] >= counts[b] ? a : b, keys(counts))
     end
     Literal("")
 end
@@ -2267,6 +2357,15 @@ function _sparql_eval_bind_expr(expr::AbstractString, binding::Dict{String, Iden
         return val.datatype
     end
 
+    # ─── Hash Functions ──────────────────────────────────────────
+    m = match(r"^MD5\s*\((.+)\)$"i, expr)
+    if !isnothing(m)
+        inner = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        isnothing(inner) && return nothing
+        s = inner isa Literal ? inner.lexical : string(inner)
+        return Literal(bytes2hex(MD5.md5(Vector{UInt8}(s))))
+    end
+
     # ─── SHA Hash Functions (SPARQL 1.2) ──────────────────────────
     m = match(r"^SHA1\s*\((.+)\)$"i, expr)
     if !isnothing(m)
@@ -2485,6 +2584,66 @@ function _sparql_eval_bind_expr(expr::AbstractString, binding::Dict{String, Iden
         end
     end
 
+    # ─── Boolean test functions ──────────────────────────────────────
+    # LANGMATCHES(LANG(?var), "tag")
+    m = match(r"^LANGMATCHES\s*\(\s*(.+)\s*,\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        lang_val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        tag_val = _sparql_eval_bind_expr(strip(m.captures[2]), binding)
+        isnothing(lang_val) && return Literal(false)
+        lang_str = lang_val isa Literal ? lang_val.lexical : string(lang_val)
+        tag_str = tag_val isa Literal ? tag_val.lexical : string(tag_val)
+        if tag_str == "*"
+            return Literal(!isempty(lang_str))
+        end
+        return Literal(lowercase(lang_str) == lowercase(tag_str) ||
+                       startswith(lowercase(lang_str), lowercase(tag_str) * "-"))
+    end
+
+    # isIRI / isURI
+    m = match(r"^is[IU]RI\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        return Literal(val isa URIRef)
+    end
+
+    # isLiteral
+    m = match(r"^isLiteral\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        return Literal(val isa Literal)
+    end
+
+    # isBlank
+    m = match(r"^isBlank\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        return Literal(val isa BNode)
+    end
+
+    # BOUND(?var)
+    m = match(r"^BOUND\s*\(\s*\?(\w+)\s*\)$"i, expr)
+    if !isnothing(m)
+        return Literal(haskey(binding, m.captures[1]) && !isnothing(binding[m.captures[1]]))
+    end
+
+    # isNumeric
+    m = match(r"^isNumeric\s*\(\s*(.+)\s*\)$"i, expr)
+    if !isnothing(m)
+        val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
+        if val isa Literal && !isnothing(val.datatype)
+            dt = val.datatype.value
+            return Literal(dt in (_XSD * "integer", _XSD * "int", _XSD * "long",
+                                  _XSD * "double", _XSD * "float", _XSD * "decimal",
+                                  _XSD * "short", _XSD * "byte",
+                                  _XSD * "nonNegativeInteger", _XSD * "positiveInteger",
+                                  _XSD * "nonPositiveInteger", _XSD * "negativeInteger",
+                                  _XSD * "unsignedInt", _XSD * "unsignedLong",
+                                  _XSD * "unsignedShort", _XSD * "unsignedByte"))
+        end
+        return Literal(false)
+    end
+
     # ─── Arithmetic expressions (SPARQL 1.2) ─────────────────────
     arith_result = _sparql_eval_arithmetic(expr, binding)
     !isnothing(arith_result) && return arith_result
@@ -2531,9 +2690,16 @@ function _sparql_eval_arithmetic(expr::AbstractString, binding::Dict{String, Ide
             (isnothing(left) || isnothing(right)) && return nothing
             lv = _sparql_numeric_value_any(left)
             rv = _sparql_numeric_value_any(right)
-            (isnothing(lv) || isnothing(rv)) && return nothing
-            result = op == '+' ? lv + rv : lv - rv
-            return Literal(isinteger(result) ? Int(result) : result)
+            if !isnothing(lv) && !isnothing(rv)
+                result = op == '+' ? lv + rv : lv - rv
+                return Literal(isinteger(result) ? Int(result) : result)
+            end
+            # Fall back to date/time duration arithmetic
+            if left isa Literal && right isa Literal
+                date_result = _sparql_date_arithmetic(string(op), left, right)
+                !isnothing(date_result) && return date_result
+            end
+            return nothing
         end
     end
 
@@ -2736,6 +2902,14 @@ function _sparql_parse_update(query::AbstractString, g::RDFGraph)
     if !isnothing(m)
         del = _sparql_parse_template(m.captures[1], prefixes)
         pats = _sparql_parse_patterns(m.captures[2], prefixes)
+        return _SPARQLModify(del, Tuple{Any,Any,Any}[], pats, prefixes)
+    end
+
+    # DELETE WHERE { patterns } (shorthand: patterns serve as both match and delete template)
+    m = match(r"^DELETE\s+WHERE\s*\{(.*)\}\s*$"is, strip(q))
+    if !isnothing(m)
+        pats = _sparql_parse_patterns(m.captures[1], prefixes)
+        del = _sparql_parse_template(m.captures[1], prefixes)
         return _SPARQLModify(del, Tuple{Any,Any,Any}[], pats, prefixes)
     end
 
@@ -3026,8 +3200,8 @@ CONSTRUCT/DESCRIBE (returns RDFGraph).
 """
 function sparql_query(g::RDFGraph{SPARQLStore}, query::AbstractString)
     store = g.store
-    # Strip prefixes/version to detect query type
-    q_stripped = replace(strip(query), r"^\s*(PREFIX|BASE|VERSION)\s+[^\n]*\n"im => "")
+    # Strip prefixes/version/base to detect query type
+    q_stripped = replace(strip(query), r"^\s*(PREFIX\s+\S+:\s*<[^>]*>\s*|BASE\s*<[^>]*>\s*|VERSION\s+\S+\s*)"im => "")
     q_upper = uppercase(strip(q_stripped))
 
     if startswith(q_upper, "ASK")
@@ -3098,4 +3272,77 @@ function sparql_update(g::RDFGraph{SPARQLStore}, query::AbstractString)
         output=devnull,
         timeout=store.timeout)
     nothing
+end
+
+# ─── Date/Time Duration Arithmetic (SPARQL 1.2) ──────────────────
+
+function _sparql_date_arithmetic(op::String, left::Literal, right::Literal)
+    XSD_DT = "http://www.w3.org/2001/XMLSchema#dateTime"
+    XSD_DATE = "http://www.w3.org/2001/XMLSchema#date"
+    XSD_DURATION = "http://www.w3.org/2001/XMLSchema#dayTimeDuration"
+    XSD_YM_DURATION = "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
+
+    ldt = !isnothing(left.datatype) ? left.datatype.value : ""
+    rdt = !isnothing(right.datatype) ? right.datatype.value : ""
+
+    if op == "+" && ldt in (XSD_DT, XSD_DATE) && rdt in (XSD_DURATION, XSD_YM_DURATION)
+        dt = _parse_datetime_value(left.lexical)
+        dur = _parse_duration(right.lexical)
+        isnothing(dt) && return nothing
+        isnothing(dur) && return nothing
+        result = dt + dur
+        return Literal(string(result), datatype=left.datatype)
+    elseif op == "-" && ldt in (XSD_DT, XSD_DATE) && rdt in (XSD_DURATION, XSD_YM_DURATION)
+        dt = _parse_datetime_value(left.lexical)
+        dur = _parse_duration(right.lexical)
+        isnothing(dt) && return nothing
+        isnothing(dur) && return nothing
+        result = dt - dur
+        return Literal(string(result), datatype=left.datatype)
+    elseif op == "-" && ldt in (XSD_DT, XSD_DATE) && rdt in (XSD_DT, XSD_DATE)
+        dt1 = _parse_datetime_value(left.lexical)
+        dt2 = _parse_datetime_value(right.lexical)
+        isnothing(dt1) && return nothing
+        isnothing(dt2) && return nothing
+        diff = dt1 - dt2
+        secs = Dates.value(diff) / 1000.0
+        sign = secs < 0 ? "-" : ""
+        abs_secs = abs(secs)
+        days = Int(abs_secs ÷ 86400)
+        rem_secs = abs_secs - days * 86400
+        hours = Int(rem_secs ÷ 3600)
+        rem_secs -= hours * 3600
+        mins = Int(rem_secs ÷ 60)
+        secs_part = rem_secs - mins * 60
+        dur_str = "$(sign)P$(days > 0 ? "$(days)D" : "")T$(hours)H$(mins)M$(isinteger(secs_part) ? Int(secs_part) : secs_part)S"
+        return Literal(dur_str, datatype=URIRef(XSD_DURATION))
+    end
+    return nothing
+end
+
+function _parse_duration(s::String)
+    m = match(r"^(-?)P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?)?$", s)
+    isnothing(m) && return nothing
+    neg = m[1] == "-" ? -1 : 1
+    years = isnothing(m[2]) ? 0 : parse(Int, m[2])
+    months = isnothing(m[3]) ? 0 : parse(Int, m[3])
+    days = isnothing(m[4]) ? 0 : parse(Int, m[4])
+    hours = isnothing(m[5]) ? 0 : parse(Int, m[5])
+    mins = isnothing(m[6]) ? 0 : parse(Int, m[6])
+    secs = isnothing(m[7]) ? 0.0 : parse(Float64, m[7])
+    total_days = years * 365 + months * 30 + days
+    total_ms = (total_days * 86400 + hours * 3600 + mins * 60) * 1000 + round(Int, secs * 1000)
+    return neg * Dates.Millisecond(total_ms)
+end
+
+function _parse_datetime_value(s::String)
+    try
+        if occursin('T', s)
+            return Dates.DateTime(replace(s, r"[+-]\d{2}:\d{2}$" => "", r"Z$" => ""))
+        else
+            return Dates.DateTime(Dates.Date(s))
+        end
+    catch
+        return nothing
+    end
 end

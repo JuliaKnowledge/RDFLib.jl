@@ -12,6 +12,9 @@ import JSON
 import CSV
 import Tables
 
+# XSD datetime parsing (needed by terms.jl convert methods)
+include("xsd_datetime.jl")
+
 # Core term types
 include("terms.jl")
 
@@ -25,6 +28,7 @@ include("store.jl")
 include("sqlitestore.jl")
 include("duckdbstore.jl")
 include("sparqlstore.jl")
+include("lmdbstore.jl")
 
 # RDFGraph
 include("graph.jl")
@@ -68,6 +72,9 @@ include("resource.jl")
 include("geosparql.jl")
 
 # SPARQL query engine
+include("sparql_ast.jl")
+include("sparql_parser.jl")
+include("sparql_eval.jl")
 include("sparql.jl")
 
 # DOT visualization
@@ -155,14 +162,17 @@ include("hext.jl")
 # N3 term parser
 include("from_n3.jl")
 
-# XSD datetime utilities
-include("xsd_datetime.jl")
+# Jelly RDF binary format
+include("jelly.jl")
 
 # ShEx (Shape Expressions) validation
 include("shex.jl")
 
 # CLI tools
 include("cli.jl")
+
+# SPARQL/N3 Server (HTTP.jl)
+include("server.jl")
 
 # SPARQL Query Builder DSL
 include("querybuilder.jl")
@@ -174,7 +184,7 @@ export
     # Term types
     Identifier, Node, IdentifiedNode,
     URIRef, BNode, Literal, Variable, Triple, TripleTerm,
-    n3, datatype, lang, value, toPython,
+    n3, datatype, lang, value,
     defrag, fragment,
     from_n3, to_term,
     validate_iri, validate_iri!, parse_iri,
@@ -189,8 +199,8 @@ export
     NamespaceManager, bind!, expand_curie, compute_qname,
 
     # Store
-    AbstractStore, MemoryStore, SQLiteStore, DuckDBStore, SPARQLStore,
-    transaction, sparql_remote,
+    AbstractStore, MemoryStore, SQLiteStore, DuckDBStore, SPARQLStore, LMDBStore,
+    transaction, sparql_remote, add_bulk!, clear!,
 
     # RDFGraph
     RDFGraph,
@@ -360,6 +370,15 @@ export
     build, execute,
 
     # Text Index
-    TextIndex, text_search, set_text_index!, clear_text_index!
+    TextIndex, build!, text_search, set_text_index!, clear_text_index!,
+
+    # Jelly binary format
+    serialize_jelly, parse_jelly, parse_jelly!,
+    serialize_jelly_to_file, parse_jelly_file,
+
+    # SPARQL Server
+    SparqlServer, DatasetEndpoint,
+    add_dataset!, remove_dataset!, get_dataset,
+    serve!, stop!
 
 end # module

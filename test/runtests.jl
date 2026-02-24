@@ -68,4 +68,6 @@ using RDFLib
     include("test_n3_builtins.jl")
     include("test_n3_reasoner.jl")
     include("test_n3_proof.jl")
+    include("test_iri_langtag.jl")
+    include("test_owl2_rl.jl")
 end
