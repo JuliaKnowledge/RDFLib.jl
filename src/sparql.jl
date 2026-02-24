@@ -2840,8 +2840,17 @@ Execute a SPARQL UPDATE operation against a graph, modifying it in-place.
 Supports: INSERT DATA, DELETE DATA, DELETE/INSERT WHERE, CLEAR, DROP, LOAD.
 """
 function sparql_update(g::RDFGraph, query::AbstractString)
-    parsed = _sparql_parse_update(String(query), g)
-    _sparql_exec_update(g, parsed)
+    try
+        parsed = sparql_parse_update(String(query))
+        if parsed isa _SPARQLModify && !isempty(parsed.patterns) && all(p -> p isa SparqlPattern, parsed.patterns)
+            _sparql_exec_update(g, parsed, Val(:ast))
+        else
+            _sparql_exec_update(g, parsed)
+        end
+    catch
+        parsed = _sparql_parse_update(String(query), g)
+        _sparql_exec_update(g, parsed)
+    end
     nothing
 end
 
@@ -2978,6 +2987,29 @@ function _sparql_exec_update(g::RDFGraph, op::_SPARQLLoad)
     tmpfile = Downloads.download(op.source)
     parse_rdf!(g, read(tmpfile, String))
     rm(tmpfile, force=true)
+end
+
+# AST-aware SPARQL UPDATE execution (patterns are SparqlPattern nodes)
+function _sparql_exec_update(g::RDFGraph, op::_SPARQLModify, ::Val{:ast})
+    bindings = _ast_eval_patterns(g, Vector{SparqlPattern}(op.patterns))
+    for binding in bindings
+        for (s_t, p_t, o_t) in op.delete_template
+            s = _sparql_resolve(s_t, binding)
+            p = _sparql_resolve(p_t, binding)
+            o = _sparql_resolve(o_t, binding)
+            (isnothing(s) || isnothing(p) || isnothing(o)) && continue
+            s isa Node && p isa URIRef && o isa Identifier && remove!(g, Triple(s, p, o))
+        end
+    end
+    for binding in bindings
+        for (s_t, p_t, o_t) in op.insert_template
+            s = _sparql_resolve(s_t, binding)
+            p = _sparql_resolve(p_t, binding)
+            o = _sparql_resolve(o_t, binding)
+            (isnothing(s) || isnothing(p) || isnothing(o)) && continue
+            s isa Node && p isa URIRef && o isa Identifier && add!(g, Triple(s, p, o))
+        end
+    end
 end
 
 # ─── SPARQL Result Serialization ──────────────────────────────────

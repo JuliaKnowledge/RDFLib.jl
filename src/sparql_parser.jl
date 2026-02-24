@@ -1510,3 +1510,133 @@ function _parse_solution_modifiers(tz::_SparqlTokenizer, prefixes)
 
     (group_by, having, order_by, limit, offset)
 end
+
+# ─── SPARQL UPDATE Parser ─────────────────────────────────────────
+
+"""
+Parse a SPARQL UPDATE query string into an update operation AST node
+using the recursive descent tokenizer/parser infrastructure.
+"""
+function sparql_parse_update(query::String)
+    tz = _sparql_tokenize_all(strip(query))
+    prefixes = _parse_prologue!(tz)
+
+    # CLEAR / DROP
+    if _check_keyword(tz, "CLEAR") || _check_keyword(tz, "DROP")
+        _advance!(tz)
+        tok = _advance!(tz)
+        target = tok.value  # "ALL", "DEFAULT", "NAMED"
+        return _SPARQLClear(target)
+    end
+
+    # LOAD <uri> [INTO GRAPH <target>]
+    if _check_keyword(tz, "LOAD")
+        _advance!(tz)
+        source = _expect!(tz, TOK_IRI).value
+        target = nothing
+        if _match_keyword!(tz, "INTO") !== nothing
+            _expect_keyword!(tz, "GRAPH")
+            target = _expect!(tz, TOK_IRI).value
+        end
+        return _SPARQLLoad(source, target)
+    end
+
+    # COPY DEFAULT TO <graph>
+    if _check_keyword(tz, "COPY")
+        _advance!(tz)
+        _expect_keyword!(tz, "DEFAULT")
+        _expect_keyword!(tz, "TO")
+        _expect!(tz, TOK_IRI)
+        return _SPARQLClear("NOOP")
+    end
+
+    # INSERT DATA { triples }
+    if _check_keyword(tz, "INSERT")
+        _advance!(tz)
+        if _check_keyword(tz, "DATA")
+            _advance!(tz)
+            tpl = _parse_update_template(tz, prefixes)
+            return _SPARQLInsertData(tpl, prefixes)
+        end
+        # INSERT { template } WHERE { patterns }
+        ins = _parse_update_template(tz, prefixes)
+        _expect_keyword!(tz, "WHERE")
+        pats = _parse_group_graph_pattern(tz, prefixes)
+        return _SPARQLModify(Tuple{Any,Any,Any}[], ins, SparqlPattern[pats...], prefixes)
+    end
+
+    # DELETE ...
+    if _check_keyword(tz, "DELETE")
+        _advance!(tz)
+
+        # DELETE DATA { triples }
+        if _check_keyword(tz, "DATA")
+            _advance!(tz)
+            tpl = _parse_update_template(tz, prefixes)
+            return _SPARQLDeleteData(tpl, prefixes)
+        end
+
+        # DELETE WHERE { patterns } — shorthand
+        if _check_keyword(tz, "WHERE")
+            _advance!(tz)
+            pats = _parse_group_graph_pattern(tz, prefixes)
+            # Extract triples from patterns as delete template
+            del = _patterns_to_template(pats)
+            return _SPARQLModify(del, Tuple{Any,Any,Any}[], SparqlPattern[pats...], prefixes)
+        end
+
+        # DELETE { template } [INSERT { template }] WHERE { patterns }
+        del = _parse_update_template(tz, prefixes)
+        ins = Tuple{Any,Any,Any}[]
+        if _check_keyword(tz, "INSERT")
+            _advance!(tz)
+            ins = _parse_update_template(tz, prefixes)
+        end
+        _expect_keyword!(tz, "WHERE")
+        pats = _parse_group_graph_pattern(tz, prefixes)
+        return _SPARQLModify(del, ins, SparqlPattern[pats...], prefixes)
+    end
+
+    error("Unsupported SPARQL UPDATE operation")
+end
+
+"""
+Parse a braced template `{ s p o . ... }` into a Vector{Tuple{Any,Any,Any}}.
+"""
+function _parse_update_template(tz::_SparqlTokenizer, prefixes)::Vector{Tuple{Any,Any,Any}}
+    _expect!(tz, TOK_LBRACE)
+    result = Tuple{Any,Any,Any}[]
+    while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF)
+        subj = _parse_term(tz, prefixes)
+        while true
+            pred = _parse_verb(tz, prefixes)
+            while true
+                obj = _parse_term(tz, prefixes)
+                push!(result, (subj, pred, obj))
+                _check(tz, TOK_COMMA) ? _advance!(tz) : break
+            end
+            if _check(tz, TOK_SEMICOLON)
+                _advance!(tz)
+                (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_EOF)) && break
+            else
+                break
+            end
+        end
+        _match!(tz, TOK_DOT)
+    end
+    _expect!(tz, TOK_RBRACE)
+    result
+end
+
+"""
+Extract triple templates from parsed SparqlPattern nodes (for DELETE WHERE shorthand).
+"""
+function _patterns_to_template(pats::Vector{SparqlPattern})::Vector{Tuple{Any,Any,Any}}
+    result = Tuple{Any,Any,Any}[]
+    for p in pats
+        if p isa PatTriple
+            push!(result, (p.subject, p.predicate, p.object))
+        end
+    end
+    result
+end

@@ -143,9 +143,35 @@ end
 Parse JSON-LD from a string and add triples to the graph.
 """
 function parse_jsonld!(g::RDFGraph, input::AbstractString)
-    data = JSON3.read(input, Dict{String, Any})
-    _jsonld_parse_doc!(g, data)
+    raw = JSON3.read(input)
+    if raw isa JSON3.Array
+        # Top-level array: treat each element as a node document
+        for item in raw
+            if item isa JSON3.Object
+                data = _json3_to_dict(item)
+                _jsonld_parse_doc!(g, data)
+            end
+        end
+    else
+        data = JSON3.read(input, Dict{String, Any})
+        _jsonld_parse_doc!(g, data)
+    end
     g
+end
+
+function _json3_to_dict(obj)::Dict{String, Any}
+    d = Dict{String, Any}()
+    for (k, v) in pairs(obj)
+        key = string(k)
+        if v isa JSON3.Object
+            d[key] = _json3_to_dict(v)
+        elseif v isa JSON3.Array
+            d[key] = Any[x isa JSON3.Object ? _json3_to_dict(x) : x for x in v]
+        else
+            d[key] = v
+        end
+    end
+    d
 end
 
 """
