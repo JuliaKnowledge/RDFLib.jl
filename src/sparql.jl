@@ -3,6 +3,54 @@
 
 using Downloads: Downloads
 
+# ─── SERVICE Query Cache ───────────────────────────────────────────
+
+const _SERVICE_CACHE = Dict{UInt64, Tuple{Float64, Vector{Dict{String, Identifier}}}}()
+const _SERVICE_CACHE_TTL = Ref{Int}(300)
+
+"""
+    clear_service_cache!()
+
+Clear all cached SERVICE query results.
+"""
+function clear_service_cache!()
+    empty!(_SERVICE_CACHE)
+    nothing
+end
+
+"""
+    set_service_cache_ttl!(seconds::Int)
+
+Set the TTL (time-to-live) in seconds for cached SERVICE query results. Default is 300.
+"""
+function set_service_cache_ttl!(seconds::Int)
+    seconds >= 0 || throw(ArgumentError("TTL must be non-negative"))
+    _SERVICE_CACHE_TTL[] = seconds
+    nothing
+end
+
+function _service_cache_key(endpoint::AbstractString, query::AbstractString)
+    hash((endpoint, query))
+end
+
+function _service_cache_lookup(endpoint::AbstractString, query::AbstractString)
+    key = _service_cache_key(endpoint, query)
+    haskey(_SERVICE_CACHE, key) || return nothing
+    ts, results = _SERVICE_CACHE[key]
+    if time() - ts > _SERVICE_CACHE_TTL[]
+        delete!(_SERVICE_CACHE, key)
+        return nothing
+    end
+    return results
+end
+
+function _service_cache_store!(endpoint::AbstractString, query::AbstractString,
+                               results::Vector{Dict{String, Identifier}})
+    key = _service_cache_key(endpoint, query)
+    _SERVICE_CACHE[key] = (time(), results)
+    nothing
+end
+
 """
     sparql_query(g::RDFGraph, query::AbstractString)
 
@@ -1227,7 +1275,14 @@ function _sparql_eval_patterns(g::RDFGraph, patterns::Vector{Any}, bindings::Vec
                 if !isnothing(endpoint_uri)
                     store = SPARQLStore(endpoint_uri)
                     remote_query = _build_service_query(pattern.patterns)
-                    remote_results = _remote_select(store, remote_query)
+                    cached = _service_cache_lookup(endpoint_uri, remote_query)
+                    remote_results = if !isnothing(cached)
+                        cached
+                    else
+                        res = _remote_select(store, remote_query)
+                        _service_cache_store!(endpoint_uri, remote_query, res)
+                        res
+                    end
                     new_bindings = Dict{String, Identifier}[]
                     for binding in bindings
                         for rr in remote_results
@@ -1539,6 +1594,24 @@ function _sparql_eval_filter_expr(expr::AbstractString, binding::Dict{String, Id
         v2 = get(binding, m.captures[2], nothing)
         (isnothing(v1) || isnothing(v2)) && return false
         return v1 === v2 || v1 == v2
+    end
+
+    # ─── GeoSPARQL filter functions ──────────────────────────────
+    m = match(r"^(?:geof:(\w+)|<http://www\.opengis\.net/def/function/geosparql/(\w+)>)\s*\((.+)\)$"i, expr)
+    if !isnothing(m)
+        func_name = lowercase(something(m.captures[1], m.captures[2]))
+        args = _sparql_split_args(m.captures[3])
+        _geo_filt = Dict("sfcontains"=>geo_contains, "sfwithin"=>geo_within,
+            "sfintersects"=>geo_intersects, "sfoverlaps"=>geo_overlaps,
+            "sftouches"=>geo_touches, "sfdisjoint"=>geo_disjoint, "sfequals"=>geo_equals)
+        if haskey(_geo_filt, func_name) && length(args) >= 2
+            v1 = _sparql_eval_bind_expr(strip(args[1]), binding)
+            v2 = _sparql_eval_bind_expr(strip(args[2]), binding)
+            g1 = _extract_wkt_geometry(v1)
+            g2 = _extract_wkt_geometry(v2)
+            (isnothing(g1) || isnothing(g2)) && return false
+            return _geo_filt[func_name](g1, g2)
+        end
     end
 
     # Handle LANG(?var) = "tag"
@@ -2384,6 +2457,32 @@ function _sparql_eval_bind_expr(expr::AbstractString, binding::Dict{String, Iden
         val = _sparql_eval_bind_expr(strip(m.captures[1]), binding)
         isnothing(val) && return nothing
         return Literal(val isa TripleTerm)
+    end
+
+    # ─── GeoSPARQL Functions ─────────────────────────────────────────
+    m = match(r"^(?:geof:(\w+)|<http://www\.opengis\.net/def/function/geosparql/(\w+)>)\s*\((.+)\)$"i, expr)
+    if !isnothing(m)
+        func_name = lowercase(something(m.captures[1], m.captures[2]))
+        args = _sparql_split_args(m.captures[3])
+        if func_name == "distance" && length(args) >= 2
+            v1 = _sparql_eval_bind_expr(strip(args[1]), binding)
+            v2 = _sparql_eval_bind_expr(strip(args[2]), binding)
+            g1 = _extract_wkt_geometry(v1)
+            g2 = _extract_wkt_geometry(v2)
+            (isnothing(g1) || isnothing(g2)) && return nothing
+            return Literal(geo_distance(g1, g2))
+        end
+        _geo_rel = Dict("sfcontains"=>geo_contains, "sfwithin"=>geo_within,
+            "sfintersects"=>geo_intersects, "sfoverlaps"=>geo_overlaps,
+            "sftouches"=>geo_touches, "sfdisjoint"=>geo_disjoint, "sfequals"=>geo_equals)
+        if haskey(_geo_rel, func_name) && length(args) >= 2
+            v1 = _sparql_eval_bind_expr(strip(args[1]), binding)
+            v2 = _sparql_eval_bind_expr(strip(args[2]), binding)
+            g1 = _extract_wkt_geometry(v1)
+            g2 = _extract_wkt_geometry(v2)
+            (isnothing(g1) || isnothing(g2)) && return nothing
+            return Literal(_geo_rel[func_name](g1, g2))
+        end
     end
 
     # ─── Arithmetic expressions (SPARQL 1.2) ─────────────────────

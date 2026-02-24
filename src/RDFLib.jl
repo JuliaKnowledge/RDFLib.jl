@@ -64,6 +64,9 @@ include("exceptions.jl")
 # Resource abstraction
 include("resource.jl")
 
+# GeoSPARQL support (WKT parsing, spatial relations, metrics)
+include("geosparql.jl")
+
 # SPARQL query engine
 include("sparql.jl")
 
@@ -155,8 +158,17 @@ include("from_n3.jl")
 # XSD datetime utilities
 include("xsd_datetime.jl")
 
+# ShEx (Shape Expressions) validation
+include("shex.jl")
+
 # CLI tools
 include("cli.jl")
+
+# SPARQL Query Builder DSL
+include("querybuilder.jl")
+
+# Full-Text Search Index
+include("textindex.jl")
 
 export
     # Term types
@@ -165,11 +177,14 @@ export
     n3, datatype, lang, value, toPython,
     defrag, fragment,
     from_n3, to_term,
+    validate_iri, validate_iri!, parse_iri,
+    validate_langtag, normalize_langtag,
 
     # Namespaces
     Namespace, DefinedNamespace,
     RDF, RDFS, XSD, OWL, SKOS,
     FOAF, DC, DCTERMS, DCAT, PROV, SDO, SH, VANN, VOID, DOAP, ORG, GEO,
+    GEOF,
     BRICK, CSVW, DCAM, DCMITYPE, ODRL2, PROF, QB, SOSA, SSN, TIME, WGS,
     NamespaceManager, bind!, expand_curie, compute_qname,
 
@@ -206,6 +221,7 @@ export
     sparql_query,
     sparql_update,
     sparql_results_json, sparql_results_xml, sparql_results_csv,
+    clear_service_cache!, set_service_cache_ttl!,
 
     # Collections & Containers
     Collection, add_collection!, collect_list,
@@ -234,6 +250,9 @@ export
 
     # SHACL
     validate, ValidationReport, ValidationResult,
+
+    # ShEx
+    validate_shex, parse_shex, ShExSchema, ShExValidationReport,
 
     # N3
     Formula, N3Format, serialize_n3, parse_n3, parse_n3!, LOG, MATH,
@@ -300,7 +319,8 @@ export
     label!, comment!, related!, sub_describe!,
 
     # Inference
-    rdfs_closure, rdfs_closure!, owl_closure, owl_closure!, infer, entails,
+    rdfs_closure, rdfs_closure!, owl_closure, owl_closure!,
+    owl2_rl_closure, owl2_rl_closure!, infer, entails,
 
     # CLI tools
     rdfpipe, csv2rdf,
@@ -323,6 +343,23 @@ export
     IsomorphicGraph, to_isomorphic,
 
     # JSON-LD Processing
-    jsonld_expand, jsonld_compact, jsonld_frame, jsonld_flatten
+    jsonld_expand, jsonld_compact, jsonld_frame, jsonld_flatten,
+
+    # GeoSPARQL
+    parse_wkt, to_wkt,
+    AbstractGeometry, GeoPoint, GeoLineString, GeoPolygon,
+    GeoMultiPoint, GeoMultiLineString, GeoMultiPolygon, GeoCollection,
+    geo_distance, geo_contains, geo_within, geo_intersects,
+    geo_disjoint, geo_equals, geo_touches, geo_overlaps,
+    geo_area, geo_buffer, geo_boundary,
+
+    # Query Builder DSL
+    AbstractQuery, SelectQuery, ConstructQuery, AskQuery, DescribeQuery,
+    select, where, prefix, optional, union_pattern, minus, query_bind, query_values,
+    group_by, having, order_by, limit, offset, distinct, construct, describe,
+    build, execute,
+
+    # Text Index
+    TextIndex, text_search, set_text_index!, clear_text_index!
 
 end # module

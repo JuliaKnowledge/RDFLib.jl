@@ -21,6 +21,7 @@ using RDFLib
     include("test_isomorphism.jl")
     include("test_graphutils.jl")
     include("test_shacl.jl")
+    include("test_shex.jl")
     include("test_n3.jl")
     include("test_sqlitestore.jl")
     include("test_duckdbstore.jl")
