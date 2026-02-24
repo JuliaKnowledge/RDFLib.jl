@@ -79,11 +79,22 @@ const _SPARQL_KEYWORDS = Set([
     "SERVICE", "SILENT", "LATERAL", "EXISTS", "NOT", "IN",
     "ORDER", "BY", "ASC", "DESC", "LIMIT", "OFFSET",
     "GROUP", "HAVING", "DISTINCT", "REDUCED",
-    "PREFIX", "BASE", "VERSION",
+    "PREFIX", "BASE", "VERSION", "FROM",
     "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP_CONCAT", "SAMPLE",
     "MEDIAN", "MODE", "SEPARATOR",
     "INSERT", "DELETE", "DATA", "CLEAR", "DROP", "LOAD", "INTO",
     "COPY", "DEFAULT", "ALL", "NAMED", "UNDEF",
+    # Built-in functions (must be keywords so they aren't tokenized as PNAME)
+    "STR", "LANG", "LANGMATCHES", "DATATYPE", "BOUND", "IRI", "URI",
+    "BNODE", "RAND", "ABS", "CEIL", "FLOOR", "ROUND", "CONCAT",
+    "STRLEN", "UCASE", "LCASE", "ENCODE_FOR_URI", "CONTAINS",
+    "STRSTARTS", "STRENDS", "STRBEFORE", "STRAFTER", "YEAR", "MONTH",
+    "DAY", "HOURS", "MINUTES", "SECONDS", "TIMEZONE", "TZ", "NOW",
+    "UUID", "STRUUID", "MD5", "SHA1", "SHA256", "SHA384", "SHA512",
+    "COALESCE", "IF", "STRLANG", "STRDT", "SAMETERM", "ISIRI",
+    "ISURI", "ISBLANK", "ISLITERAL", "ISNUMERIC", "REGEX", "REPLACE",
+    "SUBSTR", "TRIPLE", "ISTRIPLE", "SUBJECT", "PREDICATE", "OBJECT",
+    "SAMEVALUE",
 ])
 
 function _sparql_tokenize_all(input::AbstractString)
@@ -852,6 +863,19 @@ function _parse_query_body(tz::_SparqlTokenizer, prefixes::Dict{String,String})
     end
 end
 
+# Skip FROM / FROM NAMED clauses (dataset declarations)
+function _skip_from_clauses!(tz::_SparqlTokenizer)
+    while _check_keyword(tz, "FROM")
+        _advance!(tz)
+        _match_keyword!(tz, "NAMED")
+        if _check(tz, TOK_IRI)
+            _advance!(tz)
+        elseif _check(tz, TOK_PNAME)
+            _advance!(tz)
+        end
+    end
+end
+
 # ─── SELECT ────────────────────────────────────────────────────────
 
 function _parse_select(tz::_SparqlTokenizer, prefixes)
@@ -867,7 +891,7 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
     if _check(tz, TOK_STAR)
         _advance!(tz)
     else
-        while !_check_keyword(tz, "WHERE") && !_check(tz, TOK_LBRACE) && !_check(tz, TOK_EOF)
+        while !_check_keyword(tz, "WHERE") && !_check_keyword(tz, "FROM") && !_check(tz, TOK_LBRACE) && !_check(tz, TOK_EOF)
             if _check(tz, TOK_VAR)
                 push!(variables, _advance!(tz).value[2:end])
             elseif _check(tz, TOK_LPAREN)
@@ -888,6 +912,8 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
         end
     end
 
+    _skip_from_clauses!(tz)
+
     # WHERE clause
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
@@ -904,6 +930,7 @@ end
 
 function _parse_ask(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "ASK")
+    _skip_from_clauses!(tz)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
     SparqlAsk(patterns, prefixes)
@@ -913,7 +940,18 @@ end
 
 function _parse_construct(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "CONSTRUCT")
+    # CONSTRUCT WHERE { ... } shorthand — WHERE pattern is also the template
+    if _check_keyword(tz, "WHERE") || _check_keyword(tz, "FROM")
+        _skip_from_clauses!(tz)
+        _match_keyword!(tz, "WHERE")
+        patterns = _parse_group_graph_pattern(tz, prefixes)
+        # Extract PatTriple patterns as template
+        template = PatTriple[p for p in patterns if p isa PatTriple]
+        group_by, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+        return SparqlConstruct(template, patterns, prefixes, limit, offset, order_by)
+    end
     template = _parse_construct_template(tz, prefixes)
+    _skip_from_clauses!(tz)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
     group_by, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
@@ -942,7 +980,7 @@ function _parse_describe(tz::_SparqlTokenizer, prefixes)
     if _check(tz, TOK_STAR)
         _advance!(tz)
     else
-        while !_check_keyword(tz, "WHERE") && !_check(tz, TOK_LBRACE) && !_check(tz, TOK_EOF)
+        while !_check_keyword(tz, "WHERE") && !_check_keyword(tz, "FROM") && !_check(tz, TOK_LBRACE) && !_check(tz, TOK_EOF)
             if _check(tz, TOK_VAR)
                 push!(terms, ExprVar(_advance!(tz).value[2:end]))
             elseif _check(tz, TOK_IRI)
@@ -954,6 +992,7 @@ function _parse_describe(tz::_SparqlTokenizer, prefixes)
             end
         end
     end
+    _skip_from_clauses!(tz)
     patterns = SparqlPattern[]
     if _check_keyword(tz, "WHERE") || _check(tz, TOK_LBRACE)
         _match_keyword!(tz, "WHERE")
@@ -1003,9 +1042,15 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
                 pats = _parse_group_graph_pattern(tz, prefixes)
                 push!(patterns, PatFilterExists(pats, true))
             else
-                _expect!(tz, TOK_LPAREN)
-                expr = _parse_expr(tz, prefixes)
-                _expect!(tz, TOK_RPAREN)
+                # SPARQL grammar: FILTER can be BrackettedExpression or BuiltInCall
+                if _check(tz, TOK_LPAREN)
+                    _advance!(tz)
+                    expr = _parse_expr(tz, prefixes)
+                    _expect!(tz, TOK_RPAREN)
+                else
+                    # Bare function call: FILTER regex(...), FILTER CONTAINS(...)
+                    expr = _parse_expr(tz, prefixes)
+                end
                 push!(patterns, PatFilter(expr))
             end
 

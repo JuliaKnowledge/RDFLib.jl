@@ -1024,19 +1024,12 @@ end
 # ─── Hash functions ────────────────────────────────────────────────
 
 function _ast_hash(name::String, s::String)
-    using_hash = if name == "MD5"; MD5
-    elseif name == "SHA1"; SHA1
-    elseif name == "SHA256"; SHA256
-    elseif name == "SHA384"; SHA.sha384
-    elseif name == "SHA512"; SHA.sha512
-    else nothing
-    end
     if name == "MD5"
-        return Literal(bytes2hex(md5(s)))
+        return Literal(bytes2hex(MD5.md5(Vector{UInt8}(s))))
     elseif name == "SHA1"
-        return Literal(bytes2hex(sha1(s)))
+        return Literal(bytes2hex(SHA.sha1(Vector{UInt8}(s))))
     elseif name == "SHA256"
-        return Literal(bytes2hex(sha256(s)))
+        return Literal(bytes2hex(SHA.sha256(Vector{UInt8}(s))))
     elseif name == "SHA384"
         return Literal(bytes2hex(SHA.sha384(Vector{UInt8}(s))))
     elseif name == "SHA512"

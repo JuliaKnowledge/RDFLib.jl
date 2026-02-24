@@ -89,6 +89,29 @@ function parse_ntriples(source)
     parse_ntriples!(g, source)
 end
 
+"""
+    parse_ntriples_vec(io::IO) -> Vector{Triple}
+
+Parse N-Triples from an IO stream into a Vector{Triple} without creating a graph.
+Useful for bulk loading into stores that accept triple vectors.
+"""
+function parse_ntriples_vec(io::IO)
+    result = Triple[]
+    for line in eachline(io)
+        stripped = strip(line)
+        isempty(stripped) && continue
+        startswith(stripped, '#') && continue
+        m = match(_NT_LINE, stripped)
+        isnothing(m) && continue
+        subj = _parse_nt_node(m.captures[1])
+        pred_match = match(_NT_URIREF, m.captures[2])
+        pred = URIRef(pred_match.captures[1])
+        obj = _parse_nt_object(m.captures[3])
+        push!(result, Triple(subj, pred, obj))
+    end
+    result
+end
+
 function _parse_nt_node(s::AbstractString)
     m = match(_NT_URIREF, s)
     !isnothing(m) && return URIRef(m.captures[1])
