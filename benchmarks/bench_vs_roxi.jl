@@ -137,20 +137,35 @@ function bench_multi_rule(entities::Int, nrules::Int)
     BenchCase("Multi $(entities)e×$(nrules)r", n3, nt, rules, entities * (nrules + 1))
 end
 
+# RoXi's test_hierarchy pattern: 1 instance, 3 branches per depth level
+function bench_roxi_hierarchy(depth::Int)
+    n3 = "@prefix : <http://example.org/> .\n:a :type :U0 .\n"
+    nt = "<http://example.org/a> <http://example.org/type> <http://example.org/U0> .\n"
+    rules = "@prefix : <http://example.org/> .\n"
+    for i in 0:(depth-1)
+        n3 *= "{ ?x :type :U$i } => { ?x :type :U$(i+1) } .\n"
+        n3 *= "{ ?x :type :U$i } => { ?x :type :J$(i+1) } .\n"
+        n3 *= "{ ?x :type :U$i } => { ?x :type :Q$(i+1) } .\n"
+        rules *= "{ ?x :type :U$i } => { ?x :type :U$(i+1) } .\n"
+        rules *= "{ ?x :type :U$i } => { ?x :type :J$(i+1) } .\n"
+        rules *= "{ ?x :type :U$i } => { ?x :type :Q$(i+1) } .\n"
+    end
+    BenchCase("RoXi-hier d=$depth", n3, nt, rules, 1 + 3 * depth)
+end
+
 # ─── Runners ────────────────────────────────────────────────────────
 
 function run_julia(bc::BenchCase; warmup::Int=2, iters::Int=5)
-    # Warmup
+    # Parse once (not timed — RoXi doesn't time loading either)
+    g = RDFGraph()
+    parse_rdf!(g, bc.n3_data, N3Format())
+    # Warmup reasoning only
     for _ in 1:warmup
-        g = RDFGraph()
-        parse_rdf!(g, bc.n3_data, N3Format())
         result = reason(g)
     end
-    # Timed runs
+    # Timed runs (reasoning only)
     times = Float64[]
     for _ in 1:iters
-        g = RDFGraph()
-        parse_rdf!(g, bc.n3_data, N3Format())
         t = @elapsed result = reason(g)
         push!(times, t)
     end
@@ -252,6 +267,9 @@ function main()
         bench_multi_rule(100, 5),
         bench_multi_rule(500, 5),
         bench_multi_rule(100, 20),
+        bench_roxi_hierarchy(10),
+        bench_roxi_hierarchy(100),
+        bench_roxi_hierarchy(1000),
     ]
 
     println("  Benchmark                  Julia     RoXi    Ratio")

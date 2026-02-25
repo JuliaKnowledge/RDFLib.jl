@@ -502,27 +502,24 @@ end
 
 # Integer-based SPO index
 struct IntStore
-    spo::Dict{UInt32, Dict{UInt32, Vector{UInt32}}}  # s→p→[o]
-    pos::Dict{UInt32, Dict{UInt32, Vector{UInt32}}}  # p→o→[s]
+    spo::Dict{UInt32, Dict{UInt32, Set{UInt32}}}   # s→p→{o}
+    pos::Dict{UInt32, Dict{UInt32, Vector{UInt32}}} # p→o→[s]
     triples::Vector{IntTriple}
-    triple_set::Set{Tuple{UInt32,UInt32,UInt32}}
 end
 
 IntStore() = IntStore(
+    Dict{UInt32, Dict{UInt32, Set{UInt32}}}(),
     Dict{UInt32, Dict{UInt32, Vector{UInt32}}}(),
-    Dict{UInt32, Dict{UInt32, Vector{UInt32}}}(),
-    IntTriple[],
-    Set{Tuple{UInt32,UInt32,UInt32}}()
+    IntTriple[]
 )
 
 function int_add!(store::IntStore, t::IntTriple)::Bool
-    key = (t.s, t.p, t.o)
-    key in store.triple_set && return false
-    push!(store.triple_set, key)
+    # Single get! per level (combines existence check + creation)
+    sp = get!(Dict{UInt32, Set{UInt32}}, store.spo, t.s)
+    objs = get!(Set{UInt32}, sp, t.p)
+    t.o in objs && return false
+    push!(objs, t.o)
     push!(store.triples, t)
-    # SPO
-    sp = get!(Dict{UInt32, Vector{UInt32}}, store.spo, t.s)
-    push!(get!(Vector{UInt32}, sp, t.p), t.o)
     # POS
     po = get!(Dict{UInt32, Vector{UInt32}}, store.pos, t.p)
     push!(get!(Vector{UInt32}, po, t.o), t.s)
@@ -530,7 +527,11 @@ function int_add!(store::IntStore, t::IntTriple)::Bool
 end
 
 function int_contains(store::IntStore, s::UInt32, p::UInt32, o::UInt32)::Bool
-    (s, p, o) in store.triple_set
+    sp = get(store.spo, s, nothing)
+    sp === nothing && return false
+    objs = get(sp, p, nothing)
+    objs === nothing && return false
+    o in objs
 end
 
 # Query: return matching triples. nothing = wildcard.
@@ -660,20 +661,93 @@ function int_match_remaining!(results::Vector{IntBindings},
     end
 
     pat = patterns[idx]
-    # Build query from current bindings
-    qs = is_var(pat.s) ? (let s=var_slot(pat.s); bindings[s] end) : pat.s
-    qp = is_var(pat.p) ? (let s=var_slot(pat.p); bindings[s] end) : pat.p
-    qo = is_var(pat.o) ? (let s=var_slot(pat.o); bindings[s] end) : pat.o
+    # Resolve variables from current bindings
+    qs = is_var(pat.s) ? bindings[var_slot(pat.s)] : pat.s
+    qp = is_var(pat.p) ? bindings[var_slot(pat.p)] : pat.p
+    qo = is_var(pat.o) ? bindings[var_slot(pat.o)] : pat.o
 
     mark = length(undo_stack)
-    for fact in int_query(store, qs, qp, qo)
-        resize!(undo_stack, mark)
-        if int_unify_undo!(pat, fact, bindings, undo_stack)
-            int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+
+    # Inline iteration over indices (avoids int_query vector allocation)
+    if qs != UNBOUND && qp != UNBOUND && qo != UNBOUND
+        # All bound: single contains check
+        sp = get(store.spo, qs, nothing)
+        if sp !== nothing
+            objs = get(sp, qp, nothing)
+            if objs !== nothing && qo in objs
+                if int_unify_undo!(pat, IntTriple(qs, qp, qo), bindings, undo_stack)
+                    int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+                end
+                for i in (mark+1):length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                resize!(undo_stack, mark)
+            end
         end
-        # Undo
-        for i in (mark+1):length(undo_stack)
-            bindings[undo_stack[i]] = UNBOUND
+    elseif qs != UNBOUND && qp != UNBOUND
+        # s,p bound: iterate objects
+        sp = get(store.spo, qs, nothing)
+        if sp !== nothing
+            objs = get(sp, qp, nothing)
+            if objs !== nothing
+                for ov in objs
+                    resize!(undo_stack, mark)
+                    if int_unify_undo!(pat, IntTriple(qs, qp, ov), bindings, undo_stack)
+                        int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+                    end
+                    for i in (mark+1):length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                end
+            end
+        end
+    elseif qp != UNBOUND && qo != UNBOUND
+        # p,o bound: iterate subjects via POS
+        po = get(store.pos, qp, nothing)
+        if po !== nothing
+            subjs = get(po, qo, nothing)
+            if subjs !== nothing
+                for sv in subjs
+                    resize!(undo_stack, mark)
+                    if int_unify_undo!(pat, IntTriple(sv, qp, qo), bindings, undo_stack)
+                        int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+                    end
+                    for i in (mark+1):length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                end
+            end
+        end
+    elseif qp != UNBOUND
+        # Only p bound: iterate POS
+        po = get(store.pos, qp, nothing)
+        if po !== nothing
+            for (ov, subjs) in po
+                for sv in subjs
+                    resize!(undo_stack, mark)
+                    if int_unify_undo!(pat, IntTriple(sv, qp, ov), bindings, undo_stack)
+                        int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+                    end
+                    for i in (mark+1):length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                end
+            end
+        end
+    elseif qs != UNBOUND
+        # Only s bound: iterate SPO
+        sp = get(store.spo, qs, nothing)
+        if sp !== nothing
+            for (pv, objs) in sp
+                for ov in objs
+                    resize!(undo_stack, mark)
+                    if int_unify_undo!(pat, IntTriple(qs, pv, ov), bindings, undo_stack)
+                        int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+                    end
+                    for i in (mark+1):length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                end
+            end
+        end
+    else
+        # Fully unbound: iterate all triples
+        for fact in store.triples
+            resize!(undo_stack, mark)
+            if int_unify_undo!(pat, fact, bindings, undo_stack)
+                int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+            end
+            for i in (mark+1):length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
         end
     end
     resize!(undo_stack, mark)

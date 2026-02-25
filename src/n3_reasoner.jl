@@ -5,6 +5,15 @@ const _RDF_FIRST = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
 const _RDF_REST  = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
 const _LOG_IMPLIES = URIRef("http://www.w3.org/2000/10/swap/log#implies")
 
+# Pre-compiled single-body rule for fast path substitution
+struct CompiledRule
+    body_s_slot::Int  # var slot for subject (0 = bound constant)
+    body_p_slot::Int
+    body_o_slot::Int
+    n_vars::Int
+    consequent::Vector{IntPattern}
+end
+
 """
     N3Reasoner
 
@@ -842,15 +851,21 @@ function _eam_loop_tat!(reasoner::N3Reasoner)
         push!(int_rules, IntRule(ant, con, Int(slot_counter)))
     end
 
-    # 3. Build body pattern index: encoded_pred → [(rule_idx, pattern_idx)]
-    body_idx = Dict{UInt32, Vector{Tuple{Int,Int}}}()
+    # 3. Build body pattern index: multi-key for fast lookup
+    body_idx_po = Dict{Tuple{UInt32,UInt32}, Vector{Tuple{Int,Int}}}()
+    body_idx_ps = Dict{Tuple{UInt32,UInt32}, Vector{Tuple{Int,Int}}}()
+    body_idx_p = Dict{UInt32, Vector{Tuple{Int,Int}}}()
     var_pred_bodies = Tuple{Int,Int}[]
     for (ri, ir) in enumerate(int_rules)
         for (pi, pat) in enumerate(ir.antecedent)
-            if !is_var(pat.p)
-                push!(get!(Vector{Tuple{Int,Int}}, body_idx, pat.p), (ri, pi))
-            else
+            if is_var(pat.p)
                 push!(var_pred_bodies, (ri, pi))
+            elseif !is_var(pat.o)
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx_po, (pat.p, pat.o)), (ri, pi))
+            elseif !is_var(pat.s)
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx_ps, (pat.p, pat.s)), (ri, pi))
+            else
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx_p, pat.p), (ri, pi))
             end
         end
     end
@@ -869,6 +884,7 @@ function _eam_loop_tat!(reasoner::N3Reasoner)
     processed = 0
     undo_stack = Int[]
     derived_int = IntTriple[]
+    _empty_candidates = Tuple{Int,Int}[]
 
     while processed < length(istore.triples)
         processed += 1
@@ -876,45 +892,42 @@ function _eam_loop_tat!(reasoner::N3Reasoner)
 
         t = istore.triples[processed]
 
-        # Find matching rule body patterns
-        candidates = get(body_idx, t.p, Tuple{Int,Int}[])
-        if !isempty(var_pred_bodies)
-            candidates = isempty(candidates) ? var_pred_bodies :
-                vcat(candidates, var_pred_bodies)
-        end
+        # Multi-key lookup
+        cands_po = get(body_idx_po, (t.p, t.o), _empty_candidates)
+        cands_ps = get(body_idx_ps, (t.p, t.s), _empty_candidates)
+        cands_p = get(body_idx_p, t.p, _empty_candidates)
 
-        for (ri, pi) in candidates
-            ri > length(int_rules) && continue
-            ir = int_rules[ri]
-
-            # Allocate bindings for this rule
-            bindings = fill(UNBOUND, ir.n_vars)
-
-            # Unify triple with body pattern[pi]
-            empty!(undo_stack)
-            if !int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack)
-                continue
-            end
-
-            # Match remaining body patterns
-            n_ant = length(ir.antecedent)
-            if n_ant == 1
-                # Single pattern rule — fire directly
-                _int_fire_consequent!(istore, ir, bindings, enc, reasoner, derived_int)
-            else
-                remaining = get(remaining_cache, (ri, pi), nothing)
-                if remaining === nothing
-                    remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
-                    remaining_cache[(ri, pi)] = remaining
+        @inline function _process_cands(candidates)
+            for (ri, pi) in candidates
+                ir = int_rules[ri]
+                bindings = fill(UNBOUND, ir.n_vars)
+                empty!(undo_stack)
+                if !int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack)
+                    continue
                 end
-                results = IntBindings[]
-                int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
-                for b in results
-                    _int_fire_consequent!(istore, ir, b, enc, reasoner, derived_int)
-                    reasoner.inference_count >= reasoner.max_inferences && break
+                n_ant = length(ir.antecedent)
+                if n_ant == 1
+                    _int_fire_consequent!(istore, ir, bindings, enc, reasoner, derived_int)
+                else
+                    remaining = get(remaining_cache, (ri, pi), nothing)
+                    if remaining === nothing
+                        remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
+                        remaining_cache[(ri, pi)] = remaining
+                    end
+                    results = IntBindings[]
+                    int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
+                    for b in results
+                        _int_fire_consequent!(istore, ir, b, enc, reasoner, derived_int)
+                        reasoner.inference_count >= reasoner.max_inferences && break
+                    end
                 end
             end
         end
+
+        _process_cands(cands_po)
+        _process_cands(cands_ps)
+        _process_cands(cands_p)
+        _process_cands(var_pred_bodies)
     end
 
     # 6. Decode derived triples back to RDF terms and add to reasoner
@@ -1221,13 +1234,429 @@ function reason(data::RDFGraph;
     if base_dir !== nothing
         push!(_N3_BASE_DIRS, base_dir)
     end
-    
+
+    # Extract rules first (needed for both fast and slow paths)
+    all_rules = N3Rule[]
+    if rules !== nothing
+        append!(all_rules, extract_rules(rules))
+    end
+    append!(all_rules, extract_rules(data))
+
+    # Check if we can use the fast direct-encode path:
+    # No rules graph, no query, data is MemoryStore, rules are TAT-eligible
+    use_fast = rules === nothing && query === nothing && data.store isa MemoryStore &&
+               !isempty(all_rules)
+    if use_fast
+        for rule in all_rules
+            for pat in rule.antecedent
+                if pat.predicate isa URIRef && is_builtin(pat.predicate)
+                    use_fast = false; break
+                end
+                if pat.predicate == _RDF_FIRST || pat.predicate == _RDF_REST
+                    if pat.subject isa BNode; use_fast = false; break; end
+                end
+            end
+            use_fast || break
+        end
+    end
+    # Backward rules prevent fast path
+    if use_fast
+        for rule in all_rules
+            if rule.direction == BACKWARD
+                use_fast = false; break
+            end
+        end
+    end
+
+    result = if use_fast
+        _reason_fast(data, all_rules, max_iterations, max_inferences, pass_only_new)
+    else
+        _reason_full(data, rules, all_rules, query, max_iterations,
+                     max_inferences, pass_only_new)
+    end
+
+    if base_dir !== nothing
+        filter!(d -> d != base_dir, _N3_BASE_DIRS)
+    end
+
+    return result
+end
+
+# Fast path: encode directly from input graph, skip working graph copy
+function _reason_fast(data::RDFGraph, all_rules::Vector{N3Rule},
+                       max_iterations::Int, max_inferences::Int,
+                       pass_only_new::Bool)
+    store = data.store::MemoryStore
+    log_implies_uri = _LOG_IMPLIES
+    log_impliedBy_uri = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
+
+    # Encode data triples directly (skip rule triples)
+    enc = TermEncoder()
+    istore = IntStore()
+    n_data_triples = length(store.insertion_order)
+    sizehint!(istore.triples, n_data_triples * 2)
+
+    for t in store.insertion_order
+        # Skip rule triples (log:implies/impliedBy with Formula s/o)
+        if (t.predicate == log_implies_uri || t.predicate == log_impliedBy_uri) &&
+           t.subject isa Formula && t.object isa Formula
+            continue
+        end
+        s = encode_term!(enc, t.subject)
+        p = encode_term!(enc, t.predicate)
+        o = encode_term!(enc, t.object)
+        int_add!(istore, IntTriple(s, p, o))
+    end
+
+    n_data = length(istore.triples)
+
+    # Encode rules
+    int_rules = IntRule[]
+    for rule in all_rules
+        var_slots = Dict{Variable, UInt32}()
+        slot_counter = UInt32(0)
+        function _get_slot(v::Variable)
+            get!(var_slots, v) do
+                slot_counter += 1
+                slot_counter
+            end
+        end
+
+        ant = IntPattern[]
+        for pat in rule.antecedent
+            s = pat.subject isa Variable ? (VAR_FLAG | _get_slot(pat.subject)) :
+                encode_term!(enc, pat.subject)
+            p = pat.predicate isa Variable ? (VAR_FLAG | _get_slot(pat.predicate)) :
+                encode_term!(enc, pat.predicate)
+            o = pat.object isa Variable ? (VAR_FLAG | _get_slot(pat.object)) :
+                encode_term!(enc, pat.object)
+            push!(ant, IntPattern(s, p, o))
+        end
+        con = IntPattern[]
+        for pat in rule.consequent
+            s = pat.subject isa Variable ? (VAR_FLAG | _get_slot(pat.subject)) :
+                encode_term!(enc, pat.subject)
+            p = pat.predicate isa Variable ? (VAR_FLAG | _get_slot(pat.predicate)) :
+                encode_term!(enc, pat.predicate)
+            o = pat.object isa Variable ? (VAR_FLAG | _get_slot(pat.object)) :
+                encode_term!(enc, pat.object)
+            push!(con, IntPattern(s, p, o))
+        end
+        push!(int_rules, IntRule(ant, con, Int(slot_counter)))
+    end
+
+    # Build body pattern index — multi-key for fast lookup
+    # body_idx_po: (p,o) → candidates (both p and o bound in pattern)
+    # body_idx_ps: (p,s) → candidates (both p and s bound in pattern)
+    # body_idx_p: p → candidates (only p bound, s and/or o are vars)
+    # var_pred_bodies: candidates with variable predicate
+    body_idx_po = Dict{Tuple{UInt32,UInt32}, Vector{Tuple{Int,Int}}}()
+    body_idx_ps = Dict{Tuple{UInt32,UInt32}, Vector{Tuple{Int,Int}}}()
+    body_idx_p = Dict{UInt32, Vector{Tuple{Int,Int}}}()
+    var_pred_bodies = Tuple{Int,Int}[]
+    for (ri, ir) in enumerate(int_rules)
+        for (pi, pat) in enumerate(ir.antecedent)
+            if is_var(pat.p)
+                push!(var_pred_bodies, (ri, pi))
+            elseif !is_var(pat.o)
+                # p and o both bound — most specific index
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx_po, (pat.p, pat.o)), (ri, pi))
+            elseif !is_var(pat.s)
+                # p and s both bound
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx_ps, (pat.p, pat.s)), (ri, pi))
+            else
+                # Only p bound
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx_p, pat.p), (ri, pi))
+            end
+        end
+    end
+
+    # Pre-compute remaining patterns
+    remaining_cache = Dict{Tuple{Int,Int}, Vector{IntPattern}}()
+    for (ri, ir) in enumerate(int_rules)
+        n = length(ir.antecedent)
+        n <= 1 && continue
+        for pi in 1:n
+            remaining_cache[(ri, pi)] = IntPattern[ir.antecedent[j] for j in 1:n if j != pi]
+        end
+    end
+
+    # Pre-compile single-body rules for direct substitution (skip unification)
+    compiled_rules = Dict{Int, CompiledRule}()
+    for (ri, ir) in enumerate(int_rules)
+        length(ir.antecedent) == 1 || continue
+        pat = ir.antecedent[1]
+        s_slot = is_var(pat.s) ? Int(var_slot(pat.s)) : 0
+        p_slot = is_var(pat.p) ? Int(var_slot(pat.p)) : 0
+        o_slot = is_var(pat.o) ? Int(var_slot(pat.o)) : 0
+        compiled_rules[ri] = CompiledRule(s_slot, p_slot, o_slot, ir.n_vars, ir.consequent)
+    end
+
+    # Run TAT loop
+    processed = 0
+    undo_stack = sizehint!(Int[], 32)
+    inference_count = 0
+    _empty_candidates = Tuple{Int,Int}[]
+
+    # Pre-allocate binding arrays per rule
+    rule_bindings = [fill(UNBOUND, ir.n_vars) for ir in int_rules]
+
+    while processed < length(istore.triples)
+        processed += 1
+        inference_count >= max_inferences && break
+
+        t = istore.triples[processed]
+
+        # --- Process body_idx_po candidates (p and o matched by index) ---
+        for (ri, pi) in get(body_idx_po, (t.p, t.o), _empty_candidates)
+            cr = get(compiled_rules, ri, nothing)
+            if cr !== nothing && pi == 1
+                # Fast path: single-body rule, p and o matched by index
+                # Only need to bind subject variable (if any)
+                bindings = rule_bindings[ri]
+                if cr.body_s_slot > 0
+                    bindings[cr.body_s_slot] = t.s
+                end
+                for con in cr.consequent
+                    cs = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+                    cp = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+                    co = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+                    (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                    if int_add!(istore, IntTriple(cs, cp, co))
+                        inference_count += 1
+                    end
+                end
+                if cr.body_s_slot > 0
+                    bindings[cr.body_s_slot] = UNBOUND
+                end
+            else
+                # General path
+                ir = int_rules[ri]
+                bindings = rule_bindings[ri]
+                empty!(undo_stack)
+                int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack) || begin
+                    for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                    continue
+                end
+                n_ant = length(ir.antecedent)
+                if n_ant == 1
+                    for con in ir.consequent
+                        cs = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+                        cp = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+                        co = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+                        (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                        if int_add!(istore, IntTriple(cs, cp, co))
+                            inference_count += 1
+                        end
+                    end
+                else
+                    remaining = get(remaining_cache, (ri, pi), nothing)
+                    if remaining === nothing
+                        remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
+                        remaining_cache[(ri, pi)] = remaining
+                    end
+                    results = IntBindings[]
+                    int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
+                    for b in results
+                        for con in ir.consequent
+                            cs = is_var(con.s) ? b[var_slot(con.s)] : con.s
+                            cp = is_var(con.p) ? b[var_slot(con.p)] : con.p
+                            co = is_var(con.o) ? b[var_slot(con.o)] : con.o
+                            (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                            if int_add!(istore, IntTriple(cs, cp, co))
+                                inference_count += 1
+                            end
+                        end
+                        inference_count >= max_inferences && break
+                    end
+                end
+                for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+            end
+        end
+
+        # --- Process body_idx_ps candidates (p and s matched by index) ---
+        for (ri, pi) in get(body_idx_ps, (t.p, t.s), _empty_candidates)
+            cr = get(compiled_rules, ri, nothing)
+            if cr !== nothing && pi == 1
+                bindings = rule_bindings[ri]
+                if cr.body_o_slot > 0; bindings[cr.body_o_slot] = t.o; end
+                if cr.body_s_slot > 0; bindings[cr.body_s_slot] = t.s; end
+                for con in cr.consequent
+                    cs = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+                    cp = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+                    co = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+                    (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                    if int_add!(istore, IntTriple(cs, cp, co))
+                        inference_count += 1
+                    end
+                end
+                if cr.body_o_slot > 0; bindings[cr.body_o_slot] = UNBOUND; end
+                if cr.body_s_slot > 0; bindings[cr.body_s_slot] = UNBOUND; end
+            else
+                ir = int_rules[ri]
+                bindings = rule_bindings[ri]
+                empty!(undo_stack)
+                int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack) || begin
+                    for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                    continue
+                end
+                n_ant = length(ir.antecedent)
+                if n_ant == 1
+                    for con in ir.consequent
+                        cs = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+                        cp = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+                        co = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+                        (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                        if int_add!(istore, IntTriple(cs, cp, co))
+                            inference_count += 1
+                        end
+                    end
+                else
+                    remaining = get(remaining_cache, (ri, pi), nothing)
+                    if remaining === nothing
+                        remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
+                        remaining_cache[(ri, pi)] = remaining
+                    end
+                    results = IntBindings[]
+                    int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
+                    for b in results
+                        for con in ir.consequent
+                            cs = is_var(con.s) ? b[var_slot(con.s)] : con.s
+                            cp = is_var(con.p) ? b[var_slot(con.p)] : con.p
+                            co = is_var(con.o) ? b[var_slot(con.o)] : con.o
+                            (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                            if int_add!(istore, IntTriple(cs, cp, co))
+                                inference_count += 1
+                            end
+                        end
+                        inference_count >= max_inferences && break
+                    end
+                end
+                for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+            end
+        end
+
+        # --- Process body_idx_p candidates (only p matched by index) ---
+        for (ri, pi) in get(body_idx_p, t.p, _empty_candidates)
+            ir = int_rules[ri]
+            bindings = rule_bindings[ri]
+            empty!(undo_stack)
+            int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack) || begin
+                for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                continue
+            end
+            n_ant = length(ir.antecedent)
+            if n_ant == 1
+                for con in ir.consequent
+                    cs = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+                    cp = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+                    co = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+                    (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                    if int_add!(istore, IntTriple(cs, cp, co))
+                        inference_count += 1
+                    end
+                end
+            else
+                remaining = get(remaining_cache, (ri, pi), nothing)
+                if remaining === nothing
+                    remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
+                    remaining_cache[(ri, pi)] = remaining
+                end
+                results = IntBindings[]
+                int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
+                for b in results
+                    for con in ir.consequent
+                        cs = is_var(con.s) ? b[var_slot(con.s)] : con.s
+                        cp = is_var(con.p) ? b[var_slot(con.p)] : con.p
+                        co = is_var(con.o) ? b[var_slot(con.o)] : con.o
+                        (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                        if int_add!(istore, IntTriple(cs, cp, co))
+                            inference_count += 1
+                        end
+                    end
+                    inference_count >= max_inferences && break
+                end
+            end
+            for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+        end
+
+        # --- Process var_pred_bodies (variable predicate) ---
+        for (ri, pi) in var_pred_bodies
+            ir = int_rules[ri]
+            bindings = rule_bindings[ri]
+            empty!(undo_stack)
+            int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack) || begin
+                for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+                continue
+            end
+            n_ant = length(ir.antecedent)
+            if n_ant == 1
+                for con in ir.consequent
+                    cs = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+                    cp = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+                    co = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+                    (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                    if int_add!(istore, IntTriple(cs, cp, co))
+                        inference_count += 1
+                    end
+                end
+            else
+                remaining = get(remaining_cache, (ri, pi), nothing)
+                if remaining === nothing
+                    remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
+                    remaining_cache[(ri, pi)] = remaining
+                end
+                results = IntBindings[]
+                int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
+                for b in results
+                    for con in ir.consequent
+                        cs = is_var(con.s) ? b[var_slot(con.s)] : con.s
+                        cp = is_var(con.p) ? b[var_slot(con.p)] : con.p
+                        co = is_var(con.o) ? b[var_slot(con.o)] : con.o
+                        (cs == UNBOUND || cp == UNBOUND || co == UNBOUND) && continue
+                        if int_add!(istore, IntTriple(cs, cp, co))
+                            inference_count += 1
+                        end
+                    end
+                    inference_count >= max_inferences && break
+                end
+            end
+            for i in 1:length(undo_stack); bindings[undo_stack[i]] = UNBOUND; end
+        end
+    end
+
+    # Build result graph: decode all triples (skip dedup — IntStore guarantees uniqueness)
+    result = RDFGraph()
+    rstore = result.store::MemoryStore
+    for (prefix, ns_uri) in namespaces(data)
+        bind!(result, prefix, ns_uri)
+    end
+
+    if pass_only_new
+        for i in (n_data+1):length(istore.triples)
+            it = istore.triples[i]
+            _add_unchecked!(rstore, Triple(decode_term(enc, it.s), decode_term(enc, it.p),
+                                decode_term(enc, it.o)))
+        end
+    else
+        for it in istore.triples
+            _add_unchecked!(rstore, Triple(decode_term(enc, it.s), decode_term(enc, it.p),
+                                decode_term(enc, it.o)))
+        end
+    end
+    result
+end
+
+# Full path: working graph copy, supports builtins/backward chaining/queries
+function _reason_full(data::RDFGraph, rules::Union{RDFGraph,Nothing},
+                       all_rules::Vector{N3Rule},
+                       query::Union{RDFGraph,Nothing},
+                       max_iterations::Int, max_inferences::Int,
+                       pass_only_new::Bool)
     working = RDFGraph()
-    # Copy namespaces from input graph
     for (prefix, ns_uri) in namespaces(data)
         bind!(working, prefix, ns_uri)
     end
-    # Copy triples directly from store (avoid Channel overhead)
     if data.store isa MemoryStore
         for t in data.store.insertion_order
             add!(working, t)
@@ -1238,17 +1667,13 @@ function reason(data::RDFGraph;
         end
     end
 
-    all_rules = N3Rule[]
     if rules !== nothing
         for t in rules
             add!(working, t)
         end
-        append!(all_rules, extract_rules(rules))
     end
-    append!(all_rules, extract_rules(data))
 
-    # Remove rule (log:implies and log:impliedBy) triples from working graph
-    # Use direct index access (avoids Channel overhead and expensive Formula == comparisons)
+    # Remove rule triples
     log_implies = _LOG_IMPLIES
     log_impliedBy = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
     rule_triples = Triple[]
@@ -1285,11 +1710,6 @@ function reason(data::RDFGraph;
                           max_iterations=max_iterations,
                           max_inferences=max_inferences)
     eam_loop!(reasoner)
-
-    # Clean up base directory
-    if base_dir !== nothing
-        filter!(d -> d != base_dir, _N3_BASE_DIRS)
-    end
 
     if query !== nothing
         return _apply_query(reasoner, query)

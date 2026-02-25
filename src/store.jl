@@ -48,24 +48,29 @@ function add!(store::MemoryStore, t::Triple)
         end
     end
 
+    _add_unchecked!(store, t)
+    store
+end
+
+# Add triple without duplicate checking (caller guarantees uniqueness)
+function _add_unchecked!(store::MemoryStore, t::Triple)
+    s, p, o = t.subject, t.predicate, t.object
+
     # SPO index
     sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
-    objs = get!(Set{Identifier}, sp, p)
-    push!(objs, o)
+    push!(get!(Set{Identifier}, sp, p), o)
 
     # POS index
     po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
-    subjs = get!(Set{Identifier}, po, o)
-    push!(subjs, s)
+    push!(get!(Set{Identifier}, po, o), s)
 
     # OSP index
     os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
-    preds = get!(Set{Identifier}, os, s)
-    push!(preds, p)
+    push!(get!(Set{Identifier}, os, s), p)
 
     push!(store.insertion_order, t)
     store.count += 1
-    store
+    nothing
 end
 
 function remove!(store::MemoryStore, pattern::TriplePattern)
