@@ -287,7 +287,12 @@ function _ast_eval_bgp(g::RDFGraph, pat::PatTriple, binding::Dict{String,Identif
 
     p_val = _ast_resolve_term(p_val, binding)
 
-    # Use indexed lookup: pass bound values, nothing for unbound variables
+    # Fast path: direct index access for MemoryStore
+    if g.store isa MemoryStore
+        return _ast_eval_bgp_memory(g.store, pat, binding, s_val, p_val, o_val)
+    end
+
+    # Generic path: use indexed triples() for other stores
     s_pattern = s_val isa Identifier ? s_val : nothing
     p_pattern = p_val isa Identifier ? p_val : nothing
     o_pattern = o_val isa Identifier ? o_val : nothing
@@ -300,6 +305,108 @@ function _ast_eval_bgp(g::RDFGraph, pat::PatTriple, binding::Dict{String,Identif
         ok = ok && _ast_match_term(t.predicate, pat.predicate, p_val, new_b)
         ok = ok && _ast_match_term(t.object, pat.object, o_val, new_b)
         ok && push!(results, new_b)
+    end
+    results
+end
+
+# Direct MemoryStore index access — avoids Channel overhead
+function _ast_eval_bgp_memory(store::MemoryStore, pat::PatTriple,
+                               binding::Dict{String,Identifier},
+                               s_val, p_val, o_val)
+    results = Dict{String,Identifier}[]
+    s_bound = s_val isa Identifier
+    p_bound = p_val isa Identifier
+    o_bound = o_val isa Identifier
+
+    if s_bound && p_bound && o_bound
+        # Fully bound — existence check
+        if haskey(store.spo, s_val) && haskey(store.spo[s_val], p_val) && o_val in store.spo[s_val][p_val]
+            push!(results, copy(binding))
+        end
+    elseif s_bound && p_bound
+        # S P ? — iterate objects from index
+        sp = get(store.spo, s_val, nothing)
+        if !isnothing(sp)
+            objs = get(sp, p_val, nothing)
+            if !isnothing(objs)
+                for o in objs
+                    new_b = copy(binding)
+                    _ast_match_term(o, pat.object, o_val, new_b) && push!(results, new_b)
+                end
+            end
+        end
+    elseif s_bound && o_bound
+        # S ? O — iterate predicates from OSP
+        os = get(store.osp, o_val, nothing)
+        if !isnothing(os)
+            preds = get(os, s_val, nothing)
+            if !isnothing(preds)
+                for p in preds
+                    new_b = copy(binding)
+                    _ast_match_term(p, pat.predicate, p_val, new_b) && push!(results, new_b)
+                end
+            end
+        end
+    elseif p_bound && o_bound
+        # ? P O — iterate subjects from POS
+        po = get(store.pos, p_val, nothing)
+        if !isnothing(po)
+            subjs = get(po, o_val, nothing)
+            if !isnothing(subjs)
+                for s in subjs
+                    new_b = copy(binding)
+                    _ast_match_term(s, pat.subject, s_val, new_b) && push!(results, new_b)
+                end
+            end
+        end
+    elseif s_bound
+        # S ? ? — iterate predicate-object pairs from SPO
+        sp = get(store.spo, s_val, nothing)
+        if !isnothing(sp)
+            for (p, objs) in sp
+                for o in objs
+                    new_b = copy(binding)
+                    ok = _ast_match_term(p, pat.predicate, p_val, new_b)
+                    ok && (ok = _ast_match_term(o, pat.object, o_val, new_b))
+                    ok && push!(results, new_b)
+                end
+            end
+        end
+    elseif p_bound
+        # ? P ? — iterate object-subject pairs from POS
+        po = get(store.pos, p_val, nothing)
+        if !isnothing(po)
+            for (o, subjs) in po
+                for s in subjs
+                    new_b = copy(binding)
+                    ok = _ast_match_term(s, pat.subject, s_val, new_b)
+                    ok && (ok = _ast_match_term(o, pat.object, o_val, new_b))
+                    ok && push!(results, new_b)
+                end
+            end
+        end
+    elseif o_bound
+        # ? ? O — iterate subject-predicate pairs from OSP
+        os = get(store.osp, o_val, nothing)
+        if !isnothing(os)
+            for (s, preds) in os
+                for p in preds
+                    new_b = copy(binding)
+                    ok = _ast_match_term(s, pat.subject, s_val, new_b)
+                    ok && (ok = _ast_match_term(p, pat.predicate, p_val, new_b))
+                    ok && push!(results, new_b)
+                end
+            end
+        end
+    else
+        # ? ? ? — iterate all triples
+        for t in store.insertion_order
+            new_b = copy(binding)
+            ok = _ast_match_term(t.subject, pat.subject, s_val, new_b)
+            ok && (ok = _ast_match_term(t.predicate, pat.predicate, p_val, new_b))
+            ok && (ok = _ast_match_term(t.object, pat.object, o_val, new_b))
+            ok && push!(results, new_b)
+        end
     end
     results
 end
