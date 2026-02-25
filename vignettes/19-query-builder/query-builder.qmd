@@ -1,0 +1,300 @@
+---
+title: "SPARQL Query Builder DSL"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+RDFLib.jl provides a fluent SPARQL query builder that lets you construct queries programmatically using Julia's pipe (`|>`) operator. Instead of writing SPARQL strings manually, you build queries step by step with type-safe functions.
+
+```{julia}
+using RDFLib
+
+# Build a sample graph to query against
+g = RDFGraph()
+ex = Namespace("http://example.org/")
+foaf = Namespace("http://xmlns.com/foaf/0.1/")
+bind!(g, "ex", ex)
+bind!(g, "foaf", foaf)
+
+add!(g, Triple(ex("alice"), RDF.type, foaf("Person")))
+add!(g, Triple(ex("alice"), foaf("name"), Literal("Alice")))
+add!(g, Triple(ex("alice"), foaf("age"), Literal(30)))
+add!(g, Triple(ex("alice"), foaf("knows"), ex("bob")))
+add!(g, Triple(ex("alice"), foaf("knows"), ex("carol")))
+add!(g, Triple(ex("bob"), RDF.type, foaf("Person")))
+add!(g, Triple(ex("bob"), foaf("name"), Literal("Bob")))
+add!(g, Triple(ex("bob"), foaf("age"), Literal(25)))
+add!(g, Triple(ex("bob"), foaf("knows"), ex("alice")))
+add!(g, Triple(ex("carol"), RDF.type, foaf("Person")))
+add!(g, Triple(ex("carol"), foaf("name"), Literal("Carol")))
+add!(g, Triple(ex("carol"), foaf("age"), Literal(35)))
+add!(g, Triple(ex("carol"), ex("city"), Literal("London")))
+println("Graph has $(length(g)) triples")
+```
+
+## SELECT Queries
+
+Build SELECT queries by chaining `select`, `where`, and modifier functions.
+
+```{julia}
+# Simple SELECT — find all person names
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> select(q, :name) |>
+    q -> where(q, :person, "foaf:name", :name)
+
+# View the generated SPARQL
+println(build(q))
+```
+
+```{julia}
+# Execute against our graph
+results = execute(q, g)
+for row in results
+    println("  Name: ", row[:name])
+end
+```
+
+## Adding Patterns and Filters
+
+Chain multiple `where` calls for additional triple patterns, and use `filter` for constraints.
+
+```{julia}
+# Find people older than 28
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> select(q, :name, :age) |>
+    q -> where(q, :person, "rdf:type", "foaf:Person") |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> where(q, :person, "foaf:age", :age) |>
+    q -> filter(q, "?age > 28")
+
+println(build(q))
+println()
+results = execute(q, g)
+for row in results
+    println("  $(row[:name]) (age $(row[:age]))")
+end
+```
+
+## OPTIONAL Patterns
+
+Use `optional` for patterns that may or may not match.
+
+```{julia}
+# Find all people with optional city
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> prefix(q, "ex", "http://example.org/") |>
+    q -> select(q, :name, :city) |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> optional(q, (:person, "ex:city", :city))
+
+println(build(q))
+println()
+results = execute(q, g)
+for row in results
+    city = get(row, :city, "N/A")
+    println("  $(row[:name]) — $(city)")
+end
+```
+
+## ORDER BY, LIMIT, and OFFSET
+
+Control result ordering and pagination.
+
+```{julia}
+# People sorted by age, descending, limit to 2
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> select(q, :name, :age) |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> where(q, :person, "foaf:age", :age) |>
+    q -> order_by(q, :age, :desc) |>
+    q -> limit(q, 2)
+
+println(build(q))
+println()
+results = execute(q, g)
+for row in results
+    println("  $(row[:name]) — age $(row[:age])")
+end
+```
+
+## DISTINCT
+
+Eliminate duplicate results.
+
+```{julia}
+# Distinct types in the graph
+q = SelectQuery() |>
+    q -> select(q, :type) |>
+    q -> where(q, :s, "rdf:type", :type) |>
+    q -> distinct(q)
+
+println(build(q))
+println()
+results = execute(q, g)
+for row in results
+    println("  Type: ", row[:type])
+end
+```
+
+## GROUP BY and HAVING
+
+Aggregate results with grouping.
+
+```{julia}
+# Count friends per person
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> select(q, :name) |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> where(q, :person, "foaf:knows", :friend) |>
+    q -> group_by(q, :name) |>
+    q -> having(q, "COUNT(?friend) > 1")
+
+println(build(q))
+```
+
+## BIND Expressions
+
+Compute new values from existing bindings.
+
+```{julia}
+# Compute age category
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> select(q, :name, :category) |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> where(q, :person, "foaf:age", :age) |>
+    q -> query_bind(q, "IF(?age >= 30, \"senior\", \"junior\")", :category)
+
+println(build(q))
+```
+
+## VALUES Clause
+
+Inject a fixed set of bindings.
+
+```{julia}
+# Only look up specific people
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> prefix(q, "ex", "http://example.org/") |>
+    q -> select(q, :person, :name) |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> query_values(q, [:person], [["ex:alice"], ["ex:bob"]])
+
+println(build(q))
+```
+
+## UNION Patterns
+
+Match alternative graph patterns.
+
+```{julia}
+# Find people who know someone OR have a city
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> prefix(q, "ex", "http://example.org/") |>
+    q -> select(q, :person, :name) |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> union_pattern(q,
+        [(:person, "foaf:knows", :other)],
+        [(:person, "ex:city", :city)])
+
+println(build(q))
+```
+
+## MINUS Patterns
+
+Exclude certain matches.
+
+```{julia}
+# Find people who do NOT know anyone
+q = SelectQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> select(q, :name) |>
+    q -> where(q, :person, "rdf:type", "foaf:Person") |>
+    q -> where(q, :person, "foaf:name", :name) |>
+    q -> minus(q, (:person, "foaf:knows", :anyone))
+
+println(build(q))
+println()
+results = execute(q, g)
+for row in results
+    println("  Loner: ", row[:name])
+end
+```
+
+## CONSTRUCT Queries
+
+Build new RDF graphs from query results.
+
+```{julia}
+# Construct a simplified graph
+q = ConstructQuery() |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> prefix(q, "ex", "http://example.org/") |>
+    q -> construct(q, (:person, "ex:hasName", :name)) |>
+    q -> where(q, :person, "foaf:name", :name)
+
+println(build(q))
+```
+
+## ASK Queries
+
+Check if a pattern exists.
+
+```{julia}
+# Does anyone know Alice?
+q = AskQuery() |>
+    q -> prefix(q, "ex", "http://example.org/") |>
+    q -> prefix(q, "foaf", "http://xmlns.com/foaf/0.1/") |>
+    q -> where(q, :someone, "foaf:knows", "ex:alice")
+
+println(build(q))
+```
+
+## DESCRIBE Queries
+
+Get a description of resources.
+
+```{julia}
+q = DescribeQuery() |>
+    q -> prefix(q, "ex", "http://example.org/") |>
+    q -> describe(q, "ex:alice")
+
+println(build(q))
+```
+
+## Summary
+
+| Function | Description |
+|----------|-------------|
+| `SelectQuery()` | Start a SELECT query |
+| `ConstructQuery()` | Start a CONSTRUCT query |
+| `AskQuery()` | Start an ASK query |
+| `DescribeQuery()` | Start a DESCRIBE query |
+| `prefix(q, name, uri)` | Add PREFIX declaration |
+| `select(q, vars...)` | Set SELECT variables |
+| `where(q, s, p, o)` | Add triple pattern |
+| `filter(q, expr)` | Add FILTER constraint |
+| `optional(q, patterns...)` | Add OPTIONAL block |
+| `union_pattern(q, left, right)` | Add UNION |
+| `minus(q, patterns...)` | Add MINUS |
+| `query_bind(q, expr, var)` | Add BIND expression |
+| `query_values(q, vars, rows)` | Add VALUES clause |
+| `group_by(q, vars...)` | GROUP BY clause |
+| `having(q, expr)` | HAVING condition |
+| `order_by(q, var, dir)` | ORDER BY clause |
+| `limit(q, n)` | LIMIT results |
+| `offset(q, n)` | OFFSET results |
+| `distinct(q)` | DISTINCT modifier |
+| `build(q)` | Render to SPARQL string |
+| `execute(q, graph)` | Execute and return results |

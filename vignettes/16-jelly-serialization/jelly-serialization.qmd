@@ -1,0 +1,160 @@
+---
+title: "Jelly Binary RDF Serialization"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+[Jelly](https://jelly-rdf.github.io/) is a compact binary RDF serialization format based on Protocol Buffers. It provides significantly smaller file sizes than text-based formats like Turtle or N-Triples, making it ideal for high-throughput RDF streaming and storage.
+
+RDFLib.jl supports Jelly as a first-class serialization format through `JellyFormat`.
+
+```{julia}
+using RDFLib
+```
+
+## Serializing Graphs to Jelly
+
+Use the standard `serialize` API with `JellyFormat()`.
+
+```{julia}
+# Build a sample graph
+g = RDFGraph()
+ex = Namespace("http://example.org/")
+bind!(g, "ex", ex)
+
+for i in 1:100
+    add!(g, Triple(ex("item$i"), RDF.type, ex("Item")))
+    add!(g, Triple(ex("item$i"), RDFS("label"), Literal("Item number $i")))
+    add!(g, Triple(ex("item$i"), ex("value"), Literal(i)))
+end
+
+println("Graph has $(length(g)) triples")
+```
+
+```{julia}
+# Serialize to Jelly binary format
+jelly_data = serialize(g, JellyFormat())
+println("Jelly size: $(length(jelly_data)) bytes")
+println("Type: ", typeof(jelly_data))
+```
+
+## Parsing Jelly Back to Graphs
+
+Parse Jelly binary data back into an RDF graph.
+
+```{julia}
+# Round-trip: parse back from binary
+g2 = parse_rdf(jelly_data, JellyFormat())
+println("Round-trip: $(length(g2)) triples")
+
+# Verify data integrity
+sample = first(collect(triples(g2, (ex("item1"), nothing, nothing))))
+println("Sample triple: ", sample)
+```
+
+```{julia}
+# Parse into an existing graph
+g3 = RDFGraph()
+parse_rdf!(g3, jelly_data, JellyFormat())
+println("Merged graph: $(length(g3)) triples")
+```
+
+## File I/O
+
+Write Jelly data to files and read them back.
+
+```{julia}
+# Write to file
+jelly_path = tempname() * ".jelly"
+serialize_jelly_to_file(g, jelly_path)
+println("Written to: ", jelly_path)
+println("File size: ", filesize(jelly_path), " bytes")
+
+# Read from file
+g4 = parse_jelly_file(jelly_path)
+println("Read back: $(length(g4)) triples")
+
+rm(jelly_path; force=true)
+```
+
+## Size Comparison
+
+Compare Jelly against text-based formats.
+
+```{julia}
+# Build a larger graph for comparison
+g_big = RDFGraph()
+ex = Namespace("http://example.org/ontology/things/")
+bind!(g_big, "ex", ex)
+
+for i in 1:500
+    s = ex("resource_$i")
+    add!(g_big, Triple(s, RDF.type, ex("Entity")))
+    add!(g_big, Triple(s, RDFS("label"), Literal("Resource number $i"; lang="en")))
+    add!(g_big, Triple(s, ex("identifier"), Literal(i)))
+    add!(g_big, Triple(s, ex("description"),
+        Literal("This is a detailed description of resource $i with some extra text")))
+end
+
+println("Benchmark graph: $(length(g_big)) triples")
+```
+
+```{julia}
+# Serialize in each format and compare sizes
+nt_data = serialize(g_big, NTriplesFormat())
+ttl_data = serialize(g_big, TurtleFormat())
+jelly_data = serialize(g_big, JellyFormat())
+
+println("N-Triples: $(sizeof(nt_data)) bytes")
+println("Turtle:    $(sizeof(ttl_data)) bytes")
+println("Jelly:     $(length(jelly_data)) bytes")
+
+ratio_nt = round(sizeof(nt_data) / length(jelly_data); digits=1)
+ratio_ttl = round(sizeof(ttl_data) / length(jelly_data); digits=1)
+println("\nJelly is $(ratio_nt)× smaller than N-Triples")
+println("Jelly is $(ratio_ttl)× smaller than Turtle")
+```
+
+## How Jelly Compression Works
+
+Jelly achieves compact sizes through:
+
+1. **Dictionary encoding** — repeated IRIs, prefixes, and datatypes are stored once and referenced by ID
+2. **Prefix compression** — common IRI prefixes are factored out (like Turtle, but in binary)
+3. **Protobuf encoding** — variable-length integer encoding minimizes overhead
+4. **Streaming frames** — data is organized into frames for efficient chunked processing
+
+```{julia}
+# Control compression parameters
+jelly_small = serialize_jelly(g, max_names=64, max_prefixes=8, max_datatypes=8)
+jelly_large = serialize_jelly(g, max_names=256, max_prefixes=32, max_datatypes=32)
+
+println("Smaller lookup tables: $(length(jelly_small)) bytes")
+println("Larger lookup tables:  $(length(jelly_large)) bytes")
+```
+
+## Cross-Language Interoperability
+
+Jelly is a [standardized format](https://jelly-rdf.github.io/) with implementations in multiple languages including Java/Scala (Apache Jena, RDF4J) and now Julia via RDFLib.jl. Jelly files produced by RDFLib.jl can be read by any compliant implementation, and vice versa.
+
+This makes Jelly suitable for:
+
+- **Microservice architectures** — fast binary RPC between services in different languages
+- **Data pipelines** — compact intermediate format between processing stages
+- **Archival** — space-efficient long-term storage of large RDF datasets
+- **Streaming** — frame-based design supports incremental processing
+
+## Summary
+
+| Function | Description |
+|----------|-------------|
+| `serialize(g, JellyFormat())` | Serialize graph to Jelly bytes |
+| `parse_rdf(data, JellyFormat())` | Parse Jelly bytes to new graph |
+| `parse_rdf!(g, data, JellyFormat())` | Parse Jelly into existing graph |
+| `serialize_jelly(g; kwargs...)` | Serialize with compression options |
+| `serialize_jelly_to_file(g, path)` | Write Jelly to file |
+| `parse_jelly_file(path)` | Read Jelly from file |

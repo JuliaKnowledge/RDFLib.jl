@@ -1,0 +1,199 @@
+---
+title: "Persistent LMDB Storage"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+RDFLib.jl provides `LMDBStore`, a persistent triple store backed by [LMDB](https://www.symas.com/lmdb) (Lightning Memory-Mapped Database). It stores RDF graphs on disk with dictionary-encoded terms and sorted triple indices for fast pattern-matching queries.
+
+```{julia}
+using RDFLib
+```
+
+## Creating an LMDBStore
+
+Open a store by providing a directory path. LMDB creates the database files automatically.
+
+```{julia}
+# Create a temporary directory for our store
+db_path = mktempdir()
+
+# Open an LMDB-backed store
+store = LMDBStore(db_path)
+println("Store type: ", typeof(store))
+println("Store path: ", db_path)
+```
+
+## LMDB-Backed RDFGraph
+
+Use `LMDBStore` as the backend for an `RDFGraph`.
+
+```{julia}
+# Create a graph backed by LMDB
+g = RDFGraph(; store=store)
+ex = Namespace("http://example.org/")
+
+# Add triples — they are written to disk immediately
+add!(g, Triple(ex("alice"), RDF.type, ex("Person")))
+add!(g, Triple(ex("alice"), RDFS("label"), Literal("Alice")))
+add!(g, Triple(ex("alice"), ex("age"), Literal(30)))
+add!(g, Triple(ex("bob"), RDF.type, ex("Person")))
+add!(g, Triple(ex("bob"), RDFS("label"), Literal("Bob")))
+add!(g, Triple(ex("bob"), ex("knows"), ex("alice")))
+
+println("Graph has $(length(g)) triples")
+```
+
+```{julia}
+# Query works the same as any other store
+results = collect(triples(g, (nothing, RDF.type, ex("Person"))))
+println("People found: ", length(results))
+for t in results
+    println("  ", t.subject)
+end
+```
+
+## Persistence Across Sessions
+
+Data survives closing and reopening the store.
+
+```{julia}
+# Close the store
+close(store)
+
+# Reopen — data is still there
+store2 = LMDBStore(db_path)
+g2 = RDFGraph(; store=store2)
+println("After reopen: $(length(g2)) triples")
+
+# Verify data integrity
+for t in triples(g2, (ex("alice"), nothing, nothing))
+    println("  ", t.predicate, " → ", t.object)
+end
+```
+
+## Bulk Loading
+
+For loading large datasets, use `add_bulk!` which batches inserts in a single transaction for much better performance.
+
+```{julia}
+# Generate a batch of triples
+bulk_triples = Triple[]
+for i in 1:1000
+    s = ex("item$i")
+    push!(bulk_triples, Triple(s, RDF.type, ex("Item")))
+    push!(bulk_triples, Triple(s, RDFS("label"), Literal("Item $i")))
+    push!(bulk_triples, Triple(s, ex("value"), Literal(i)))
+end
+
+# Bulk insert — all in one transaction
+count = add_bulk!(store2, bulk_triples)
+println("Bulk loaded: $count triples")
+println("Total: $(length(RDFGraph(; store=store2))) triples")
+```
+
+## Dictionary Encoding
+
+LMDB store uses dictionary encoding for space efficiency. Each unique RDF term (URI, blank node, literal) is stored once and assigned a compact integer ID. Triple indices store only these IDs (3 × 8 bytes = 24 bytes per triple), making the store compact and cache-friendly.
+
+```{julia}
+# The same URI is stored once, regardless of how many triples reference it
+for i in 1:100
+    add!(RDFGraph(; store=store2),
+        Triple(ex("new_item_$i"), RDF.type, ex("Item")))  # ex("Item") stored once
+end
+
+g3 = RDFGraph(; store=store2)
+items = collect(triples(g3, (nothing, RDF.type, ex("Item"))))
+println("Total items: ", length(items))
+```
+
+## Sorted Indices
+
+`LMDBStore` maintains three sorted indices for efficient lookups:
+
+| Index | Key Order | Best For |
+|-------|-----------|----------|
+| **SPO** | Subject → Predicate → Object | "What do we know about X?" |
+| **POS** | Predicate → Object → Subject | "Who has property P with value V?" |
+| **OSP** | Object → Subject → Predicate | "What links to X?" |
+
+```{julia}
+# Subject lookup — uses SPO index
+alice_facts = collect(triples(g3, (ex("alice"), nothing, nothing)))
+println("Facts about Alice: ", length(alice_facts))
+
+# Predicate+Object lookup — uses POS index
+people = collect(triples(g3, (nothing, RDF.type, ex("Person"))))
+println("People: ", length(people))
+
+# Object lookup — uses OSP index
+who_knows_alice = collect(triples(g3, (nothing, ex("knows"), ex("alice"))))
+println("Who knows Alice: ", length(who_knows_alice))
+```
+
+## Transactions
+
+Wrap multiple operations in a transaction for atomicity.
+
+```{julia}
+transaction(store2) do
+    g = RDFGraph(; store=store2)
+    add!(g, Triple(ex("carol"), RDF.type, ex("Person")))
+    add!(g, Triple(ex("carol"), RDFS("label"), Literal("Carol")))
+    add!(g, Triple(ex("carol"), ex("knows"), ex("alice")))
+end
+
+g4 = RDFGraph(; store=store2)
+carol_triples = collect(triples(g4, (ex("carol"), nothing, nothing)))
+println("Carol facts: ", length(carol_triples))
+```
+
+## Pattern Matching
+
+All eight query patterns (combinations of bound/unbound S, P, O) are supported efficiently.
+
+```{julia}
+g5 = RDFGraph(; store=store2)
+
+# (?, ?, ?) — all triples
+println("Total triples: ", length(g5))
+
+# (s, ?, ?) — everything about a subject
+println("Alice triples: ", length(collect(triples(g5, (ex("alice"), nothing, nothing)))))
+
+# (?, p, ?) — all triples with a predicate
+println("rdf:type triples: ", length(collect(triples(g5, (nothing, RDF.type, nothing)))))
+
+# (?, ?, o) — all triples with an object
+println("Triples pointing to Alice: ", length(collect(triples(g5, (nothing, nothing, ex("alice"))))))
+
+# (s, p, ?) — specific subject and predicate
+println("Alice's type: ", length(collect(triples(g5, (ex("alice"), RDF.type, nothing)))))
+```
+
+## Cleanup
+
+```{julia}
+close(store2)
+rm(db_path; force=true, recursive=true)
+println("Cleaned up")
+```
+
+## Summary
+
+| Function | Description |
+|----------|-------------|
+| `LMDBStore(path)` | Open/create persistent store |
+| `RDFGraph(; store=store)` | Create graph backed by LMDB |
+| `add!(store, triple)` | Insert a triple |
+| `add_bulk!(store, triples)` | Bulk insert in one transaction |
+| `triples(store, pattern)` | Pattern-matching query |
+| `remove!(store, pattern)` | Remove matching triples |
+| `transaction(f, store)` | Execute within transaction |
+| `clear!(store)` | Clear all data |
+| `close(store)` | Close the database |

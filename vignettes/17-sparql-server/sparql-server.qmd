@@ -1,0 +1,258 @@
+---
+title: "SPARQL Server"
+format:
+  html:
+    code-fold: false
+engine: julia
+---
+
+## Overview
+
+RDFLib.jl includes a built-in SPARQL server similar to Apache Jena Fuseki. It exposes RDF datasets over HTTP with support for the SPARQL Protocol, Graph Store Protocol, N3 reasoning, SHACL validation, and Jelly binary endpoints.
+
+```{julia}
+using RDFLib
+```
+
+## Creating a Server
+
+Create a `SparqlServer` and add datasets to it.
+
+```{julia}
+# Create a server on a given port
+server = SparqlServer(; port=3331, verbose=false)
+println("Server created: ", typeof(server))
+```
+
+## Adding Datasets
+
+Each dataset is an independent RDF store with its own endpoints.
+
+```{julia}
+# Add a dataset — creates a MemoryStore-backed graph by default
+add_dataset!(server, "people")
+
+# Add data to the dataset
+ds = get_dataset(server, "people")
+g = ds.graph
+ex = Namespace("http://example.org/")
+foaf = Namespace("http://xmlns.com/foaf/0.1/")
+bind!(g, "ex", ex)
+bind!(g, "foaf", foaf)
+
+add!(g, Triple(ex("alice"), RDF.type, foaf("Person")))
+add!(g, Triple(ex("alice"), foaf("name"), Literal("Alice")))
+add!(g, Triple(ex("alice"), foaf("age"), Literal(30)))
+add!(g, Triple(ex("alice"), foaf("knows"), ex("bob")))
+add!(g, Triple(ex("bob"), RDF.type, foaf("Person")))
+add!(g, Triple(ex("bob"), foaf("name"), Literal("Bob")))
+add!(g, Triple(ex("bob"), foaf("age"), Literal(25)))
+
+println("Dataset 'people' has $(length(g)) triples")
+```
+
+## Starting the Server
+
+Start the server in the background so it runs alongside your Julia session.
+
+```{julia}
+#| eval: false
+# Start in background mode (non-blocking)
+serve!(server; background=true)
+println("Server running at http://localhost:3331")
+
+# The server is now accepting HTTP requests
+```
+
+## SPARQL Protocol
+
+The SPARQL endpoint accepts queries via GET or POST at `/<dataset>/sparql`.
+
+```{julia}
+#| eval: false
+# Query via HTTP (using curl as an example)
+# GET request with query parameter:
+#   curl "http://localhost:3331/people/sparql?query=SELECT+*+WHERE+{+?s+?p+?o+}+LIMIT+5"
+
+# POST request with query in body:
+#   curl -X POST http://localhost:3331/people/sparql \
+#        -H "Content-Type: application/sparql-query" \
+#        -d "SELECT ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }"
+
+# Accept different result formats:
+#   curl -H "Accept: application/sparql-results+json" \
+#        "http://localhost:3331/people/sparql?query=SELECT+?s+WHERE+{+?s+?p+?o+}"
+```
+
+## SPARQL Update Endpoint
+
+Send SPARQL UPDATE operations to `/<dataset>/update`.
+
+```{julia}
+#| eval: false
+# Insert new data via SPARQL Update
+#   curl -X POST http://localhost:3331/people/update \
+#        -H "Content-Type: application/sparql-update" \
+#        -d "INSERT DATA {
+#              <http://example.org/carol> a <http://xmlns.com/foaf/0.1/Person> ;
+#                <http://xmlns.com/foaf/0.1/name> \"Carol\" .
+#            }"
+
+# Delete data
+#   curl -X POST http://localhost:3331/people/update \
+#        -H "Content-Type: application/sparql-update" \
+#        -d "DELETE WHERE { <http://example.org/bob> ?p ?o }"
+```
+
+## Graph Store Protocol
+
+The data endpoint at `/<dataset>/data` supports the W3C Graph Store Protocol for managing RDF graphs directly.
+
+```{julia}
+#| eval: false
+# GET — retrieve the default graph as Turtle
+#   curl http://localhost:3331/people/data
+
+# PUT — replace the entire graph
+#   curl -X PUT http://localhost:3331/people/data \
+#        -H "Content-Type: text/turtle" \
+#        --data-binary @mydata.ttl
+
+# POST — add triples to the graph
+#   curl -X POST http://localhost:3331/people/data \
+#        -H "Content-Type: application/n-triples" \
+#        --data-binary @additional.nt
+
+# DELETE — clear the graph
+#   curl -X DELETE http://localhost:3331/people/data
+```
+
+## File Upload
+
+Upload RDF files in any supported format, including Jelly binary.
+
+```{julia}
+#| eval: false
+# Upload a Turtle file
+#   curl -X POST http://localhost:3331/people/upload \
+#        -F "file=@data.ttl;type=text/turtle"
+
+# Upload a Jelly binary file
+#   curl -X POST http://localhost:3331/people/upload \
+#        -F "file=@data.jelly;type=application/x-jelly-rdf"
+```
+
+## N3 Reasoning Endpoint
+
+Submit N3 rules for forward-chaining reasoning at `/<dataset>/reason`.
+
+```{julia}
+#| eval: false
+# Apply N3 inference rules
+#   curl -X POST http://localhost:3331/people/reason \
+#        -H "Content-Type: text/n3" \
+#        -d '@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+#            { ?a foaf:knows ?b } => { ?b foaf:knows ?a } .'
+```
+
+## SHACL Validation Endpoint
+
+Validate the dataset against SHACL shapes at `/<dataset>/shacl`.
+
+```{julia}
+#| eval: false
+# Validate against SHACL shapes
+#   curl -X POST http://localhost:3331/people/shacl \
+#        -H "Content-Type: text/turtle" \
+#        -d '@prefix sh: <http://www.w3.org/ns/shacl#> .
+#            @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+#            @prefix ex: <http://example.org/> .
+#
+#            ex:PersonShape a sh:NodeShape ;
+#                sh:targetClass foaf:Person ;
+#                sh:property [
+#                    sh:path foaf:name ;
+#                    sh:minCount 1 ;
+#                    sh:datatype xsd:string ;
+#                ] .'
+```
+
+## Jelly Binary Endpoint
+
+The server supports Jelly as a content type for high-performance data exchange.
+
+```{julia}
+#| eval: false
+# Request data in Jelly format
+#   curl -H "Accept: application/x-jelly-rdf" \
+#        http://localhost:3331/people/data -o output.jelly
+
+# Upload data in Jelly format
+#   curl -X POST http://localhost:3331/people/data \
+#        -H "Content-Type: application/x-jelly-rdf" \
+#        --data-binary @input.jelly
+```
+
+## Admin Endpoints
+
+Manage the server and its datasets via admin endpoints under `/$`.
+
+```{julia}
+#| eval: false
+# Server info
+#   curl http://localhost:3331/$/server
+
+# List all datasets
+#   curl http://localhost:3331/$/datasets
+
+# Create a new dataset
+#   curl -X POST http://localhost:3331/$/datasets \
+#        -H "Content-Type: application/json" \
+#        -d '{"name": "newdata"}'
+
+# Delete a dataset
+#   curl -X DELETE http://localhost:3331/$/datasets/people
+
+# Health check
+#   curl http://localhost:3331/$/ping
+```
+
+## Programmatic Client Usage
+
+You can also interact with the server from Julia using HTTP.jl.
+
+```{julia}
+#| eval: false
+using HTTP
+
+# Query the server programmatically
+query = "SELECT ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }"
+resp = HTTP.get("http://localhost:3331/people/sparql";
+    query=Dict("query" => query),
+    headers=Dict("Accept" => "application/sparql-results+json"))
+println(String(resp.body))
+```
+
+## Stopping the Server
+
+```{julia}
+#| eval: false
+stop!(server)
+println("Server stopped")
+```
+
+## Summary
+
+| Endpoint | Method | Path | Description |
+|----------|--------|------|-------------|
+| SPARQL Query | GET/POST | `/<ds>/sparql` | Run SPARQL queries |
+| SPARQL Update | POST | `/<ds>/update` | Run SPARQL updates |
+| Graph Store | GET/PUT/POST/DELETE | `/<ds>/data` | Manage graph data |
+| File Upload | POST | `/<ds>/upload` | Upload RDF files |
+| N3 Reasoning | POST | `/<ds>/reason` | Apply inference rules |
+| SHACL Validation | POST | `/<ds>/shacl` | Validate shapes |
+| Server Info | GET | `/$/server` | Server metadata |
+| List Datasets | GET | `/$/datasets` | List datasets |
+| Create Dataset | POST | `/$/datasets` | Add dataset |
+| Delete Dataset | DELETE | `/$/datasets/<ds>` | Remove dataset |
+| Health Check | GET | `/$/ping` | Ping |
