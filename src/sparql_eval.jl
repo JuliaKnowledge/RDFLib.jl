@@ -51,6 +51,10 @@ end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
     bindings = _ast_eval_patterns(g, q.patterns)
+    # Apply LIMIT/OFFSET to bindings before constructing
+    start = q.offset + 1
+    stop = isnothing(q.limit) ? length(bindings) : min(start + q.limit - 1, length(bindings))
+    bindings = start <= length(bindings) ? bindings[start:stop] : Dict{String,Identifier}[]
     result = RDFGraph()
     for b in bindings
         for pt in q.template
@@ -64,7 +68,6 @@ function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
             add!(result, Triple(s, p, o))
         end
     end
-    # Apply LIMIT/OFFSET to constructed triples if specified
     result
 end
 
