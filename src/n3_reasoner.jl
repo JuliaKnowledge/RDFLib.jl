@@ -1398,8 +1398,8 @@ function _reason_fast_int(data::RDFGraph, enc::TermEncoder, istore::IntStore,
         end
     end
 
-    # Pre-compile single-body rules for direct substitution (skip unification)
-    compiled_rules = Dict{Int, CompiledRule}()
+    # Pre-compile single-body rules for direct substitution (Vector for O(1) lookup)
+    compiled_rules = Vector{Union{CompiledRule, Nothing}}(nothing, length(int_rules))
     for (ri, ir) in enumerate(int_rules)
         length(ir.antecedent) == 1 || continue
         pat = ir.antecedent[1]
@@ -1426,7 +1426,7 @@ function _reason_fast_int(data::RDFGraph, enc::TermEncoder, istore::IntStore,
 
         # --- Process body_idx_po candidates (p and o matched by index) ---
         for (ri, pi) in get(body_idx_po, (t.p, t.o), _empty_candidates)
-            cr = get(compiled_rules, ri, nothing)
+            cr = compiled_rules[ri]
             if cr !== nothing && pi == 1
                 # Fast path: single-body rule, p and o matched by index
                 # Only need to bind subject variable (if any)
@@ -1493,7 +1493,7 @@ function _reason_fast_int(data::RDFGraph, enc::TermEncoder, istore::IntStore,
 
         # --- Process body_idx_ps candidates (p and s matched by index) ---
         for (ri, pi) in get(body_idx_ps, (t.p, t.s), _empty_candidates)
-            cr = get(compiled_rules, ri, nothing)
+            cr = compiled_rules[ri]
             if cr !== nothing && pi == 1
                 bindings = rule_bindings[ri]
                 if cr.body_o_slot > 0; bindings[cr.body_o_slot] = t.o; end
