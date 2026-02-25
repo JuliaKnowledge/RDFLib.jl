@@ -230,55 +230,76 @@ function sparql_results_json(results; variables=nothing)
         String[]
     end
 
-    io = IOBuffer()
+    io = IOBuffer(; sizehint=max(256, length(results) * length(vars) * 80))
     write(io, "{\"head\":{\"vars\":[")
-    write(io, join(["\"$(v)\"" for v in vars], ","))
+    for (i, v) in enumerate(vars)
+        i > 1 && write(io, ',')
+        write(io, '"'); write(io, v); write(io, '"')
+    end
     write(io, "]},\"results\":{\"bindings\":[")
     for (i, binding) in enumerate(results)
-        i > 1 && write(io, ",")
-        write(io, "{")
+        i > 1 && write(io, ',')
+        write(io, '{')
         first_var = true
         for v in vars
             val = get(binding, v, nothing)
             isnothing(val) && continue
-            !first_var && write(io, ",")
+            !first_var && write(io, ',')
             first_var = false
-            write(io, "\"$(v)\":")
-            write(io, _sparql_json_term(val))
+            write(io, '"'); write(io, v); write(io, "\":")
+            _sparql_json_term!(io, val)
         end
-        write(io, "}")
+        write(io, '}')
     end
     write(io, "]}}")
     String(take!(io))
 end
 
-function _sparql_json_term(val::URIRef)
-    "{\"type\":\"uri\",\"value\":\"$(val.value)\"}"
+function _sparql_json_term!(io::IOBuffer, val::URIRef)
+    write(io, "{\"type\":\"uri\",\"value\":\"")
+    write(io, val.value)
+    write(io, "\"}")
 end
 
-function _sparql_json_term(val::BNode)
-    "{\"type\":\"bnode\",\"value\":\"$(val.id)\"}"
+function _sparql_json_term!(io::IOBuffer, val::BNode)
+    write(io, "{\"type\":\"bnode\",\"value\":\"")
+    write(io, val.id)
+    write(io, "\"}")
 end
 
-function _sparql_json_term(val::Literal)
-    io = IOBuffer()
-    write(io, "{\"type\":\"literal\",\"value\":\"$(_sparql_json_escape(val.lexical))\"")
+function _sparql_json_term!(io::IOBuffer, val::Literal)
+    write(io, "{\"type\":\"literal\",\"value\":\"")
+    _sparql_json_write_escaped!(io, val.lexical)
+    write(io, '"')
     if !isnothing(val.language) && !isempty(val.language)
-        write(io, ",\"xml:lang\":\"$(val.language)\"")
+        write(io, ",\"xml:lang\":\"")
+        write(io, val.language)
+        write(io, '"')
     elseif !isnothing(val.datatype) && val.datatype != URIRef(_XSD * "string")
-        write(io, ",\"datatype\":\"$(val.datatype.value)\"")
+        write(io, ",\"datatype\":\"")
+        write(io, val.datatype.value)
+        write(io, '"')
     end
-    write(io, "}")
-    String(take!(io))
+    write(io, '}')
 end
 
-function _sparql_json_escape(s::AbstractString)
-    s = replace(s, "\\" => "\\\\")
-    s = replace(s, "\"" => "\\\"")
-    s = replace(s, "\n" => "\\n")
-    s = replace(s, "\r" => "\\r")
-    s = replace(s, "\t" => "\\t")
-    s
+# Write JSON-escaped string directly to IO without allocating intermediate strings
+function _sparql_json_write_escaped!(io::IOBuffer, s::AbstractString)
+    for c in s
+        if c == '\\'
+            write(io, "\\\\")
+        elseif c == '"'
+            write(io, "\\\"")
+        elseif c == '\n'
+            write(io, "\\n")
+        elseif c == '\r'
+            write(io, "\\r")
+        elseif c == '\t'
+            write(io, "\\t")
+        else
+            write(io, c)
+        end
+    end
 end
 
 """

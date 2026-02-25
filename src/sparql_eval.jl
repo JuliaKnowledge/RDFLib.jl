@@ -42,10 +42,14 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         end
     end
 
-    # Project variables
+    # Project variables — skip if bindings already match projection
     proj_vars = _ast_projection_vars(q)
-    if !isempty(proj_vars)
-        bindings = [Dict{String,Identifier}(v => b[v] for v in proj_vars if haskey(b, v)) for b in bindings]
+    if !isempty(proj_vars) && !isempty(bindings)
+        b1 = bindings[1]
+        needs_proj = length(b1) != length(proj_vars) || !all(v -> haskey(b1, v), proj_vars)
+        if needs_proj
+            bindings = [Dict{String,Identifier}(v => b[v] for v in proj_vars if haskey(b, v)) for b in bindings]
+        end
     end
 
     # DISTINCT / REDUCED
@@ -62,7 +66,9 @@ function _ast_evaluate(g::RDFGraph, q::SparqlAsk)
 end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
-    bindings = _ast_eval_patterns(g, q.patterns)
+    # Push LIMIT into pattern evaluation when safe (no ORDER BY)
+    push_limit = isnothing(q.limit) ? 0 : q.offset + q.limit
+    bindings = _ast_eval_patterns(g, q.patterns; limit=push_limit)
     # Apply LIMIT/OFFSET to bindings before constructing
     start = q.offset + 1
     stop = isnothing(q.limit) ? length(bindings) : min(start + q.limit - 1, length(bindings))
