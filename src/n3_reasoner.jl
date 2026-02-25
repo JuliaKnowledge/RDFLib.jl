@@ -1236,42 +1236,18 @@ function reason(data::RDFGraph;
         push!(_N3_BASE_DIRS, base_dir)
     end
 
-    # Extract rules first (needed for both fast and slow paths)
-    all_rules = N3Rule[]
-    if rules !== nothing
-        append!(all_rules, extract_rules(rules))
-    end
-    append!(all_rules, extract_rules(data))
+    # Quick check: can we potentially use the fast direct-encode path?
+    # Requirements: no rules graph, no query, MemoryStore, has formulas
+    can_fast = rules === nothing && query === nothing && data.store isa MemoryStore
 
-    # Check if we can use the fast direct-encode path:
-    # No rules graph, no query, data is MemoryStore, rules are TAT-eligible
-    use_fast = rules === nothing && query === nothing && data.store isa MemoryStore &&
-               !isempty(all_rules)
-    if use_fast
-        for rule in all_rules
-            for pat in rule.antecedent
-                if pat.predicate isa URIRef && is_builtin(pat.predicate)
-                    use_fast = false; break
-                end
-                if pat.predicate == _RDF_FIRST || pat.predicate == _RDF_REST
-                    if pat.subject isa BNode; use_fast = false; break; end
-                end
-            end
-            use_fast || break
-        end
-    end
-    # Backward rules prevent fast path
-    if use_fast
-        for rule in all_rules
-            if rule.direction == BACKWARD
-                use_fast = false; break
-            end
-        end
-    end
-
-    result = if use_fast
-        _reason_fast(data, all_rules, max_iterations, max_inferences, pass_only_new)
+    result = if can_fast
+        _try_reason_fast(data, max_iterations, max_inferences, pass_only_new)
     else
+        all_rules = N3Rule[]
+        if rules !== nothing
+            append!(all_rules, extract_rules(rules))
+        end
+        append!(all_rules, extract_rules(data))
         _reason_full(data, rules, all_rules, query, max_iterations,
                      max_inferences, pass_only_new)
     end
@@ -1283,74 +1259,114 @@ function reason(data::RDFGraph;
     return result
 end
 
-# Fast path: encode directly from input graph, skip working graph copy
-function _reason_fast(data::RDFGraph, all_rules::Vector{N3Rule},
-                       max_iterations::Int, max_inferences::Int,
-                       pass_only_new::Bool)
+# Try the fast path: extract rules + encode + TAT in one pass
+# Falls back to full path if rules contain builtins/backward/BNode lists
+function _try_reason_fast(data::RDFGraph, max_iterations::Int,
+                           max_inferences::Int, pass_only_new::Bool)
     store = data.store::MemoryStore
     log_implies_uri = _LOG_IMPLIES
     log_impliedBy_uri = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
 
-    # Encode data triples directly (skip rule triples)
     enc = TermEncoder()
     istore = IntStore()
     n_data_triples = length(store.insertion_order)
     sizehint!(istore.triples, n_data_triples * 2)
 
+    # Extract rules and encode data in single pass over insertion_order
+    int_rules = IntRule[]
+    has_backward = false
+
     for t in store.insertion_order
-        # Skip rule triples (log:implies/impliedBy with Formula s/o)
         if (t.predicate == log_implies_uri || t.predicate == log_impliedBy_uri) &&
            t.subject isa Formula && t.object isa Formula
-            continue
+            # Rule triple — extract directly to IntRule
+            if t.predicate == log_impliedBy_uri
+                has_backward = true
+                break
+            end
+            ant_form = t.subject::Formula
+            con_form = t.object::Formula
+
+            # Check for builtins/BNode lists in antecedent
+            use_fast = true
+            ant_triples = collect(ant_form.graph)
+            for pat in ant_triples
+                if pat.predicate isa URIRef && is_builtin(pat.predicate)
+                    use_fast = false; break
+                end
+                if (pat.predicate == _RDF_FIRST || pat.predicate == _RDF_REST) &&
+                   pat.subject isa BNode
+                    use_fast = false; break
+                end
+            end
+            use_fast || begin has_backward = true; break end  # signal fallback
+
+            con_triples = collect(con_form.graph)
+
+            # Convert BNodes to Variables (fast path for no-BNode rules)
+            if _has_bnodes(ant_triples) || _has_bnodes(con_triples)
+                ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
+            end
+
+            # Encode directly to IntRule
+            var_slots = Dict{Variable, UInt32}()
+            slot_counter = UInt32(0)
+            function _get_slot(v::Variable)
+                get!(var_slots, v) do
+                    slot_counter += 1
+                    slot_counter
+                end
+            end
+
+            ant = IntPattern[]
+            for pat in ant_triples
+                s = pat.subject isa Variable ? (VAR_FLAG | _get_slot(pat.subject)) :
+                    encode_term!(enc, pat.subject)
+                p = pat.predicate isa Variable ? (VAR_FLAG | _get_slot(pat.predicate)) :
+                    encode_term!(enc, pat.predicate)
+                o = pat.object isa Variable ? (VAR_FLAG | _get_slot(pat.object)) :
+                    encode_term!(enc, pat.object)
+                push!(ant, IntPattern(s, p, o))
+            end
+            con = IntPattern[]
+            for pat in con_triples
+                s = pat.subject isa Variable ? (VAR_FLAG | _get_slot(pat.subject)) :
+                    encode_term!(enc, pat.subject)
+                p = pat.predicate isa Variable ? (VAR_FLAG | _get_slot(pat.predicate)) :
+                    encode_term!(enc, pat.predicate)
+                o = pat.object isa Variable ? (VAR_FLAG | _get_slot(pat.object)) :
+                    encode_term!(enc, pat.object)
+                push!(con, IntPattern(s, p, o))
+            end
+            push!(int_rules, IntRule(ant, con, Int(slot_counter)))
+        else
+            # Data triple — encode
+            s = encode_term!(enc, t.subject)
+            p = encode_term!(enc, t.predicate)
+            o = encode_term!(enc, t.object)
+            int_add!(istore, IntTriple(s, p, o))
         end
-        s = encode_term!(enc, t.subject)
-        p = encode_term!(enc, t.predicate)
-        o = encode_term!(enc, t.object)
-        int_add!(istore, IntTriple(s, p, o))
     end
 
+    # Fall back to full path if backward rules or builtins detected
+    if has_backward || isempty(int_rules)
+        all_rules = extract_rules(data)
+        return _reason_full(data, nothing, all_rules, nothing, max_iterations,
+                           max_inferences, pass_only_new)
+    end
+
+    _reason_fast_int(data, enc, istore, int_rules, max_iterations,
+                     max_inferences, pass_only_new)
+end
+
+# Fast path: run TAT loop with pre-encoded data and rules
+function _reason_fast_int(data::RDFGraph, enc::TermEncoder, istore::IntStore,
+                           int_rules::Vector{IntRule},
+                           max_iterations::Int, max_inferences::Int,
+                           pass_only_new::Bool)
     n_data = length(istore.triples)
 
-    # Encode rules
-    int_rules = IntRule[]
-    for rule in all_rules
-        var_slots = Dict{Variable, UInt32}()
-        slot_counter = UInt32(0)
-        function _get_slot(v::Variable)
-            get!(var_slots, v) do
-                slot_counter += 1
-                slot_counter
-            end
-        end
-
-        ant = IntPattern[]
-        for pat in rule.antecedent
-            s = pat.subject isa Variable ? (VAR_FLAG | _get_slot(pat.subject)) :
-                encode_term!(enc, pat.subject)
-            p = pat.predicate isa Variable ? (VAR_FLAG | _get_slot(pat.predicate)) :
-                encode_term!(enc, pat.predicate)
-            o = pat.object isa Variable ? (VAR_FLAG | _get_slot(pat.object)) :
-                encode_term!(enc, pat.object)
-            push!(ant, IntPattern(s, p, o))
-        end
-        con = IntPattern[]
-        for pat in rule.consequent
-            s = pat.subject isa Variable ? (VAR_FLAG | _get_slot(pat.subject)) :
-                encode_term!(enc, pat.subject)
-            p = pat.predicate isa Variable ? (VAR_FLAG | _get_slot(pat.predicate)) :
-                encode_term!(enc, pat.predicate)
-            o = pat.object isa Variable ? (VAR_FLAG | _get_slot(pat.object)) :
-                encode_term!(enc, pat.object)
-            push!(con, IntPattern(s, p, o))
-        end
-        push!(int_rules, IntRule(ant, con, Int(slot_counter)))
-    end
-
     # Build body pattern index — multi-key for fast lookup
-    # body_idx_po: (p,o) → candidates (both p and o bound in pattern)
-    # body_idx_ps: (p,s) → candidates (both p and s bound in pattern)
-    # body_idx_p: p → candidates (only p bound, s and/or o are vars)
-    # var_pred_bodies: candidates with variable predicate
     body_idx_po = Dict{Tuple{UInt32,UInt32}, Vector{Tuple{Int,Int}}}()
     body_idx_ps = Dict{Tuple{UInt32,UInt32}, Vector{Tuple{Int,Int}}}()
     body_idx_p = Dict{UInt32, Vector{Tuple{Int,Int}}}()

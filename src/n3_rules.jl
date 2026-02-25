@@ -94,6 +94,32 @@ function _bnodes_to_vars(ant_triples::Vector{Triple}, con_triples::Vector{Triple
     return new_ant, new_con
 end
 
+# Check if any triple has a BNode in subject or object position
+function _has_bnodes(triples::Vector{Triple})
+    for t in triples
+        (t.subject isa BNode || t.object isa BNode) && return true
+    end
+    false
+end
+
+# Extract a single rule from antecedent/consequent triples
+function _extract_rule!(rules::Vector{N3Rule}, ant_triples::Vector{Triple},
+                         con_triples::Vector{Triple}, direction::RuleDirection)
+    # Fast path: no BNodes → skip _bnodes_to_vars entirely
+    if !_has_bnodes(ant_triples) && !_has_bnodes(con_triples)
+        vars = Set{Variable}()
+        for tt in ant_triples; _collect_vars!(vars, tt); end
+        for tt in con_triples; _collect_vars!(vars, tt); end
+        push!(rules, N3Rule(ant_triples, con_triples, direction, nothing, vars))
+    else
+        ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
+        vars = Set{Variable}()
+        for tt in ant_triples; _collect_vars!(vars, tt); end
+        for tt in con_triples; _collect_vars!(vars, tt); end
+        push!(rules, N3Rule(ant_triples, con_triples, direction, nothing, vars))
+    end
+end
+
 function extract_rules(g::RDFGraph)
     rules = N3Rule[]
     log_implies = URIRef("http://www.w3.org/2000/10/swap/log#implies")
@@ -108,15 +134,7 @@ function extract_rules(g::RDFGraph)
         if t.subject isa Formula && t.object isa Formula
             ant_triples = collect(t.subject.graph)
             con_triples = collect(t.object.graph)
-            ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
-            vars = Set{Variable}()
-            for tt in ant_triples
-                _collect_vars!(vars, tt)
-            end
-            for tt in con_triples
-                _collect_vars!(vars, tt)
-            end
-            push!(rules, N3Rule(ant_triples, con_triples, FORWARD, nothing, vars))
+            _extract_rule!(rules, ant_triples, con_triples, FORWARD)
         end
     end
 
@@ -125,15 +143,7 @@ function extract_rules(g::RDFGraph)
         if t.subject isa Formula && t.object isa Formula
             ant_triples = collect(t.object.graph)    # object is antecedent
             con_triples = collect(t.subject.graph)   # subject is consequent
-            ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
-            vars = Set{Variable}()
-            for tt in ant_triples
-                _collect_vars!(vars, tt)
-            end
-            for tt in con_triples
-                _collect_vars!(vars, tt)
-            end
-            push!(rules, N3Rule(ant_triples, con_triples, BACKWARD, nothing, vars))
+            _extract_rule!(rules, ant_triples, con_triples, BACKWARD)
         elseif t.subject isa Formula && t.object isa Literal
             # Unconditional backward rule: { head } <= true
             xsd_bool = URIRef("http://www.w3.org/2001/XMLSchema#boolean")
