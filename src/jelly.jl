@@ -896,13 +896,31 @@ Parse Jelly binary data and add triples to existing graph.
 """
 function parse_jelly!(g::RDFGraph, data::Vector{UInt8})::RDFGraph
     dec = JellyDecoder()
-    pos = 1
-    limit = length(data) + 1
-    while pos < limit
-        frame_len, pos = _pb_get_varint(data, pos)
-        frame_end = pos + Int(frame_len)
-        _dec_frame!(dec, g, data, pos, frame_end)
-        pos = frame_end
+    store = g.store
+    # Use bulk path for MemoryStore (avoids per-triple Dict overhead)
+    if store isa MemoryStore && isempty(store.spo)
+        triples_vec = Triple[]
+        sizehint!(triples_vec, length(data) ÷ 20)
+        pos = 1
+        limit = length(data) + 1
+        while pos < limit
+            frame_len, pos = _pb_get_varint(data, pos)
+            frame_end = pos + Int(frame_len)
+            _dec_frame!(dec, g, triples_vec, data, pos, frame_end)
+            pos = frame_end
+        end
+        if !isempty(triples_vec)
+            add_bulk!(store, triples_vec)
+        end
+    else
+        pos = 1
+        limit = length(data) + 1
+        while pos < limit
+            frame_len, pos = _pb_get_varint(data, pos)
+            frame_end = pos + Int(frame_len)
+            _dec_frame!(dec, g, data, pos, frame_end)
+            pos = frame_end
+        end
     end
     return g
 end

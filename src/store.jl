@@ -39,37 +39,29 @@ MemoryStore() = MemoryStore(
 function add!(store::MemoryStore, t::Triple)
     s, p, o = t.subject, t.predicate, t.object
 
-    # Check if already present
-    if haskey(store.spo, s) && haskey(store.spo[s], p) && o in store.spo[s][p]
-        return store
+    # Check if already present (using get to avoid double-hashing)
+    sp = get(store.spo, s, nothing)
+    if !isnothing(sp)
+        objs = get(sp, p, nothing)
+        if !isnothing(objs) && o in objs
+            return store
+        end
     end
 
     # SPO index
-    if !haskey(store.spo, s)
-        store.spo[s] = Dict{Identifier, Set{Identifier}}()
-    end
-    if !haskey(store.spo[s], p)
-        store.spo[s][p] = Set{Identifier}()
-    end
-    push!(store.spo[s][p], o)
+    sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
+    objs = get!(Set{Identifier}, sp, p)
+    push!(objs, o)
 
     # POS index
-    if !haskey(store.pos, p)
-        store.pos[p] = Dict{Identifier, Set{Identifier}}()
-    end
-    if !haskey(store.pos[p], o)
-        store.pos[p][o] = Set{Identifier}()
-    end
-    push!(store.pos[p][o], s)
+    po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
+    subjs = get!(Set{Identifier}, po, o)
+    push!(subjs, s)
 
     # OSP index
-    if !haskey(store.osp, o)
-        store.osp[o] = Dict{Identifier, Set{Identifier}}()
-    end
-    if !haskey(store.osp[o], s)
-        store.osp[o][s] = Set{Identifier}()
-    end
-    push!(store.osp[o][s], p)
+    os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
+    preds = get!(Set{Identifier}, os, s)
+    push!(preds, p)
 
     push!(store.insertion_order, t)
     store.count += 1
@@ -172,3 +164,28 @@ end
 
 Base.length(store::MemoryStore) = store.count
 Base.isempty(store::MemoryStore) = store.count == 0
+
+function add_bulk!(store::MemoryStore, triples_vec::Vector{Triple})
+    n = length(triples_vec)
+    sizehint!(store.spo, n ÷ 4)
+    sizehint!(store.pos, 16)
+    sizehint!(store.osp, n ÷ 2)
+    for t in triples_vec
+        s, p, o = t.subject, t.predicate, t.object
+        # SPO index
+        sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
+        objs = get!(Set{Identifier}, sp, p)
+        push!(objs, o)
+        # POS index
+        po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
+        subjs = get!(Set{Identifier}, po, o)
+        push!(subjs, s)
+        # OSP index
+        os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
+        preds = get!(Set{Identifier}, os, s)
+        push!(preds, p)
+    end
+    store.insertion_order = copy(triples_vec)
+    store.count = n
+    store
+end
