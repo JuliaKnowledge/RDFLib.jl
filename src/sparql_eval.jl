@@ -287,8 +287,13 @@ function _ast_eval_bgp(g::RDFGraph, pat::PatTriple, binding::Dict{String,Identif
 
     p_val = _ast_resolve_term(p_val, binding)
 
+    # Use indexed lookup: pass bound values, nothing for unbound variables
+    s_pattern = s_val isa Identifier ? s_val : nothing
+    p_pattern = p_val isa Identifier ? p_val : nothing
+    o_pattern = o_val isa Identifier ? o_val : nothing
+
     results = Dict{String,Identifier}[]
-    for t in triples(g)
+    for t in triples(g, (s_pattern, p_pattern, o_pattern))
         new_b = copy(binding)
         ok = true
         ok = ok && _ast_match_term(t.subject, pat.subject, s_val, new_b)
