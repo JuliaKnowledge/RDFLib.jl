@@ -71,33 +71,46 @@ end
 function remove!(store::MemoryStore, pattern::TriplePattern)
     to_remove = collect(triples(store, pattern))
     for t in to_remove
-        s, p, o = t.subject, t.predicate, t.object
-
-        # SPO
-        if haskey(store.spo, s) && haskey(store.spo[s], p)
-            delete!(store.spo[s][p], o)
-            isempty(store.spo[s][p]) && delete!(store.spo[s], p)
-            isempty(store.spo[s]) && delete!(store.spo, s)
-        end
-
-        # POS
-        if haskey(store.pos, p) && haskey(store.pos[p], o)
-            delete!(store.pos[p][o], s)
-            isempty(store.pos[p][o]) && delete!(store.pos[p], o)
-            isempty(store.pos[p]) && delete!(store.pos, p)
-        end
-
-        # OSP
-        if haskey(store.osp, o) && haskey(store.osp[o], s)
-            delete!(store.osp[o][s], p)
-            isempty(store.osp[o][s]) && delete!(store.osp[o], s)
-            isempty(store.osp[o]) && delete!(store.osp, o)
-        end
-
-        store.count -= 1
+        _remove_from_indices!(store, t)
     end
-    filter!(t -> !any(r -> r.subject == t.subject && r.predicate == t.predicate && r.object == t.object, to_remove), store.insertion_order)
+    # Use === for insertion_order to avoid expensive == on Formulas
+    id_set = IdDict{Triple,Nothing}(t => nothing for t in to_remove)
+    filter!(t -> !haskey(id_set, t), store.insertion_order)
     store
+end
+
+# Remove a single exact triple (by identity) from the store
+function _remove_exact!(store::MemoryStore, t::Triple)
+    _remove_from_indices!(store, t)
+    filter!(x -> x !== t, store.insertion_order)
+    store
+end
+
+function _remove_from_indices!(store::MemoryStore, t::Triple)
+    s, p, o = t.subject, t.predicate, t.object
+
+    # SPO
+    if haskey(store.spo, s) && haskey(store.spo[s], p)
+        delete!(store.spo[s][p], o)
+        isempty(store.spo[s][p]) && delete!(store.spo[s], p)
+        isempty(store.spo[s]) && delete!(store.spo, s)
+    end
+
+    # POS
+    if haskey(store.pos, p) && haskey(store.pos[p], o)
+        delete!(store.pos[p][o], s)
+        isempty(store.pos[p][o]) && delete!(store.pos[p], o)
+        isempty(store.pos[p]) && delete!(store.pos, p)
+    end
+
+    # OSP
+    if haskey(store.osp, o) && haskey(store.osp[o], s)
+        delete!(store.osp[o][s], p)
+        isempty(store.osp[o][s]) && delete!(store.osp[o], s)
+        isempty(store.osp[o]) && delete!(store.osp, o)
+    end
+
+    store.count -= 1
 end
 
 """

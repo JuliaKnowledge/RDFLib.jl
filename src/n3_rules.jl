@@ -99,14 +99,21 @@ function extract_rules(g::RDFGraph)
     log_implies = URIRef("http://www.w3.org/2000/10/swap/log#implies")
     log_impliedBy = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
 
+    # Collect matching triples without Channel overhead
+    implies_triples = _triples_by_predicate(g, log_implies)
+    impliedBy_triples = _triples_by_predicate(g, log_impliedBy)
+
     # Forward rules: {antecedent} log:implies {consequent}
-    for t in triples(g, (nothing, log_implies, nothing))
+    for t in implies_triples
         if t.subject isa Formula && t.object isa Formula
             ant_triples = collect(t.subject.graph)
             con_triples = collect(t.object.graph)
             ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
             vars = Set{Variable}()
-            for tt in vcat(ant_triples, con_triples)
+            for tt in ant_triples
+                _collect_vars!(vars, tt)
+            end
+            for tt in con_triples
                 _collect_vars!(vars, tt)
             end
             push!(rules, N3Rule(ant_triples, con_triples, FORWARD, nothing, vars))
@@ -114,13 +121,16 @@ function extract_rules(g::RDFGraph)
     end
 
     # Backward rules: {consequent} log:impliedBy {antecedent}
-    for t in triples(g, (nothing, log_impliedBy, nothing))
+    for t in impliedBy_triples
         if t.subject isa Formula && t.object isa Formula
             ant_triples = collect(t.object.graph)    # object is antecedent
             con_triples = collect(t.subject.graph)   # subject is consequent
             ant_triples, con_triples = _bnodes_to_vars(ant_triples, con_triples)
             vars = Set{Variable}()
-            for tt in vcat(ant_triples, con_triples)
+            for tt in ant_triples
+                _collect_vars!(vars, tt)
+            end
+            for tt in con_triples
                 _collect_vars!(vars, tt)
             end
             push!(rules, N3Rule(ant_triples, con_triples, BACKWARD, nothing, vars))
@@ -141,6 +151,23 @@ function extract_rules(g::RDFGraph)
     end
 
     rules
+end
+
+# Collect triples matching a predicate directly from MemoryStore indices (no Channel)
+function _triples_by_predicate(g::RDFGraph{MemoryStore}, pred::URIRef)
+    result = Triple[]
+    store = g.store
+    haskey(store.pos, pred) || return result
+    for (obj, subjs) in store.pos[pred]
+        for s in subjs
+            push!(result, Triple(s, pred, obj))
+        end
+    end
+    result
+end
+
+function _triples_by_predicate(g::RDFGraph, pred::URIRef)
+    collect(triples(g, (nothing, pred, nothing)))
 end
 
 function _collect_vars!(vars::Set{Variable}, t::Triple)

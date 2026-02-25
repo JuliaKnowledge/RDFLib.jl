@@ -753,12 +753,148 @@ end
 # ─── Fixed-point loop ───────────────────────────────────────────────
 
 function eam_loop!(reasoner::N3Reasoner)
+    # Build antecedent predicate index: pred → Set{rule_index}
+    ant_pred_idx = Dict{URIRef, Set{Int}}()
+    for (i, rule) in enumerate(reasoner.ruleset.forward_rules)
+        for pat in rule.antecedent
+            pat.predicate isa URIRef || continue
+            push!(get!(Set{Int}, ant_pred_idx, pat.predicate), i)
+        end
+    end
+    # Also track rules with variable predicates (must always be checked)
+    var_pred_rules = Set{Int}()
+    for (i, rule) in enumerate(reasoner.ruleset.forward_rules)
+        for pat in rule.antecedent
+            pat.predicate isa Variable && (push!(var_pred_rules, i); break)
+        end
+    end
+
+    # First iteration: all rules
+    all_rules_set = Set{Int}(1:length(reasoner.ruleset.forward_rules))
+    active_rules = all_rules_set
+    
     for _ in 1:reasoner.max_iterations
-        changed = eam_step!(reasoner)
+        new_preds = Set{URIRef}()
+        changed = _eam_step_selective!(reasoner, active_rules, new_preds)
         !changed && break
         reasoner.inference_count >= reasoner.max_inferences && break
+        
+        # Next iteration: only rules triggered by new fact predicates
+        active_rules = copy(var_pred_rules)
+        for p in new_preds
+            for ri in get(ant_pred_idx, p, Set{Int}())
+                push!(active_rules, ri)
+            end
+        end
+        # Also add rules for any dynamically added rules
+        n_current = length(reasoner.ruleset.forward_rules)
+        n_indexed = length(all_rules_set)
+        if n_current > n_indexed
+            for i in (n_indexed+1):n_current
+                push!(active_rules, i)
+                push!(all_rules_set, i)
+                rule = reasoner.ruleset.forward_rules[i]
+                for pat in rule.antecedent
+                    pat.predicate isa URIRef || continue
+                    push!(get!(Set{Int}, ant_pred_idx, pat.predicate), i)
+                end
+            end
+        end
     end
     reasoner
+end
+
+# Selective EAM step: only evaluate rules in `active_rules` set.
+# Records predicates of newly added facts in `new_preds`.
+function _eam_step_selective!(reasoner::N3Reasoner, active_rules::Set{Int},
+                               new_preds::Set{URIRef})
+    new_facts = false
+
+    for ri in active_rules
+        ri > length(reasoner.ruleset.forward_rules) && continue
+        rule = reasoner.ruleset.forward_rules[ri]
+        bindings_list = _match_with_builtins(rule.antecedent, reasoner.facts, Binding();
+                                              reasoner=reasoner)
+
+        consequent_bnodes = Set{BNode}()
+        for cp in rule.consequent
+            cp.subject isa BNode && push!(consequent_bnodes, cp.subject)
+            cp.object isa BNode && push!(consequent_bnodes, cp.object)
+        end
+
+        for bindings in bindings_list
+            bnode_map = Dict{BNode, BNode}()
+
+            grounded_all = Triple[]
+            for con_pattern in rule.consequent
+                grounded = apply_bindings(con_pattern, bindings)
+                grounded = _freshen_bnodes_selective(grounded, bnode_map, consequent_bnodes)
+                push!(grounded_all, grounded)
+            end
+
+            temp_graph = RDFGraph()
+            main_triples = Triple[]
+            for gt in grounded_all
+                if gt.subject isa BNode && (gt.predicate == _RDF_FIRST || gt.predicate == _RDF_REST)
+                    add!(temp_graph, gt)
+                else
+                    push!(main_triples, gt)
+                end
+            end
+
+            for (i, gt) in enumerate(main_triples)
+                if gt.object isa BNode
+                    items = _resolve_rdf_list(gt.object, temp_graph)
+                    if items !== nothing
+                        head = _build_rdf_list(items, reasoner.facts)
+                        main_triples[i] = Triple(gt.subject, gt.predicate, head)
+                    end
+                end
+                if gt.subject isa BNode
+                    items = _resolve_rdf_list(gt.subject, temp_graph)
+                    if items !== nothing
+                        head = _build_rdf_list(items, reasoner.facts)
+                        main_triples[i] = Triple(head, main_triples[i].predicate, main_triples[i].object)
+                    end
+                end
+            end
+
+            for grounded in main_triples
+                if is_ground(grounded) && !_triple_exists_structurally(grounded, reasoner.facts)
+                    path_key = hash((hash(rule), hash(grounded)))
+                    path_key in reasoner.euler_path && continue
+                    push!(reasoner.euler_path, path_key)
+
+                    add!(reasoner.facts, grounded)
+                    push!(reasoner.derived, grounded)
+                    reasoner.inference_count += 1
+                    new_facts = true
+                    grounded.predicate isa URIRef && push!(new_preds, grounded.predicate)
+
+                    if grounded.predicate == _LOG_IMPLIES
+                        if grounded.subject isa Formula && grounded.object isa Formula
+                            new_rule = N3Rule(
+                                collect(grounded.subject.graph),
+                                collect(grounded.object.graph),
+                                FORWARD, nothing,
+                                _collect_all_vars(grounded.subject.graph, grounded.object.graph)
+                            )
+                            push!(reasoner.ruleset.forward_rules, new_rule)
+                            for ct in new_rule.consequent
+                                if ct.predicate isa URIRef
+                                    push!(get!(reasoner.ruleset.predicate_index, ct.predicate, N3Rule[]), new_rule)
+                                end
+                            end
+                        end
+                    end
+
+                    reasoner.inference_count >= reasoner.max_inferences && return new_facts
+                end
+            end
+        end
+    end
+
+    return new_facts
 end
 
 # ─── Backward chaining ─────────────────────────────────────────────
@@ -862,8 +998,15 @@ function reason(data::RDFGraph;
     for (prefix, ns_uri) in namespaces(data)
         bind!(working, prefix, ns_uri)
     end
-    for t in data
-        add!(working, t)
+    # Copy triples directly from store (avoid Channel overhead)
+    if data.store isa MemoryStore
+        for t in data.store.insertion_order
+            add!(working, t)
+        end
+    else
+        for t in data
+            add!(working, t)
+        end
     end
 
     all_rules = N3Rule[]
@@ -876,14 +1019,36 @@ function reason(data::RDFGraph;
     append!(all_rules, extract_rules(data))
 
     # Remove rule (log:implies and log:impliedBy) triples from working graph
-    # Only remove triples where both subject and object are Formulas (actual rules)
+    # Use direct index access (avoids Channel overhead and expensive Formula == comparisons)
     log_implies = _LOG_IMPLIES
     log_impliedBy = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
-    for pred in (log_implies, log_impliedBy)
-        for t in collect(triples(working, (nothing, pred, nothing)))
-            if t.subject isa Formula && t.object isa Formula
-                remove!(working, (t.subject, t.predicate, t.object))
+    rule_triples = Triple[]
+    if working.store isa MemoryStore
+        for pred in (log_implies, log_impliedBy)
+            for t in _triples_by_predicate(working, pred)
+                if t.subject isa Formula && t.object isa Formula
+                    push!(rule_triples, t)
+                end
             end
+        end
+    else
+        for pred in (log_implies, log_impliedBy)
+            for t in collect(triples(working, (nothing, pred, nothing)))
+                if t.subject isa Formula && t.object isa Formula
+                    push!(rule_triples, t)
+                end
+            end
+        end
+    end
+    if !isempty(rule_triples) && working.store isa MemoryStore
+        for t in rule_triples
+            _remove_from_indices!(working.store, t)
+        end
+        id_set = IdDict{Triple,Nothing}(t => nothing for t in rule_triples)
+        filter!(t -> !haskey(id_set, t), working.store.insertion_order)
+    elseif !isempty(rule_triples)
+        for t in rule_triples
+            remove!(working, t)
         end
     end
 

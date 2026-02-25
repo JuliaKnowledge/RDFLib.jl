@@ -20,21 +20,27 @@ add!(f, Triple(URIRef("http://ex.org/s"), URIRef("http://ex.org/p"), URIRef("htt
 mutable struct Formula <: Node
     graph::RDFGraph
     id::String
+    _hash::UInt  # cached hash (0 = not yet computed)
 end
 
-Formula() = Formula(RDFGraph(), "F" * replace(string(uuid4()), "-" => ""))
+Formula() = Formula(RDFGraph(), "F" * replace(string(uuid4()), "-" => ""), UInt(0))
 
 function Base.:(==)(a::Formula, b::Formula)
+    a === b && return true
     isomorphic(a.graph, b.graph)
 end
 
 function Base.hash(a::Formula, h::UInt)
-    # Hash based on sorted triple signatures for consistency
-    ts = sort(collect(a.graph), by=t -> (string(t.subject), string(t.predicate), string(t.object)))
-    for t in ts
-        h = hash(t, h)
+    if a._hash == UInt(0) && length(a.graph) > 0
+        # Compute and cache content hash
+        ts = sort(collect(a.graph), by=t -> (string(t.subject), string(t.predicate), string(t.object)))
+        ch = UInt(0)
+        for t in ts
+            ch = hash(t, ch)
+        end
+        a._hash = hash(:Formula, ch)
     end
-    hash(:Formula, h)
+    h ⊻ (a._hash != UInt(0) ? a._hash : hash(:Formula, h))
 end
 
 Base.show(io::IO, f::Formula) = print(io, "Formula(", length(f.graph), " triples)")
