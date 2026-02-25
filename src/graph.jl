@@ -169,6 +169,7 @@ end
 function Base.in(t::Triple, g::RDFGraph)
     # Fast path: direct SPO index check for MemoryStore
     if g.store isa MemoryStore
+        _ensure_indexed!(g.store)
         sp = get(g.store.spo, t.subject, nothing)
         sp === nothing && return false
         objs = get(sp, t.predicate, nothing)

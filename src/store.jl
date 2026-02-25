@@ -26,6 +26,7 @@ mutable struct MemoryStore <: AbstractStore
     osp::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     count::Int
     insertion_order::Vector{Triple}  # Preserve insertion order for deterministic iteration
+    indexed::Bool  # Whether SPO/POS/OSP indices are built
 end
 
 MemoryStore() = MemoryStore(
@@ -33,11 +34,29 @@ MemoryStore() = MemoryStore(
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     0,
-    Triple[]
+    Triple[],
+    true
 )
+
+# Build indices from insertion_order (for lazy-indexed stores)
+function _ensure_indexed!(store::MemoryStore)
+    store.indexed && return
+    for t in store.insertion_order
+        s, p, o = t.subject, t.predicate, t.object
+        sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
+        push!(get!(Set{Identifier}, sp, p), o)
+        po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
+        push!(get!(Set{Identifier}, po, o), s)
+        os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
+        push!(get!(Set{Identifier}, os, s), p)
+    end
+    store.indexed = true
+end
 
 function add!(store::MemoryStore, t::Triple)
     s, p, o = t.subject, t.predicate, t.object
+
+    _ensure_indexed!(store)
 
     # Check if already present (using get to avoid double-hashing)
     sp = get(store.spo, s, nothing)
@@ -74,6 +93,7 @@ function _add_unchecked!(store::MemoryStore, t::Triple)
 end
 
 function remove!(store::MemoryStore, pattern::TriplePattern)
+    _ensure_indexed!(store)
     to_remove = collect(triples(store, pattern))
     for t in to_remove
         _remove_from_indices!(store, t)
@@ -86,6 +106,7 @@ end
 
 # Remove a single exact triple (by identity) from the store
 function _remove_exact!(store::MemoryStore, t::Triple)
+    _ensure_indexed!(store)
     _remove_from_indices!(store, t)
     filter!(x -> x !== t, store.insertion_order)
     store
@@ -124,6 +145,7 @@ end
 Iterate all triples matching the given pattern. `nothing` in any position is a wildcard.
 """
 function triples(store::MemoryStore, pattern::TriplePattern)
+    _ensure_indexed!(store)
     s, p, o = pattern
     Channel{Triple}() do ch
         _triples_inner(store, s, p, o, ch)

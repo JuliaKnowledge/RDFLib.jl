@@ -590,6 +590,7 @@ function _triple_exists_structurally(t::Triple, graph::RDFGraph)
     # If object is a BNode (might be list head), check structurally
     if t.object isa BNode
         if store isa MemoryStore
+            _ensure_indexed!(store)
             sp = get(store.spo, t.subject, nothing)
             if sp !== nothing
                 objs = get(sp, t.predicate, nothing)
@@ -1625,24 +1626,31 @@ function _reason_fast(data::RDFGraph, all_rules::Vector{N3Rule},
         end
     end
 
-    # Build result graph: decode all triples (skip dedup — IntStore guarantees uniqueness)
+    # Build result graph: decode triples (lazy-indexed — indices built on first query)
     result = RDFGraph()
     rstore = result.store::MemoryStore
+    rstore.indexed = false  # Defer index building until first query
     for (prefix, ns_uri) in namespaces(data)
         bind!(result, prefix, ns_uri)
     end
 
     if pass_only_new
+        n_new = length(istore.triples) - n_data
+        sizehint!(rstore.insertion_order, n_new)
         for i in (n_data+1):length(istore.triples)
             it = istore.triples[i]
-            _add_unchecked!(rstore, Triple(decode_term(enc, it.s), decode_term(enc, it.p),
-                                decode_term(enc, it.o)))
+            push!(rstore.insertion_order, Triple(decode_term(enc, it.s),
+                        decode_term(enc, it.p), decode_term(enc, it.o)))
         end
+        rstore.count = n_new
     else
+        n_total = length(istore.triples)
+        sizehint!(rstore.insertion_order, n_total)
         for it in istore.triples
-            _add_unchecked!(rstore, Triple(decode_term(enc, it.s), decode_term(enc, it.p),
-                                decode_term(enc, it.o)))
+            push!(rstore.insertion_order, Triple(decode_term(enc, it.s),
+                        decode_term(enc, it.p), decode_term(enc, it.o)))
         end
+        rstore.count = n_total
     end
     result
 end
