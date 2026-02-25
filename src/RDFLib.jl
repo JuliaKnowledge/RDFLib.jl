@@ -108,6 +108,9 @@ include("n3_proof.jl")
 # N3 reasoner (Euler Abstract Machine)
 include("n3_reasoner.jl")
 
+# Datalog reasoner (semi-naive evaluation)
+include("datalog.jl")
+
 # Additional formats
 include("trix.jl")
 include("hextuples.jl")
@@ -283,6 +286,9 @@ export
 
     # N3 reasoner
     N3Reasoner, eam_step!, eam_loop!, reason,
+
+    # Datalog reasoner
+    datalog_reason, DatalogProgram, DatalogRule, semi_naive!,
 
     # Additional formats
     serialize_trix, parse_trix, parse_trix!,

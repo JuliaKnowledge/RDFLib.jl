@@ -92,4 +92,5 @@ using RDFLib
     include("test_textindex.jl")
     include("test_iri_langtag.jl")
     include("test_owl2_rl.jl")
+    include("test_datalog.jl")
 end
