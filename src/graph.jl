@@ -155,6 +155,14 @@ function Base.iterate(g::RDFGraph, ch)
 end
 
 function Base.in(t::Triple, g::RDFGraph)
+    # Fast path: direct SPO index check for MemoryStore
+    if g.store isa MemoryStore
+        sp = get(g.store.spo, t.subject, nothing)
+        sp === nothing && return false
+        objs = get(sp, t.predicate, nothing)
+        objs === nothing && return false
+        return t.object in objs
+    end
     for _ in triples(g, (t.subject, t.predicate, t.object))
         return true
     end

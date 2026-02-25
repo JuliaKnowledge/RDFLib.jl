@@ -195,7 +195,7 @@ function _match_recursive!(results::Vector{Binding}, patterns::Vector{Triple},
     query_s = s_is_list ? nothing : s
     query_o = o_is_list ? nothing : o
 
-    for fact in triples(graph, (query_s, p, query_o))
+    for fact in _match_triples(graph, query_s, p, query_o)
         new_bindings = unify_triple(patterns[idx], fact, bindings)
         if new_bindings === nothing && list_graph !== nothing
             new_bindings = _unify_triple_structural(patterns[idx], fact, bindings, list_graph, graph)
@@ -204,6 +204,65 @@ function _match_recursive!(results::Vector{Binding}, patterns::Vector{Triple},
             _match_recursive!(results, patterns, idx + 1, graph, new_bindings, list_graph)
         end
     end
+end
+
+# Direct index access for pattern matching — avoids Channel overhead
+function _match_triples(graph::RDFGraph, s, p, o)
+    store = graph.store
+    store isa MemoryStore || return triples(graph, (s, p, o))
+    result = Triple[]
+    s_bound = s isa Identifier
+    p_bound = p isa Identifier
+    o_bound = o isa Identifier
+    if s_bound && p_bound && o_bound
+        sp = get(store.spo, s, nothing)
+        if sp !== nothing
+            objs = get(sp, p, nothing)
+            objs !== nothing && o in objs && push!(result, Triple(s, p, o))
+        end
+    elseif s_bound && p_bound
+        sp = get(store.spo, s, nothing)
+        if sp !== nothing
+            objs = get(sp, p, nothing)
+            objs !== nothing && for ov in objs; push!(result, Triple(s, p, ov)); end
+        end
+    elseif s_bound && o_bound
+        os = get(store.osp, o, nothing)
+        if os !== nothing
+            preds = get(os, s, nothing)
+            preds !== nothing && for pv in preds; push!(result, Triple(s, pv, o)); end
+        end
+    elseif p_bound && o_bound
+        po = get(store.pos, p, nothing)
+        if po !== nothing
+            subjs = get(po, o, nothing)
+            subjs !== nothing && for sv in subjs; push!(result, Triple(sv, p, o)); end
+        end
+    elseif s_bound
+        sp = get(store.spo, s, nothing)
+        if sp !== nothing
+            for (pv, objs) in sp
+                for ov in objs; push!(result, Triple(s, pv, ov)); end
+            end
+        end
+    elseif p_bound
+        po = get(store.pos, p, nothing)
+        if po !== nothing
+            for (ov, subjs) in po
+                for sv in subjs; push!(result, Triple(sv, p, ov)); end
+            end
+        end
+    elseif o_bound
+        os = get(store.osp, o, nothing)
+        if os !== nothing
+            for (sv, preds) in os
+                for pv in preds; push!(result, Triple(sv, pv, o)); end
+            end
+        end
+    else
+        return store.insertion_order
+    end
+    result
 end
 
 """Structural unification: when normal unify fails, try structural list comparison for BNodes."""

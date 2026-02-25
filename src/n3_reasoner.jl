@@ -1,6 +1,10 @@
 # ─── N3 Reasoner (Euler Abstract Machine) ────────────────────────────
 # Forward/backward chaining N3 reasoner with cycle detection (Euler paths).
 
+const _RDF_FIRST = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+const _RDF_REST  = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+const _LOG_IMPLIES = URIRef("http://www.w3.org/2000/10/swap/log#implies")
+
 """
     N3Reasoner
 
@@ -40,13 +44,10 @@ function _match_with_builtins(patterns::Vector{Triple}, graph::RDFGraph, binding
     builtin = Triple[]
     list_structure = Triple[]  # rdf:first/rdf:rest triples from collections in rule patterns
 
-    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
-
     for p in patterns
         if p.predicate isa URIRef && is_builtin(p.predicate)
             push!(builtin, p)
-        elseif p.predicate == rdf_first || p.predicate == rdf_rest
+        elseif p.predicate == _RDF_FIRST || p.predicate == _RDF_REST
             # Check if subject is a BNode (collection structure) — keep for list resolution
             if p.subject isa BNode
                 push!(list_structure, p)
@@ -227,8 +228,6 @@ end
 
 # ─── List destructuring ────────────────────────────────────────────
 
-const _RDF_FIRST_URI = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-const _RDF_REST_URI = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
 const _RDF_NIL_URI = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
 
 """
@@ -246,7 +245,7 @@ function _resolve_list_bindings(bindings_list::Vector{Binding},
     rest_targets = Set{Identifier}()
     for t in list_structure
         t.subject isa BNode && push!(all_subjects, t.subject)
-        t.predicate == _RDF_REST_URI && push!(rest_targets, t.object)
+        t.predicate == _RDF_REST && push!(rest_targets, t.object)
     end
     list_heads = setdiff(all_subjects, rest_targets)
 
@@ -278,9 +277,9 @@ function _extract_list_pattern(head::BNode, list_structure::Vector{Triple})
         rest_val = nothing
         for t in list_structure
             t.subject == current || continue
-            if t.predicate == _RDF_FIRST_URI
+            if t.predicate == _RDF_FIRST
                 first_val = t.object
-            elseif t.predicate == _RDF_REST_URI
+            elseif t.predicate == _RDF_REST
                 rest_val = t.object
             end
         end
@@ -572,32 +571,56 @@ end
 function _triple_exists_structurally(t::Triple, graph::RDFGraph)
     t in graph && return true
 
-    rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-    rdf_rest = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
-
     # Skip structural dedup for list structure triples (rdf:first/rdf:rest with BNode subject)
-    # These must always be added so BNode list heads can be resolved later
-    if t.subject isa BNode && (t.predicate == rdf_first || t.predicate == rdf_rest)
+    if t.subject isa BNode && (t.predicate == _RDF_FIRST || t.predicate == _RDF_REST)
         return false
     end
 
+    store = graph.store
+
     # If object is a BNode (might be list head), check structurally
     if t.object isa BNode
-        for existing in triples(graph, (t.subject, t.predicate, nothing))
-            if existing.object isa BNode && _terms_equal(t.object, existing.object, graph)
-                return true
+        if store isa MemoryStore
+            sp = get(store.spo, t.subject, nothing)
+            if sp !== nothing
+                objs = get(sp, t.predicate, nothing)
+                if objs !== nothing
+                    for o in objs
+                        o isa BNode && _terms_equal(t.object, o, graph) && return true
+                    end
+                end
+            end
+        else
+            for existing in triples(graph, (t.subject, t.predicate, nothing))
+                existing.object isa BNode && _terms_equal(t.object, existing.object, graph) && return true
             end
         end
     end
-    # If subject is a BNode (existential in consequent), check if a triple with
-    # same predicate and object already exists with any BNode subject
+
+    # If subject is a BNode, check if a triple with same predicate+object exists with any BNode subject
     if t.subject isa BNode
-        for existing in triples(graph, (nothing, t.predicate, nothing))
-            if existing.subject isa BNode
-                if t.object isa BNode && existing.object isa BNode
-                    _terms_equal(t.object, existing.object, graph) && return true
-                elseif _terms_match(t.object, existing.object)
-                    return true
+        if store isa MemoryStore
+            po = get(store.pos, t.predicate, nothing)
+            if po !== nothing
+                for (o, subjs) in po
+                    for s in subjs
+                        s isa BNode || continue
+                        if t.object isa BNode && o isa BNode
+                            _terms_equal(t.object, o, graph) && return true
+                        elseif _terms_match(t.object, o)
+                            return true
+                        end
+                    end
+                end
+            end
+        else
+            for existing in triples(graph, (nothing, t.predicate, nothing))
+                if existing.subject isa BNode
+                    if t.object isa BNode && existing.object isa BNode
+                        _terms_equal(t.object, existing.object, graph) && return true
+                    elseif _terms_match(t.object, existing.object)
+                        return true
+                    end
                 end
             end
         end
@@ -608,8 +631,6 @@ end
 function eam_step!(reasoner::N3Reasoner)::Bool
     new_facts = false
 
-    _rdf_first = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-    _rdf_rest  = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
 
     for rule in reasoner.ruleset.forward_rules
         bindings_list = _match_with_builtins(rule.antecedent, reasoner.facts, Binding();
@@ -637,7 +658,7 @@ function eam_step!(reasoner::N3Reasoner)::Bool
             temp_graph = RDFGraph()
             main_triples = Triple[]
             for gt in grounded_all
-                if gt.subject isa BNode && (gt.predicate == _rdf_first || gt.predicate == _rdf_rest)
+                if gt.subject isa BNode && (gt.predicate == _RDF_FIRST || gt.predicate == _RDF_REST)
                     add!(temp_graph, gt)
                 else
                     push!(main_triples, gt)
@@ -675,7 +696,7 @@ function eam_step!(reasoner::N3Reasoner)::Bool
                     reasoner.inference_count += 1
                     new_facts = true
 
-                    if grounded.predicate == URIRef("http://www.w3.org/2000/10/swap/log#implies")
+                    if grounded.predicate == _LOG_IMPLIES
                         if grounded.subject isa Formula && grounded.object isa Formula
                             new_rule = N3Rule(
                                 collect(grounded.subject.graph),
@@ -856,7 +877,7 @@ function reason(data::RDFGraph;
 
     # Remove rule (log:implies and log:impliedBy) triples from working graph
     # Only remove triples where both subject and object are Formulas (actual rules)
-    log_implies = URIRef("http://www.w3.org/2000/10/swap/log#implies")
+    log_implies = _LOG_IMPLIES
     log_impliedBy = URIRef("http://www.w3.org/2000/10/swap/log#impliedBy")
     for pred in (log_implies, log_impliedBy)
         for t in collect(triples(working, (nothing, pred, nothing)))
