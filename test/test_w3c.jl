@@ -139,20 +139,20 @@ const EX = Namespace("http://example.org/")
     @testset "datatyped literal (xsd:integer)" begin
         g = parse_rdf("<http://example.org/s> <http://example.org/p> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n", NTriplesFormat())
         obj = first(objects(g, URIRef("http://example.org/s"), URIRef("http://example.org/p")))
-        @test toPython(obj) == 42
+        @test convert(Any, obj) == 42
         @test datatype(obj) == URIRef("http://www.w3.org/2001/XMLSchema#integer")
     end
 
     @testset "datatyped literal (xsd:boolean)" begin
         g = parse_rdf("<http://example.org/s> <http://example.org/p> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n", NTriplesFormat())
         obj = first(objects(g, URIRef("http://example.org/s"), URIRef("http://example.org/p")))
-        @test toPython(obj) == true
+        @test convert(Any, obj) == true
     end
 
     @testset "datatyped literal (xsd:double)" begin
         g = parse_rdf("<http://example.org/s> <http://example.org/p> \"3.14\"^^<http://www.w3.org/2001/XMLSchema#double> .\n", NTriplesFormat())
         obj = first(objects(g, URIRef("http://example.org/s"), URIRef("http://example.org/p")))
-        @test toPython(obj) ≈ 3.14
+        @test convert(Any, obj) ≈ 3.14
     end
 
     # ── Round-trip ──────────────────────────────────────────────────
@@ -345,7 +345,7 @@ end
         ttl = "@prefix ex: <http://example.org/> .\nex:s ex:val 42 .\n"
         g = parse_rdf(ttl, TurtleFormat())
         obj = first(objects(g, EX("s"), EX("val")))
-        @test toPython(obj) == 42
+        @test convert(Any, obj) == 42
         @test datatype(obj) == URIRef("http://www.w3.org/2001/XMLSchema#integer")
     end
 
@@ -353,14 +353,14 @@ end
         ttl = "@prefix ex: <http://example.org/> .\nex:s ex:val -7 .\n"
         g = parse_rdf(ttl, TurtleFormat())
         obj = first(objects(g, EX("s"), EX("val")))
-        @test toPython(obj) == -7
+        @test convert(Any, obj) == -7
     end
 
     @testset "decimal literal" begin
         ttl = "@prefix ex: <http://example.org/> .\nex:s ex:val 3.14 .\n"
         g = parse_rdf(ttl, TurtleFormat())
         obj = first(objects(g, EX("s"), EX("val")))
-        @test toPython(obj) ≈ 3.14
+        @test convert(Any, obj) ≈ 3.14
         @test datatype(obj) == URIRef("http://www.w3.org/2001/XMLSchema#decimal")
     end
 
@@ -376,14 +376,14 @@ end
         ttl = "@prefix ex: <http://example.org/> .\nex:s ex:active true .\n"
         g = parse_rdf(ttl, TurtleFormat())
         obj = first(objects(g, EX("s"), EX("active")))
-        @test toPython(obj) == true
+        @test convert(Any, obj) == true
     end
 
     @testset "boolean false" begin
         ttl = "@prefix ex: <http://example.org/> .\nex:s ex:active false .\n"
         g = parse_rdf(ttl, TurtleFormat())
         obj = first(objects(g, EX("s"), EX("active")))
-        @test toPython(obj) == false
+        @test convert(Any, obj) == false
     end
 
     # ── Datatyped literals ──────────────────────────────────────────
@@ -395,7 +395,7 @@ end
         """
         g = parse_rdf(ttl, TurtleFormat())
         obj = first(objects(g, EX("s"), EX("val")))
-        @test toPython(obj) == 42
+        @test convert(Any, obj) == 42
     end
 
     # ── Language-tagged literals ────────────────────────────────────
@@ -563,7 +563,7 @@ end
         </rdf:RDF>"""
         g = parse_rdf(xml, RDFXMLFormat())
         obj = first(objects(g, EX("alice"), EX("age")))
-        @test toPython(obj) == 30
+        @test convert(Any, obj) == 30
         @test datatype(obj) == URIRef("http://www.w3.org/2001/XMLSchema#integer")
     end
 
@@ -736,7 +736,7 @@ end
         ds = parse_nquads(nq)
         g = get_graph(ds, EX("g"))
         obj = first(objects(g, URIRef("http://example.org/s"), URIRef("http://example.org/p")))
-        @test toPython(obj) == 42
+        @test convert(Any, obj) == 42
     end
 end
 
@@ -1223,7 +1223,7 @@ end
             }
         """)
         @test length(results) == 1
-        @test toPython(results[1]["count"]) == 3
+        @test convert(Any, results[1]["count"]) == 3
     end
 
     @testset "SUM" begin
@@ -1235,7 +1235,7 @@ end
             }
         """)
         @test length(results) == 1
-        @test toPython(results[1]["total"]) == 90
+        @test convert(Any, results[1]["total"]) == 90
     end
 
     @testset "AVG" begin
@@ -1247,7 +1247,7 @@ end
             }
         """)
         @test length(results) == 1
-        @test toPython(results[1]["avg"]) ≈ 30.0
+        @test convert(Any, results[1]["avg"]) ≈ 30.0
     end
 
     @testset "MIN" begin
@@ -1259,7 +1259,7 @@ end
             }
         """)
         @test length(results) == 1
-        @test toPython(results[1]["youngest"]) == 25
+        @test convert(Any, results[1]["youngest"]) == 25
     end
 
     @testset "MAX" begin
@@ -1271,7 +1271,7 @@ end
             }
         """)
         @test length(results) == 1
-        @test toPython(results[1]["oldest"]) == 35
+        @test convert(Any, results[1]["oldest"]) == 35
     end
 
     # ── GROUP BY ────────────────────────────────────────────────────
@@ -1286,9 +1286,9 @@ end
         @test length(results) == 2
         for r in results
             if r["type"] == EX("Person")
-                @test toPython(r["count"]) == 3
+                @test convert(Any, r["count"]) == 3
             elseif r["type"] == EX("Organization")
-                @test toPython(r["count"]) == 1
+                @test convert(Any, r["count"]) == 1
             end
         end
     end
@@ -1617,7 +1617,7 @@ end
                 BIND(STRLEN(?name) AS ?len)
             }
         """)
-        lens = Dict(r["s"] => toPython(r["len"]) for r in results if haskey(r, "len"))
+        lens = Dict(r["s"] => convert(Any, r["len"]) for r in results if haskey(r, "len"))
         @test lens[EX("alice")] == 5
         @test lens[EX("bob")] == 3
     end

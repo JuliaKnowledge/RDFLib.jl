@@ -89,7 +89,7 @@ using RDFLib
         g = parse_rdf(xml, RDFXMLFormat())
         objs = collect(objects(g, EX("alice"), EX("age")))
         @test length(objs) == 1
-        @test toPython(objs[1]) == 30
+        @test convert(Any, objs[1]) == 30
     end
 
     @testset "parsing - blank nodes" begin

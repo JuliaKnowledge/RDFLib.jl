@@ -148,7 +148,7 @@ using RDFLib
         g = parse_rdf(ttl, TurtleFormat())
         objs = collect(objects(g, EX("s"), EX("age")))
         @test length(objs) == 1
-        @test toPython(objs[1]) == 42
+        @test convert(Any, objs[1]) == 42
     end
 
     @testset "parsing - language tags" begin
@@ -176,13 +176,13 @@ using RDFLib
         @test length(g) == 4
 
         int_val = first(objects(g, EX("s"), EX("int")))
-        @test toPython(int_val) == 42
+        @test convert(Any, int_val) == 42
 
         dec_val = first(objects(g, EX("s"), EX("decimal")))
-        @test toPython(dec_val) ≈ 3.14
+        @test convert(Any, dec_val) ≈ 3.14
 
         bool_val = first(objects(g, EX("s"), EX("bool")))
-        @test toPython(bool_val) == true
+        @test convert(Any, bool_val) == true
     end
 
     @testset "parsing - long strings" begin

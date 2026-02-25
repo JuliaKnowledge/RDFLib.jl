@@ -10,7 +10,13 @@ const _XSD_NS = "http://www.w3.org/2001/XMLSchema#"
 # ─── Top-level evaluation ─────────────────────────────────────────
 
 function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
-    bindings = _ast_eval_patterns(g, q.patterns)
+    # Push LIMIT into pattern evaluation when safe (no ORDER BY, GROUP BY, DISTINCT, computed exprs)
+    push_limit = 0
+    if !isnothing(q.limit) && isempty(q.order_by) && isempty(q.aggregates) &&
+       isempty(q.group_by) && !q.distinct && !q.reduced && isempty(q.select_exprs)
+        push_limit = q.offset + q.limit
+    end
+    bindings = _ast_eval_patterns(g, q.patterns; limit=push_limit)
 
     # Evaluate SELECT expressions
     for b in bindings
@@ -25,9 +31,15 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         bindings = _ast_eval_group_aggregate(q, bindings, g)
     end
 
-    # ORDER BY
+    # ORDER BY — use partial sort when LIMIT is set (top-K optimization)
     if !isempty(q.order_by)
-        sort!(bindings, lt=(a, b) -> _ast_order_compare(a, b, q.order_by, g))
+        cmp = (a, b) -> _ast_order_compare(a, b, q.order_by, g)
+        k = q.offset + (isnothing(q.limit) ? length(bindings) : q.limit)
+        if k < length(bindings)
+            sort!(bindings, lt=cmp, alg=PartialQuickSort(k))
+        else
+            sort!(bindings, lt=cmp)
+        end
     end
 
     # Project variables
@@ -123,12 +135,301 @@ end
 # ─── Pattern evaluation ───────────────────────────────────────────
 
 function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
-                             bindings::Vector{Dict{String,Identifier}} = Dict{String,Identifier}[Dict{String,Identifier}()])
+                             bindings::Vector{Dict{String,Identifier}} = Dict{String,Identifier}[Dict{String,Identifier}()];
+                             limit::Int = 0)
+    # Star-join optimization for MemoryStore
+    if g.store isa MemoryStore && length(patterns) >= 2
+        return _ast_eval_patterns_star(g, patterns, bindings, limit)
+    end
     for pattern in patterns
         bindings = _ast_eval_pattern(g, pattern, bindings)
         isempty(bindings) && return bindings
     end
     bindings
+end
+
+# Detect end index of a "star group" starting at `start`.
+# A star group is consecutive PatTriple patterns sharing the same subject variable
+# with bound URI predicates (no property paths or variables).
+function _star_group_end(patterns::Vector{SparqlPattern}, start::Int)
+    pat = patterns[start]
+    pat isa PatTriple || return start
+    subj = pat.subject
+    subj isa String || return start
+    pat.predicate isa URIRef || return start
+    last = start
+    for j in (start+1):length(patterns)
+        next = patterns[j]
+        next isa PatTriple || break
+        next.subject isa String || break
+        next.subject == subj || break
+        next.predicate isa URIRef || break
+        last = j
+    end
+    last
+end
+
+# Pattern evaluation with star-join grouping (MemoryStore only)
+function _ast_eval_patterns_star(g::RDFGraph, patterns::Vector{SparqlPattern},
+                                  bindings::Vector{Dict{String,Identifier}}, limit::Int)
+    store = g.store::MemoryStore
+    i = 1
+    n = length(patterns)
+    while i <= n
+        star_end = _star_group_end(patterns, i)
+        if star_end > i
+            # Absorb trailing PatFilter(s) into the star group
+            filters = SparqlExpr[]
+            j = star_end + 1
+            while j <= n && patterns[j] isa PatFilter
+                push!(filters, (patterns[j]::PatFilter).expr)
+                j += 1
+            end
+            star_pats = @view patterns[i:star_end]
+            is_last = (j > n)
+            eff_limit = is_last ? limit : 0
+            if isempty(filters)
+                bindings = _ast_eval_star_memory(store, star_pats, bindings, eff_limit)
+            else
+                bindings = _ast_eval_star_filter_memory(g, store, star_pats, filters,
+                                                        bindings, eff_limit)
+            end
+            i = j
+        else
+            # Single pattern: use normal or limited evaluation
+            is_last = (i == n)
+            if is_last && limit > 0
+                bindings = _ast_eval_pattern_limited(g, patterns[i], bindings, limit)
+            else
+                bindings = _ast_eval_pattern(g, patterns[i], bindings)
+            end
+            i += 1
+        end
+        isempty(bindings) && return bindings
+    end
+    bindings
+end
+
+# Limited pattern evaluation — stop collecting after `limit` results.
+# Used for the last pattern when LIMIT is pushed down.
+function _ast_eval_pattern_limited(g::RDFGraph, pat::PatTriple, bindings, limit::Int)
+    new_bindings = Dict{String,Identifier}[]
+    for b in bindings
+        matches = _ast_eval_bgp(g, pat, b)
+        append!(new_bindings, matches)
+        length(new_bindings) >= limit && break
+    end
+    new_bindings
+end
+
+function _ast_eval_pattern_limited(g::RDFGraph, pat::PatOptional, bindings, limit::Int)
+    new_bindings = Dict{String,Identifier}[]
+    for b in bindings
+        opt_bindings = _ast_eval_patterns(g, pat.patterns, Dict{String,Identifier}[copy(b)])
+        if isempty(opt_bindings)
+            push!(new_bindings, b)
+        else
+            append!(new_bindings, opt_bindings)
+        end
+        length(new_bindings) >= limit && break
+    end
+    new_bindings
+end
+
+function _ast_eval_pattern_limited(g::RDFGraph, pat::SparqlPattern, bindings, limit::Int)
+    result = _ast_eval_pattern(g, pat, bindings)
+    length(result) > limit && resize!(result, limit)
+    result
+end
+
+# Star-join: evaluate multiple patterns sharing the same subject in a single pass.
+# Instead of nested-loop (pattern1 → bindings → pattern2 → bindings → ...),
+# iterates subjects once and checks all predicates per subject.
+function _ast_eval_star_memory(store::MemoryStore, pats, 
+                                bindings::Vector{Dict{String,Identifier}}, limit::Int)
+    subj_var = pats[1].subject::String
+    n = length(pats)
+    pred_uris = URIRef[pats[i].predicate::URIRef for i in 1:n]
+    results = Dict{String,Identifier}[]
+    obj_sets = Vector{Set{Identifier}}(undef, n)
+
+    for b in bindings
+        s_val = get(b, subj_var, nothing)
+        if s_val isa Identifier
+            # Subject already bound — check this one subject
+            _star_check!(results, store.spo, b, s_val, subj_var, pats, pred_uris,
+                         obj_sets, n, limit)
+        else
+            # Subject unbound — iterate all subjects from SPO index
+            for (s, _) in store.spo
+                _star_check!(results, store.spo, b, s, subj_var, pats, pred_uris,
+                             obj_sets, n, limit)
+                limit > 0 && length(results) >= limit && break
+            end
+        end
+        limit > 0 && length(results) >= limit && break
+    end
+    results
+end
+
+# Check one subject against all star-group predicates, emit matching bindings
+@inline function _star_check!(results, spo, b, s, subj_var, pats, pred_uris,
+                               obj_sets, n, limit)
+    sp = get(spo, s, nothing)
+    sp === nothing && return
+    # Collect object sets; bail early if any predicate missing
+    @inbounds for i in 1:n
+        os = get(sp, pred_uris[i], nothing)
+        os === nothing && return
+        obj_sets[i] = os
+    end
+    # Fast path: all predicates have single object values (common case)
+    all_single = true
+    @inbounds for i in 1:n
+        length(obj_sets[i]) != 1 && (all_single = false; break)
+    end
+    if all_single
+        new_b = copy(b)
+        haskey(new_b, subj_var) || (new_b[subj_var] = s)
+        @inbounds for i in 1:n
+            obj = first(obj_sets[i])
+            pat_obj = pats[i].object
+            # For bound terms (URIRef/Literal/BNode), pass as resolved; for variables, use nothing
+            resolved = pat_obj isa String ? nothing : _ast_resolve_term(pat_obj, new_b)
+            _ast_match_term(obj, pat_obj, resolved, new_b) || return
+        end
+        push!(results, new_b)
+    else
+        # Multi-valued predicates: cross-product (rare)
+        new_b = copy(b)
+        haskey(new_b, subj_var) || (new_b[subj_var] = s)
+        _star_cross!(results, new_b, obj_sets, pats, 1, n, limit)
+    end
+end
+
+# Recursive cross-product for multi-valued star predicates.
+# Mutates `b` in-place (add/remove vars) to avoid intermediate copies.
+function _star_cross!(results, b, obj_sets, pats, idx, n, limit)
+    if idx > n
+        push!(results, copy(b))
+        return
+    end
+    pat_obj = pats[idx].object
+    for obj in obj_sets[idx]
+        if pat_obj isa String
+            existing = get(b, pat_obj, nothing)
+            if existing !== nothing
+                existing == obj || continue
+                _star_cross!(results, b, obj_sets, pats, idx + 1, n, limit)
+            else
+                b[pat_obj] = obj
+                _star_cross!(results, b, obj_sets, pats, idx + 1, n, limit)
+                delete!(b, pat_obj)
+            end
+        else
+            # Bound term (URIRef/Literal/BNode) — check equality
+            resolved = pat_obj isa URIRef ? pat_obj : (pat_obj isa Literal ? pat_obj : 
+                       (pat_obj isa BNode ? pat_obj : nothing))
+            (resolved !== nothing && resolved == obj) || continue
+            _star_cross!(results, b, obj_sets, pats, idx + 1, n, limit)
+        end
+        limit > 0 && length(results) >= limit && return
+    end
+end
+
+# Star-join with integrated FILTER evaluation.
+# Applies filter(s) to each candidate binding BEFORE emitting,
+# avoiding materialization of filtered-out results.
+function _ast_eval_star_filter_memory(g::RDFGraph, store::MemoryStore, pats,
+                                      filters::Vector{SparqlExpr},
+                                      bindings::Vector{Dict{String,Identifier}}, limit::Int)
+    subj_var = pats[1].subject::String
+    n = length(pats)
+    pred_uris = URIRef[pats[i].predicate::URIRef for i in 1:n]
+    results = Dict{String,Identifier}[]
+    obj_sets = Vector{Set{Identifier}}(undef, n)
+
+    for b in bindings
+        s_val = get(b, subj_var, nothing)
+        if s_val isa Identifier
+            _star_filter_check!(results, g, store.spo, b, s_val, subj_var, pats,
+                                pred_uris, obj_sets, n, filters, limit)
+        else
+            for (s, _) in store.spo
+                _star_filter_check!(results, g, store.spo, b, s, subj_var, pats,
+                                    pred_uris, obj_sets, n, filters, limit)
+                limit > 0 && length(results) >= limit && break
+            end
+        end
+        limit > 0 && length(results) >= limit && break
+    end
+    results
+end
+
+@inline function _star_filter_check!(results, g, spo, b, s, subj_var, pats, pred_uris,
+                                      obj_sets, n, filters, limit)
+    sp = get(spo, s, nothing)
+    sp === nothing && return
+    @inbounds for i in 1:n
+        os = get(sp, pred_uris[i], nothing)
+        os === nothing && return
+        obj_sets[i] = os
+    end
+    # Fast path: all single-valued
+    all_single = true
+    @inbounds for i in 1:n
+        length(obj_sets[i]) != 1 && (all_single = false; break)
+    end
+    if all_single
+        new_b = copy(b)
+        haskey(new_b, subj_var) || (new_b[subj_var] = s)
+        @inbounds for i in 1:n
+            obj = first(obj_sets[i])
+            pat_obj = pats[i].object
+            resolved = pat_obj isa String ? nothing : _ast_resolve_term(pat_obj, new_b)
+            _ast_match_term(obj, pat_obj, resolved, new_b) || return
+        end
+        # Apply all filters before emitting
+        for f in filters
+            _ast_eval_expr_bool(f, new_b, g) || return
+        end
+        push!(results, new_b)
+    else
+        # Multi-valued with filter: generate candidates, filter each
+        new_b = copy(b)
+        haskey(new_b, subj_var) || (new_b[subj_var] = s)
+        _star_cross_filter!(results, g, new_b, obj_sets, pats, filters, 1, n, limit)
+    end
+end
+
+function _star_cross_filter!(results, g, b, obj_sets, pats, filters, idx, n, limit)
+    if idx > n
+        for f in filters
+            _ast_eval_expr_bool(f, b, g) || return
+        end
+        push!(results, copy(b))
+        return
+    end
+    pat_obj = pats[idx].object
+    for obj in obj_sets[idx]
+        if pat_obj isa String
+            existing = get(b, pat_obj, nothing)
+            if existing !== nothing
+                existing == obj || continue
+                _star_cross_filter!(results, g, b, obj_sets, pats, filters, idx + 1, n, limit)
+            else
+                b[pat_obj] = obj
+                _star_cross_filter!(results, g, b, obj_sets, pats, filters, idx + 1, n, limit)
+                delete!(b, pat_obj)
+            end
+        else
+            resolved = pat_obj isa URIRef ? pat_obj : (pat_obj isa Literal ? pat_obj :
+                       (pat_obj isa BNode ? pat_obj : nothing))
+            (resolved !== nothing && resolved == obj) || continue
+            _star_cross_filter!(results, g, b, obj_sets, pats, filters, idx + 1, n, limit)
+        end
+        limit > 0 && length(results) >= limit && return
+    end
 end
 
 function _ast_eval_pattern(g::RDFGraph, pat::PatTriple, bindings)

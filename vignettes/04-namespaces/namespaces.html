@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Namespaces and Vocabularies</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="namespaces_files/libs/clipboard/clipboard.min.js"></script>
+<script src="namespaces_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="namespaces_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="namespaces_files/libs/quarto-html/popper.min.js"></script>
+<script src="namespaces_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="namespaces_files/libs/quarto-html/anchor.min.js"></script>
+<link href="namespaces_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="namespaces_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="namespaces_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="namespaces_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="namespaces_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Namespaces and Vocabularies</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="overview" class="level2">
+<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<p>Namespaces provide short, readable prefixes for long URI bases. RDFLib.jl comes with many predefined namespaces for common RDF vocabularies and lets you create your own.</p>
+<div id="2" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="predefined-namespaces" class="level2">
+<h2 class="anchored" data-anchor-id="predefined-namespaces">Predefined Namespaces</h2>
+<p>RDFLib.jl includes all major W3C and community vocabularies:</p>
+<div id="4" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Core W3C vocabularies</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"RDF type:          "</span>, RDF.<span class="kw">type</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"RDFS label:        "</span>, <span class="fu">RDFS</span>(<span class="st">"label"</span>))</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"OWL Class:         "</span>, <span class="fu">OWL</span>(<span class="st">"Class"</span>))</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"XSD integer:       "</span>, XSD.integer)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"XSD dateTime:      "</span>, XSD.dateTime)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Community vocabularies</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"FOAF name:         "</span>, <span class="fu">FOAF</span>(<span class="st">"name"</span>))</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"DC title:          "</span>, <span class="fu">DC</span>(<span class="st">"title"</span>))</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"DCTERMS created:   "</span>, <span class="fu">DCTERMS</span>(<span class="st">"created"</span>))</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"SKOS prefLabel:    "</span>, <span class="fu">SKOS</span>(<span class="st">"prefLabel"</span>))</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"PROV wasGeneratedBy: "</span>, <span class="fu">PROV</span>(<span class="st">"wasGeneratedBy"</span>))</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Schema.org name:   "</span>, <span class="fu">SDO</span>(<span class="st">"name"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>RDF type:          URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+RDFS label:        URIRef("http://www.w3.org/2000/01/rdf-schema#label")
+OWL Class:         URIRef("http://www.w3.org/2002/07/owl#Class")
+XSD integer:       URIRef("http://www.w3.org/2001/XMLSchema#integer")
+XSD dateTime:      URIRef("http://www.w3.org/2001/XMLSchema#dateTime")
+FOAF name:         URIRef("http://xmlns.com/foaf/0.1/name")
+DC title:          URIRef("http://purl.org/dc/elements/1.1/title")
+DCTERMS created:   URIRef("http://purl.org/dc/terms/created")
+SKOS prefLabel:    URIRef("http://www.w3.org/2004/02/skos/core#prefLabel")
+PROV wasGeneratedBy: URIRef("http://www.w3.org/ns/prov#wasGeneratedBy")
+Schema.org name:   URIRef("https://schema.org/name")</code></pre>
+</div>
+</div>
+</section>
+<section id="creating-custom-namespaces" class="level2">
+<h2 class="anchored" data-anchor-id="creating-custom-namespaces">Creating Custom Namespaces</h2>
+<div id="6" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple namespace from a URI base</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>bio <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://purl.org/vocab/bio/0.1/"</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">bio</span>(<span class="st">"Birth"</span>))</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">bio</span>(<span class="st">"Event"</span>))</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Use namespaces to build URIs concisely</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>dbr <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/resource/"</span>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>dbo <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/ontology/"</span>)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), RDF.<span class="kw">type</span>, <span class="fu">dbo</span>(<span class="st">"ProgrammingLanguage"</span>)))</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), <span class="fu">dbo</span>(<span class="st">"designer"</span>), <span class="fu">dbr</span>(<span class="st">"Jeff_Bezanson"</span>)))</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), <span class="fu">RDFS</span>(<span class="st">"label"</span>), <span class="fu">Literal</span>(<span class="st">"Julia"</span>; lang<span class="op">=</span><span class="st">"en"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>URIRef("http://purl.org/vocab/bio/0.1/Birth")
+URIRef("http://purl.org/vocab/bio/0.1/Event")</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>RDFGraph (3 triples)</code></pre>
+</div>
+</div>
+</section>
+<section id="binding-prefixes-to-graphs" class="level2">
+<h2 class="anchored" data-anchor-id="binding-prefixes-to-graphs">Binding Prefixes to Graphs</h2>
+<p>Prefix bindings control how URIs are shortened in serialized output:</p>
+<div id="8" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"dbr"</span>, <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/resource/"</span>))</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"dbo"</span>, <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/ontology/"</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>@prefix dbo: &lt;http://dbpedia.org/ontology/&gt; .
+@prefix dbr: &lt;http://dbpedia.org/resource/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+dbr:Julia_Language a dbo:ProgrammingLanguage ;
+    dbo:designer dbr:Jeff_Bezanson ;
+    rdfs:label "Julia"@en .
+</code></pre>
+</div>
+</div>
+</section>
+<section id="namespace-manager" class="level2">
+<h2 class="anchored" data-anchor-id="namespace-manager">Namespace Manager</h2>
+<p>The <code>NamespaceManager</code> provides centralized prefix management:</p>
+<div id="10" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>nsm <span class="op">=</span> <span class="fu">NamespaceManager</span>()</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(nsm, <span class="st">"ex"</span>, <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>))</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(nsm, <span class="st">"foaf"</span>, <span class="fu">Namespace</span>(<span class="st">"http://xmlns.com/foaf/0.1/"</span>))</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(nsm, <span class="st">"schema"</span>, <span class="fu">Namespace</span>(<span class="st">"http://schema.org/"</span>))</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Expand CURIEs (Compact URIs)</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">expand_curie</span>(nsm, <span class="st">"ex:alice"</span>))</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">expand_curie</span>(nsm, <span class="st">"foaf:name"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>URIRef("http://example.org/alice")
+URIRef("http://xmlns.com/foaf/0.1/name")</code></pre>
+</div>
+</div>
+<div id="12" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute qualified names (reverse of expand)</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>qname <span class="op">=</span> <span class="fu">compute_qname</span>(nsm, <span class="fu">URIRef</span>(<span class="st">"http://xmlns.com/foaf/0.1/Person"</span>))</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"QName: "</span>, qname)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>QName: ("foaf", "http://xmlns.com/foaf/0.1/", "Person")</code></pre>
+</div>
+</div>
+</section>
+<section id="programmatic-namespace-creation" class="level2">
+<h2 class="anchored" data-anchor-id="programmatic-namespace-creation">Programmatic Namespace Creation</h2>
+<p>Create new vocabulary namespaces with metadata:</p>
+<div id="14" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># create_namespace generates Julia code for a DefinedNamespace from a graph</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co"># First, build a small ontology graph</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>vocab_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>vocab_ns <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/myvocab#"</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(vocab_g, <span class="fu">Triple</span>(<span class="fu">vocab_ns</span>(<span class="st">"Person"</span>), RDF.<span class="kw">type</span>, <span class="fu">RDFS</span>(<span class="st">"Class"</span>)))</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(vocab_g, <span class="fu">Triple</span>(<span class="fu">vocab_ns</span>(<span class="st">"hasFriend"</span>), RDF.<span class="kw">type</span>, <span class="fu">RDF</span>(<span class="st">"Property"</span>)))</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>code <span class="op">=</span> <span class="fu">create_namespace</span>(vocab_g, <span class="st">"http://example.org/myvocab#"</span>, <span class="st">"MyVocab"</span>)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(code)</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="co"># For direct use, just create a Namespace</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>my_vocab <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/myvocab#"</span>)</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">my_vocab</span>(<span class="st">"Person"</span>))</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">my_vocab</span>(<span class="st">"hasFriend"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># Auto-generated namespace: MyVocab
+# URI: http://example.org/myvocab#
+
+const MyVocab = DefinedNamespace(
+    "http://example.org/myvocab#",
+    Set([
+        "Person",
+        "hasFriend"
+    ])
+)
+
+URIRef("http://example.org/myvocab#Person")
+URIRef("http://example.org/myvocab#hasFriend")</code></pre>
+</div>
+</div>
+</section>
+<section id="using-namespaces-in-practice" class="level2">
+<h2 class="anchored" data-anchor-id="using-namespaces-in-practice">Using Namespaces in Practice</h2>
+<p>A common pattern is to define all your namespaces at the top of your code:</p>
+<div id="16" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define project namespaces</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>schema <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://schema.org/"</span>)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Build a well-prefixed graph</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"ex"</span>, ex)</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"schema"</span>, schema)</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"xsd"</span>, <span class="fu">Namespace</span>(<span class="st">"http://www.w3.org/2001/XMLSchema#"</span>))</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Describe a conference</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>conf <span class="op">=</span> <span class="fu">ex</span>(<span class="st">"juliacon2025"</span>)</span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, RDF.<span class="kw">type</span>, <span class="fu">schema</span>(<span class="st">"Event"</span>)))</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"name"</span>), <span class="fu">Literal</span>(<span class="st">"JuliaCon 2025"</span>)))</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"startDate"</span>), <span class="fu">Literal</span>(<span class="st">"2025-07-21"</span>; datatype<span class="op">=</span>XSD.date)))</span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"endDate"</span>), <span class="fu">Literal</span>(<span class="st">"2025-07-25"</span>; datatype<span class="op">=</span>XSD.date)))</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"location"</span>), <span class="fu">Literal</span>(<span class="st">"Aachen, Germany"</span>)))</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"url"</span>), <span class="fu">URIRef</span>(<span class="st">"https://juliacon.org/2025/"</span>)))</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>@prefix ex: &lt;http://example.org/&gt; .
+@prefix ns1: &lt;https://juliacon.org/2025/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix schema: &lt;http://schema.org/&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ex:juliacon2025 a schema:Event ;
+    schema:endDate "2025-07-25"^^xsd:date ;
+    schema:location "Aachen, Germany" ;
+    schema:name "JuliaCon 2025" ;
+    schema:startDate "2025-07-21"^^xsd:date ;
+    schema:url ns1: .
+</code></pre>
+</div>
+</div>
+</section>
+<section id="common-vocabulary-prefixes" class="level2">
+<h2 class="anchored" data-anchor-id="common-vocabulary-prefixes">Common Vocabulary Prefixes</h2>
+<p>Here is a quick reference of commonly used namespace prefixes:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 36%">
+<col style="width: 22%">
+<col style="width: 40%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Prefix</th>
+<th>URI</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>rdf:</code></td>
+<td><code>http://www.w3.org/1999/02/22-rdf-syntax-ns#</code></td>
+<td>RDF syntax</td>
+</tr>
+<tr class="even">
+<td><code>rdfs:</code></td>
+<td><code>http://www.w3.org/2000/01/rdf-schema#</code></td>
+<td>RDF Schema</td>
+</tr>
+<tr class="odd">
+<td><code>owl:</code></td>
+<td><code>http://www.w3.org/2002/07/owl#</code></td>
+<td>OWL ontology</td>
+</tr>
+<tr class="even">
+<td><code>xsd:</code></td>
+<td><code>http://www.w3.org/2001/XMLSchema#</code></td>
+<td>XML Schema datatypes</td>
+</tr>
+<tr class="odd">
+<td><code>foaf:</code></td>
+<td><code>http://xmlns.com/foaf/0.1/</code></td>
+<td>Friend of a Friend</td>
+</tr>
+<tr class="even">
+<td><code>dc:</code></td>
+<td><code>http://purl.org/dc/elements/1.1/</code></td>
+<td>Dublin Core</td>
+</tr>
+<tr class="odd">
+<td><code>dcterms:</code></td>
+<td><code>http://purl.org/dc/terms/</code></td>
+<td>Dublin Core Terms</td>
+</tr>
+<tr class="even">
+<td><code>skos:</code></td>
+<td><code>http://www.w3.org/2004/02/skos/core#</code></td>
+<td>Knowledge organization</td>
+</tr>
+<tr class="odd">
+<td><code>schema:</code></td>
+<td><code>http://schema.org/</code></td>
+<td>Schema.org</td>
+</tr>
+<tr class="even">
+<td><code>prov:</code></td>
+<td><code>http://www.w3.org/ns/prov#</code></td>
+<td>Provenance</td>
+</tr>
+<tr class="odd">
+<td><code>shacl:</code></td>
+<td><code>http://www.w3.org/ns/shacl#</code></td>
+<td>Shapes Constraint Language</td>
+</tr>
+</tbody>
+</table>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

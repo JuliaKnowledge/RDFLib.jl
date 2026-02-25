@@ -1,0 +1,32 @@
+Jelly Benchmark Results
+==================================================
+n=100: triples=399
+  Jelly serialize: Julia=8.5958e-5s Python=0.002639s speedup=30.701040042811602x
+  Jelly parse:     Julia=0.0006065s Python=0.003804s speedup=6.272052761747733x
+  Jelly size:      Julia=8128 Python=9738
+  NT size:         Julia=39160 Python=39160
+  Interop:         true
+n=500: triples=1999
+  Jelly serialize: Julia=0.000436791s Python=0.013852s speedup=31.713107641869907x
+  Jelly parse:     Julia=0.003000583s Python=0.020123s speedup=6.706363396713239x
+  Jelly size:      Julia=39745 Python=50534
+  NT size:         Julia=198760 Python=198760
+  Interop:         true
+n=1000: triples=3999
+  Jelly serialize: Julia=0.000937625s Python=0.027876s speedup=29.73043594187442x
+  Jelly parse:     Julia=0.006126542s Python=0.040069s speedup=6.540231014493984x
+  Jelly size:      Julia=79263 Python=101465
+  NT size:         Julia=398265 Python=398265
+  Interop:         true
+n=5000: triples=19999
+  Jelly serialize: Julia=0.004692458s Python=0.157664s speedup=33.59944830619688x
+  Jelly parse:     Julia=0.031977958s Python=0.225794s speedup=7.060926154196587x
+  Jelly size:      Julia=403391 Python=587502
+  NT size:         Julia=2018265 Python=2018265
+  Interop:         true
+n=10000: triples=39999
+  Jelly serialize: Julia=0.009587625s Python=0.361225s speedup=37.676171105982974x
+  Jelly parse:     Julia=0.069911291s Python=0.479654s speedup=6.860894615720943x
+  Jelly size:      Julia=808557 Python=1460978
+  NT size:         Julia=4043270 Python=4043270
+  Interop:         true

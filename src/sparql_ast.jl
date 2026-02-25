@@ -96,7 +96,7 @@ abstract type SparqlPattern end
 """Basic graph pattern triple: `subject predicate object`"""
 struct PatTriple <: SparqlPattern
     subject::Any       # ExprVar, ExprURI, ExprLiteral, or a path expression
-    predicate::Any     # ExprURI, ExprVar, or _PathExpr
+    predicate::Any     # ExprURI, ExprVar, or PathExpr
     object::Any
 end
 

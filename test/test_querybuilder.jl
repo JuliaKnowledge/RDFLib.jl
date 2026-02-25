@@ -171,14 +171,14 @@ using RDFLib
 
     @testset "DescribeQuery" begin
         q = DescribeQuery()
-        q = describe(q, "<http://example.org/alice>")
+        q = RDFLib.describe(q, "<http://example.org/alice>")
         s = build(q)
         @test occursin("DESCRIBE <http://example.org/alice>", s)
     end
 
     @testset "DescribeQuery with WHERE" begin
         q = DescribeQuery()
-        q = describe(q, "?s")
+        q = RDFLib.describe(q, "?s")
         q = where(q, "?s", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", "<http://example.org/Person>")
         s = build(q)
         @test occursin("DESCRIBE ?s", s)
@@ -285,7 +285,7 @@ using RDFLib
     @testset "DescribeQuery with prefix" begin
         q = DescribeQuery()
         q = prefix(q, "ex", "http://example.org/")
-        q = describe(q, "ex:alice")
+        q = RDFLib.describe(q, "ex:alice")
         s = build(q)
         @test occursin("PREFIX ex:", s)
         @test occursin("DESCRIBE ex:alice", s)

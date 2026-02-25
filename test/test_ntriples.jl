@@ -58,7 +58,7 @@ using RDFLib
         g = parse_rdf(nt, NTriplesFormat())
         objs = collect(objects(g, URIRef("http://example.org/s"), URIRef("http://example.org/p")))
         @test length(objs) == 1
-        @test toPython(objs[1]) == 42
+        @test convert(Any, objs[1]) == 42
     end
 
     @testset "parse blank node" begin

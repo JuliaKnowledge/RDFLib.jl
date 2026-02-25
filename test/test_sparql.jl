@@ -236,7 +236,7 @@ using RDFLib
             }
         """)
         @test length(results) == 1
-        @test toPython(results[1]["count"]) == 2
+        @test convert(Any, results[1]["count"]) == 2
     end
 
     @testset "GROUP BY with COUNT" begin
@@ -250,9 +250,9 @@ using RDFLib
         @test length(results) == 2
         for r in results
             if r["type"] == EX("Person")
-                @test toPython(r["count"]) == 2
+                @test convert(Any, r["count"]) == 2
             elseif r["type"] == EX("Organization")
-                @test toPython(r["count"]) == 1
+                @test convert(Any, r["count"]) == 1
             end
         end
     end

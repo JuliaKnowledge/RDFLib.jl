@@ -48,19 +48,19 @@ using Dates
     @testset "Literal - typed" begin
         l = Literal("42", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
         @test n3(l) == "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>"
-        @test toPython(l) == 42
+        @test convert(Any, l) == 42
     end
 
     @testset "Literal - auto-typed constructors" begin
-        @test toPython(Literal(42)) == 42
-        @test toPython(Literal(3.14)) == 3.14
-        @test toPython(Literal(true)) == true
-        @test toPython(Literal(false)) == false
+        @test convert(Any, Literal(42)) == 42
+        @test convert(Any, Literal(3.14)) == 3.14
+        @test convert(Any, Literal(true)) == true
+        @test convert(Any, Literal(false)) == false
 
         dt = DateTime(2024, 1, 15, 10, 30, 0)
         l = Literal(dt)
         @test datatype(l) == URIRef("http://www.w3.org/2001/XMLSchema#dateTime")
-        @test toPython(l) == dt
+        @test convert(Any, l) == dt
 
         d = Date(2024, 1, 15)
         l = Literal(d)
