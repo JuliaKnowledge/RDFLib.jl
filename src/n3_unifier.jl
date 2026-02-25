@@ -386,3 +386,295 @@ function _binding_hash(b::Binding)
     end
     h
 end
+
+# ─── Undo-log based matching (zero-copy backtracking) ──────────────
+# Mutates bindings in-place and tracks newly added variables for undo.
+# Only copies at the leaf (when a full match is found).
+
+function _unify_term_undo!(a::Variable, b::Identifier, bindings::Binding,
+                            undo::Vector{Variable})::Bool
+    ra = get(bindings, a, nothing)
+    if ra === nothing
+        bindings[a] = b
+        push!(undo, a)
+        return true
+    end
+    ra === b && return true
+    _terms_match(ra, b)
+end
+
+function _unify_term_undo!(a::Identifier, b::Identifier, bindings::Binding,
+                            undo::Vector{Variable})::Bool
+    _terms_match(a, b)
+end
+
+function _unify_triple_undo!(pattern::Triple, fact::Triple, bindings::Binding,
+                              undo::Vector{Variable})::Bool
+    _unify_term_undo!(pattern.subject, fact.subject, bindings, undo) || return false
+    _unify_term_undo!(pattern.predicate, fact.predicate, bindings, undo) || return false
+    _unify_term_undo!(pattern.object, fact.object, bindings, undo)
+end
+
+"""
+    match_conjunction_undo(patterns, graph, initial_bindings) -> Vector{Binding}
+
+Like match_conjunction but uses mutable bindings with undo-log backtracking.
+Only copies the binding at the leaf (when a complete match is found), avoiding
+O(depth) Dict copies per match attempt.
+"""
+function match_conjunction_undo(patterns::Vector{Triple}, graph::RDFGraph,
+                                 initial_bindings::Binding=Binding())
+    isempty(patterns) && return [initial_bindings]
+    results = Binding[]
+    bindings = copy(initial_bindings)
+    _match_recursive_undo!(results, patterns, 1, graph, bindings)
+    return results
+end
+
+function _match_recursive_undo!(results::Vector{Binding}, patterns::Vector{Triple},
+                                 idx::Int, graph::RDFGraph, bindings::Binding)
+    if idx > length(patterns)
+        push!(results, copy(bindings))
+        return
+    end
+
+    # Build query pattern from current bindings
+    pat = patterns[idx]
+    s_raw = pat.subject isa Variable ? get(bindings, pat.subject, nothing) : pat.subject
+    p_raw = pat.predicate isa Variable ? get(bindings, pat.predicate, nothing) : pat.predicate
+    o_raw = pat.object isa Variable ? get(bindings, pat.object, nothing) : pat.object
+
+    s = s_raw isa Variable ? nothing : s_raw
+    p = p_raw isa Variable ? nothing : p_raw
+    o = o_raw isa Variable ? nothing : o_raw
+
+    # Widen for numeric and Formula terms
+    if s isa Literal && _to_number(s) !== nothing; s = nothing; end
+    if o isa Literal && _to_number(o) !== nothing; o = nothing; end
+    if s isa Formula; s = nothing; end
+    if o isa Formula; o = nothing; end
+
+    undo = Variable[]
+    for fact in _match_triples(graph, s, p, o)
+        empty!(undo)
+        if _unify_triple_undo!(pat, fact, bindings, undo)
+            _match_recursive_undo!(results, patterns, idx + 1, graph, bindings)
+        end
+        # Undo all bindings added in this attempt
+        for v in undo
+            delete!(bindings, v)
+        end
+    end
+end
+
+# ─── Integer-encoded reasoning (RoXi-style) ───────────────────────
+# Encode terms as UInt32 for O(1) comparison. Use fixed-size arrays
+# for bindings instead of Dict. This eliminates all string hashing
+# from the inner loop.
+
+const UNBOUND = UInt32(0)
+const VAR_FLAG = UInt32(0x80000000)  # high bit marks variable slots
+
+struct TermEncoder
+    to_id::Dict{Identifier, UInt32}
+    from_id::Vector{Identifier}
+    var_to_slot::Dict{Variable, UInt32}  # per-rule variable slot assignments
+end
+
+function TermEncoder()
+    TermEncoder(Dict{Identifier, UInt32}(), Identifier[], Dict{Variable, UInt32}())
+end
+
+function encode_term!(enc::TermEncoder, term::Identifier)::UInt32
+    get!(enc.to_id, term) do
+        push!(enc.from_id, term)
+        UInt32(length(enc.from_id))
+    end
+end
+
+decode_term(enc::TermEncoder, id::UInt32)::Identifier = enc.from_id[id]
+
+struct IntTriple
+    s::UInt32
+    p::UInt32
+    o::UInt32
+end
+
+# Integer-based SPO index
+struct IntStore
+    spo::Dict{UInt32, Dict{UInt32, Vector{UInt32}}}  # s→p→[o]
+    pos::Dict{UInt32, Dict{UInt32, Vector{UInt32}}}  # p→o→[s]
+    triples::Vector{IntTriple}
+    triple_set::Set{Tuple{UInt32,UInt32,UInt32}}
+end
+
+IntStore() = IntStore(
+    Dict{UInt32, Dict{UInt32, Vector{UInt32}}}(),
+    Dict{UInt32, Dict{UInt32, Vector{UInt32}}}(),
+    IntTriple[],
+    Set{Tuple{UInt32,UInt32,UInt32}}()
+)
+
+function int_add!(store::IntStore, t::IntTriple)::Bool
+    key = (t.s, t.p, t.o)
+    key in store.triple_set && return false
+    push!(store.triple_set, key)
+    push!(store.triples, t)
+    # SPO
+    sp = get!(Dict{UInt32, Vector{UInt32}}, store.spo, t.s)
+    push!(get!(Vector{UInt32}, sp, t.p), t.o)
+    # POS
+    po = get!(Dict{UInt32, Vector{UInt32}}, store.pos, t.p)
+    push!(get!(Vector{UInt32}, po, t.o), t.s)
+    return true
+end
+
+function int_contains(store::IntStore, s::UInt32, p::UInt32, o::UInt32)::Bool
+    (s, p, o) in store.triple_set
+end
+
+# Query: return matching triples. nothing = wildcard.
+function int_query(store::IntStore, s::UInt32, p::UInt32, o::UInt32)
+    # All three bound
+    if s != UNBOUND && p != UNBOUND && o != UNBOUND
+        return int_contains(store, s, p, o) ? [IntTriple(s, p, o)] : IntTriple[]
+    end
+    result = IntTriple[]
+    if s != UNBOUND && p != UNBOUND
+        sp = get(store.spo, s, nothing)
+        sp === nothing && return result
+        objs = get(sp, p, nothing)
+        objs === nothing && return result
+        for ov in objs; push!(result, IntTriple(s, p, ov)); end
+    elseif p != UNBOUND && o != UNBOUND
+        po = get(store.pos, p, nothing)
+        po === nothing && return result
+        subjs = get(po, o, nothing)
+        subjs === nothing && return result
+        for sv in subjs; push!(result, IntTriple(sv, p, o)); end
+    elseif s != UNBOUND
+        sp = get(store.spo, s, nothing)
+        sp === nothing && return result
+        for (pv, objs) in sp
+            (p != UNBOUND && pv != p) && continue
+            for ov in objs; push!(result, IntTriple(s, pv, ov)); end
+        end
+    elseif p != UNBOUND
+        po = get(store.pos, p, nothing)
+        po === nothing && return result
+        for (ov, subjs) in po
+            (o != UNBOUND && ov != o) && continue
+            for sv in subjs; push!(result, IntTriple(sv, p, ov)); end
+        end
+    else
+        return store.triples
+    end
+    result
+end
+
+# Encoded rule pattern: variable slots marked with VAR_FLAG | slot_index
+struct IntPattern
+    s::UInt32  # term_id or VAR_FLAG|slot
+    p::UInt32
+    o::UInt32
+end
+
+struct IntRule
+    antecedent::Vector{IntPattern}
+    consequent::Vector{IntPattern}
+    n_vars::Int
+end
+
+# Fixed-size binding array: slot_index → term_id (0 = unbound)
+const IntBindings = Vector{UInt32}
+
+@inline is_var(v::UInt32) = (v & VAR_FLAG) != 0
+@inline var_slot(v::UInt32) = Int(v & ~VAR_FLAG)
+
+function int_unify_term!(pat_v::UInt32, fact_v::UInt32,
+                          bindings::IntBindings)::Bool
+    if is_var(pat_v)
+        slot = var_slot(pat_v)
+        cur = bindings[slot]
+        if cur == UNBOUND
+            bindings[slot] = fact_v
+            return true
+        end
+        return cur == fact_v
+    end
+    return pat_v == fact_v
+end
+
+function int_unify_undo!(pat::IntPattern, fact::IntTriple,
+                          bindings::IntBindings, undo::Vector{Int})::Bool
+    # Subject
+    if is_var(pat.s)
+        slot = var_slot(pat.s)
+        cur = bindings[slot]
+        if cur == UNBOUND
+            bindings[slot] = fact.s
+            push!(undo, slot)
+        elseif cur != fact.s
+            return false
+        end
+    elseif pat.s != fact.s
+        return false
+    end
+    # Predicate
+    if is_var(pat.p)
+        slot = var_slot(pat.p)
+        cur = bindings[slot]
+        if cur == UNBOUND
+            bindings[slot] = fact.p
+            push!(undo, slot)
+        elseif cur != fact.p
+            return false
+        end
+    elseif pat.p != fact.p
+        return false
+    end
+    # Object
+    if is_var(pat.o)
+        slot = var_slot(pat.o)
+        cur = bindings[slot]
+        if cur == UNBOUND
+            bindings[slot] = fact.o
+            push!(undo, slot)
+        elseif cur != fact.o
+            return false
+        end
+    elseif pat.o != fact.o
+        return false
+    end
+    return true
+end
+
+# Match conjunction of remaining patterns using integer backtracking
+function int_match_remaining!(results::Vector{IntBindings},
+                               patterns::Vector{IntPattern}, idx::Int,
+                               store::IntStore, bindings::IntBindings,
+                               undo_stack::Vector{Int})
+    if idx > length(patterns)
+        push!(results, copy(bindings))
+        return
+    end
+
+    pat = patterns[idx]
+    # Build query from current bindings
+    qs = is_var(pat.s) ? (let s=var_slot(pat.s); bindings[s] end) : pat.s
+    qp = is_var(pat.p) ? (let s=var_slot(pat.p); bindings[s] end) : pat.p
+    qo = is_var(pat.o) ? (let s=var_slot(pat.o); bindings[s] end) : pat.o
+
+    mark = length(undo_stack)
+    for fact in int_query(store, qs, qp, qo)
+        resize!(undo_stack, mark)
+        if int_unify_undo!(pat, fact, bindings, undo_stack)
+            int_match_remaining!(results, patterns, idx + 1, store, bindings, undo_stack)
+        end
+        # Undo
+        for i in (mark+1):length(undo_stack)
+            bindings[undo_stack[i]] = UNBOUND
+        end
+    end
+    resize!(undo_stack, mark)
+end

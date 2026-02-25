@@ -753,7 +753,203 @@ end
 # ─── Fixed-point loop ───────────────────────────────────────────────
 
 function eam_loop!(reasoner::N3Reasoner)
-    # Build antecedent predicate index: pred → Set{rule_index}
+    # Check if we can use the fast triple-at-a-time path:
+    # requires no builtins, no backward rules, no list structure, no variable predicates
+    use_tat = isempty(reasoner.ruleset.backward_rules)
+    if use_tat
+        for rule in reasoner.ruleset.forward_rules
+            for pat in rule.antecedent
+                if pat.predicate isa URIRef && is_builtin(pat.predicate)
+                    use_tat = false; break
+                end
+                if !(pat.predicate isa URIRef) && !(pat.predicate isa Variable)
+                    use_tat = false; break
+                end
+                # Check for list structure patterns
+                if pat.predicate == _RDF_FIRST || pat.predicate == _RDF_REST
+                    if pat.subject isa BNode
+                        use_tat = false; break
+                    end
+                end
+            end
+            use_tat || break
+        end
+    end
+
+    if use_tat
+        _eam_loop_tat!(reasoner)
+    else
+        _eam_loop_delta!(reasoner)
+    end
+    reasoner
+end
+
+# ─── Triple-at-a-time (TAT) evaluation ─────────────────────────────
+# Inspired by RoXi: process each triple once, find matching rules via
+# predicate index, evaluate remaining body patterns, add inferred facts.
+# Uses integer-encoded terms for O(1) comparison (no string hashing).
+
+function _eam_loop_tat!(reasoner::N3Reasoner)
+    rules = reasoner.ruleset.forward_rules
+    store = reasoner.facts.store::MemoryStore
+
+    # 1. Encode all existing terms as integers
+    enc = TermEncoder()
+    istore = IntStore()
+
+    for t in store.insertion_order
+        s = encode_term!(enc, t.subject)
+        p = encode_term!(enc, t.predicate)
+        o = encode_term!(enc, t.object)
+        int_add!(istore, IntTriple(s, p, o))
+    end
+
+    # 2. Encode rules
+    int_rules = IntRule[]
+    for rule in rules
+        # Assign variable slots for this rule
+        var_slots = Dict{Variable, UInt32}()
+        slot_counter = UInt32(0)
+        function get_slot(v::Variable)
+            get!(var_slots, v) do
+                slot_counter += 1
+                slot_counter
+            end
+        end
+
+        ant = IntPattern[]
+        for pat in rule.antecedent
+            s = pat.subject isa Variable ? (VAR_FLAG | get_slot(pat.subject)) :
+                encode_term!(enc, pat.subject)
+            p = pat.predicate isa Variable ? (VAR_FLAG | get_slot(pat.predicate)) :
+                encode_term!(enc, pat.predicate)
+            o = pat.object isa Variable ? (VAR_FLAG | get_slot(pat.object)) :
+                encode_term!(enc, pat.object)
+            push!(ant, IntPattern(s, p, o))
+        end
+
+        con = IntPattern[]
+        for pat in rule.consequent
+            s = pat.subject isa Variable ? (VAR_FLAG | get_slot(pat.subject)) :
+                encode_term!(enc, pat.subject)
+            p = pat.predicate isa Variable ? (VAR_FLAG | get_slot(pat.predicate)) :
+                encode_term!(enc, pat.predicate)
+            o = pat.object isa Variable ? (VAR_FLAG | get_slot(pat.object)) :
+                encode_term!(enc, pat.object)
+            push!(con, IntPattern(s, p, o))
+        end
+
+        push!(int_rules, IntRule(ant, con, Int(slot_counter)))
+    end
+
+    # 3. Build body pattern index: encoded_pred → [(rule_idx, pattern_idx)]
+    body_idx = Dict{UInt32, Vector{Tuple{Int,Int}}}()
+    var_pred_bodies = Tuple{Int,Int}[]
+    for (ri, ir) in enumerate(int_rules)
+        for (pi, pat) in enumerate(ir.antecedent)
+            if !is_var(pat.p)
+                push!(get!(Vector{Tuple{Int,Int}}, body_idx, pat.p), (ri, pi))
+            else
+                push!(var_pred_bodies, (ri, pi))
+            end
+        end
+    end
+
+    # 4. Pre-compute remaining patterns per (rule, pattern_position)
+    remaining_cache = Dict{Tuple{Int,Int}, Vector{IntPattern}}()
+    for (ri, ir) in enumerate(int_rules)
+        n = length(ir.antecedent)
+        n <= 1 && continue
+        for pi in 1:n
+            remaining_cache[(ri, pi)] = IntPattern[ir.antecedent[j] for j in 1:n if j != pi]
+        end
+    end
+
+    # 5. Process triples one at a time
+    processed = 0
+    undo_stack = Int[]
+    derived_int = IntTriple[]
+
+    while processed < length(istore.triples)
+        processed += 1
+        reasoner.inference_count >= reasoner.max_inferences && break
+
+        t = istore.triples[processed]
+
+        # Find matching rule body patterns
+        candidates = get(body_idx, t.p, Tuple{Int,Int}[])
+        if !isempty(var_pred_bodies)
+            candidates = isempty(candidates) ? var_pred_bodies :
+                vcat(candidates, var_pred_bodies)
+        end
+
+        for (ri, pi) in candidates
+            ri > length(int_rules) && continue
+            ir = int_rules[ri]
+
+            # Allocate bindings for this rule
+            bindings = fill(UNBOUND, ir.n_vars)
+
+            # Unify triple with body pattern[pi]
+            empty!(undo_stack)
+            if !int_unify_undo!(ir.antecedent[pi], t, bindings, undo_stack)
+                continue
+            end
+
+            # Match remaining body patterns
+            n_ant = length(ir.antecedent)
+            if n_ant == 1
+                # Single pattern rule — fire directly
+                _int_fire_consequent!(istore, ir, bindings, enc, reasoner, derived_int)
+            else
+                remaining = get(remaining_cache, (ri, pi), nothing)
+                if remaining === nothing
+                    remaining = IntPattern[ir.antecedent[j] for j in 1:n_ant if j != pi]
+                    remaining_cache[(ri, pi)] = remaining
+                end
+                results = IntBindings[]
+                int_match_remaining!(results, remaining, 1, istore, bindings, undo_stack)
+                for b in results
+                    _int_fire_consequent!(istore, ir, b, enc, reasoner, derived_int)
+                    reasoner.inference_count >= reasoner.max_inferences && break
+                end
+            end
+        end
+    end
+
+    # 6. Decode derived triples back to RDF terms and add to reasoner
+    for it in derived_int
+        t = Triple(decode_term(enc, it.s), decode_term(enc, it.p), decode_term(enc, it.o))
+        if !_triple_exists_structurally(t, reasoner.facts)
+            add!(reasoner.facts, t)
+            push!(reasoner.derived, t)
+        end
+    end
+end
+
+# Fire rule consequent with integer bindings
+function _int_fire_consequent!(istore::IntStore, ir::IntRule, bindings::IntBindings,
+                                enc::TermEncoder, reasoner::N3Reasoner,
+                                derived::Vector{IntTriple})
+    for con in ir.consequent
+        s = is_var(con.s) ? bindings[var_slot(con.s)] : con.s
+        p = is_var(con.p) ? bindings[var_slot(con.p)] : con.p
+        o = is_var(con.o) ? bindings[var_slot(con.o)] : con.o
+
+        # All must be bound
+        (s == UNBOUND || p == UNBOUND || o == UNBOUND) && continue
+
+        gt = IntTriple(s, p, o)
+        if int_add!(istore, gt)
+            push!(derived, gt)
+            reasoner.inference_count += 1
+        end
+    end
+end
+
+# ─── Delta-based evaluation (fallback for builtins/backward chaining) ──
+
+function _eam_loop_delta!(reasoner::N3Reasoner)
     ant_pred_idx = Dict{URIRef, Set{Int}}()
     for (i, rule) in enumerate(reasoner.ruleset.forward_rules)
         for pat in rule.antecedent
@@ -767,7 +963,6 @@ function eam_loop!(reasoner::N3Reasoner)
             pat.predicate isa Variable && (push!(var_pred_rules, i); break)
         end
     end
-    # Track which rules have builtins (cannot use delta matching)
     has_builtins = Set{Int}()
     for (i, rule) in enumerate(reasoner.ruleset.forward_rules)
         for pat in rule.antecedent
@@ -779,26 +974,20 @@ function eam_loop!(reasoner::N3Reasoner)
     end
 
     all_rules_set = Set{Int}(1:length(reasoner.ruleset.forward_rules))
-
-    # First iteration: full match (no delta yet)
     delta_triples = Triple[]
     new_preds = Set{URIRef}()
     changed = _eam_step_delta!(reasoner, all_rules_set, has_builtins,
                                 nothing, new_preds, delta_triples)
-    (!changed || reasoner.inference_count >= reasoner.max_inferences) && return reasoner
+    (!changed || reasoner.inference_count >= reasoner.max_inferences) && return
 
     for _ in 2:reasoner.max_iterations
-        # Build delta index from triples added in last iteration
         delta_index = _build_delta_index(delta_triples)
-
-        # Determine active rules from delta predicates
         active_rules = copy(var_pred_rules)
         for p in new_preds
             for ri in get(ant_pred_idx, p, Set{Int}())
                 push!(active_rules, ri)
             end
         end
-        # Handle dynamically added rules
         n_current = length(reasoner.ruleset.forward_rules)
         n_indexed = length(all_rules_set)
         if n_current > n_indexed
@@ -810,7 +999,6 @@ function eam_loop!(reasoner::N3Reasoner)
                     pat.predicate isa URIRef || continue
                     push!(get!(Set{Int}, ant_pred_idx, pat.predicate), i)
                 end
-                # Check for builtins in new rule
                 for pat in rule.antecedent
                     if pat.predicate isa URIRef && is_builtin(pat.predicate)
                         push!(has_builtins, i)
@@ -827,7 +1015,6 @@ function eam_loop!(reasoner::N3Reasoner)
         !changed && break
         reasoner.inference_count >= reasoner.max_inferences && break
     end
-    reasoner
 end
 
 # EAM step with semi-naive delta matching.

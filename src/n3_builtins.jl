@@ -49,10 +49,11 @@ end
 
 # Follow variable binding chains to find the ground term (or the last Variable).
 function _resolve(term::Identifier, bindings::Dict{Variable, Identifier})
-    seen = Set{Variable}()
-    while term isa Variable && haskey(bindings, term) && !(term in seen)
-        push!(seen, term)
-        term = bindings[term]
+    while term isa Variable
+        v = get(bindings, term, nothing)
+        v === nothing && break
+        v === term && break
+        term = v
     end
     term
 end

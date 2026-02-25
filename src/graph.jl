@@ -142,13 +142,25 @@ Base.length(g::RDFGraph) = length(g.store)
 Base.isempty(g::RDFGraph) = isempty(g.store)
 
 function Base.iterate(g::RDFGraph)
+    # Fast path for MemoryStore: iterate insertion_order directly
+    if g.store isa MemoryStore
+        isempty(g.store.insertion_order) && return nothing
+        return (g.store.insertion_order[1], (g.store, 2))
+    end
     ch = triples(g)
     result = iterate(ch)
     isnothing(result) && return nothing
     (result[1], ch)
 end
 
-function Base.iterate(g::RDFGraph, ch)
+function Base.iterate(g::RDFGraph, state)
+    # Fast path for MemoryStore
+    if state isa Tuple{MemoryStore, Int}
+        store, idx = state
+        idx > length(store.insertion_order) && return nothing
+        return (store.insertion_order[idx], (store, idx + 1))
+    end
+    ch = state
     result = iterate(ch)
     isnothing(result) && return nothing
     (result[1], ch)
