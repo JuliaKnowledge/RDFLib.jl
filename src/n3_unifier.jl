@@ -304,3 +304,85 @@ function _unify_term_structural(a::Identifier, b::Identifier, bindings::Binding,
     end
     return nothing
 end
+
+# ─── Semi-naive delta matching ─────────────────────────────────────
+
+"""Predicate-indexed delta triples for semi-naive evaluation."""
+const DeltaPredIndex = Dict{URIRef, Vector{Triple}}
+
+function _build_delta_index(delta::Vector{Triple})
+    idx = DeltaPredIndex()
+    for t in delta
+        t.predicate isa URIRef || continue
+        push!(get!(Vector{Triple}, idx, t.predicate), t)
+    end
+    idx
+end
+
+"""
+    match_conjunction_delta(patterns, all_graph, delta_index, initial_bindings) -> Vector{Binding}
+
+Semi-naive matching: find bindings where at least one pattern matches
+a delta triple. For each pattern position i, we match pattern[i] against
+delta triples and all other patterns against the full graph.
+"""
+function match_conjunction_delta(patterns::Vector{Triple}, all_graph::RDFGraph,
+                                 delta_index::DeltaPredIndex,
+                                 initial_bindings::Binding=Binding())
+    n = length(patterns)
+    isempty(patterns) && return Binding[]
+
+    results = Binding[]
+    seen = Set{UInt64}()
+
+    for delta_pos in 1:n
+        pat = apply_bindings(patterns[delta_pos], initial_bindings)
+
+        # Determine candidate delta triples for this pattern position
+        if pat.predicate isa URIRef
+            candidates = get(delta_index, pat.predicate, Triple[])
+        elseif pat.predicate isa Variable
+            candidates = Triple[]
+            for ts in values(delta_index)
+                append!(candidates, ts)
+            end
+        else
+            continue
+        end
+        isempty(candidates) && continue
+
+        if n == 1
+            for dt in candidates
+                b = unify_triple(patterns[delta_pos], dt, initial_bindings)
+                b === nothing && continue
+                h = _binding_hash(b)
+                h in seen && continue
+                push!(seen, h)
+                push!(results, b)
+            end
+        else
+            remaining = Triple[patterns[j] for j in 1:n if j != delta_pos]
+            for dt in candidates
+                b = unify_triple(patterns[delta_pos], dt, initial_bindings)
+                b === nothing && continue
+                sub = match_conjunction(remaining, all_graph, b)
+                for sb in sub
+                    h = _binding_hash(sb)
+                    h in seen && continue
+                    push!(seen, h)
+                    push!(results, sb)
+                end
+            end
+        end
+    end
+    results
+end
+
+# XOR-based order-independent binding hash for deduplication
+function _binding_hash(b::Binding)
+    h = UInt(0x9e3779b97f4a7c15)
+    for (k, v) in b
+        h ⊻= hash(k) * UInt(0x517cc1b727220a95) ⊻ hash(v)
+    end
+    h
+end

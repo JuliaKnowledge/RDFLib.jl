@@ -761,32 +761,44 @@ function eam_loop!(reasoner::N3Reasoner)
             push!(get!(Set{Int}, ant_pred_idx, pat.predicate), i)
         end
     end
-    # Also track rules with variable predicates (must always be checked)
     var_pred_rules = Set{Int}()
     for (i, rule) in enumerate(reasoner.ruleset.forward_rules)
         for pat in rule.antecedent
             pat.predicate isa Variable && (push!(var_pred_rules, i); break)
         end
     end
+    # Track which rules have builtins (cannot use delta matching)
+    has_builtins = Set{Int}()
+    for (i, rule) in enumerate(reasoner.ruleset.forward_rules)
+        for pat in rule.antecedent
+            if pat.predicate isa URIRef && is_builtin(pat.predicate)
+                push!(has_builtins, i)
+                break
+            end
+        end
+    end
 
-    # First iteration: all rules
     all_rules_set = Set{Int}(1:length(reasoner.ruleset.forward_rules))
-    active_rules = all_rules_set
-    
-    for _ in 1:reasoner.max_iterations
-        new_preds = Set{URIRef}()
-        changed = _eam_step_selective!(reasoner, active_rules, new_preds)
-        !changed && break
-        reasoner.inference_count >= reasoner.max_inferences && break
-        
-        # Next iteration: only rules triggered by new fact predicates
+
+    # First iteration: full match (no delta yet)
+    delta_triples = Triple[]
+    new_preds = Set{URIRef}()
+    changed = _eam_step_delta!(reasoner, all_rules_set, has_builtins,
+                                nothing, new_preds, delta_triples)
+    (!changed || reasoner.inference_count >= reasoner.max_inferences) && return reasoner
+
+    for _ in 2:reasoner.max_iterations
+        # Build delta index from triples added in last iteration
+        delta_index = _build_delta_index(delta_triples)
+
+        # Determine active rules from delta predicates
         active_rules = copy(var_pred_rules)
         for p in new_preds
             for ri in get(ant_pred_idx, p, Set{Int}())
                 push!(active_rules, ri)
             end
         end
-        # Also add rules for any dynamically added rules
+        # Handle dynamically added rules
         n_current = length(reasoner.ruleset.forward_rules)
         n_indexed = length(all_rules_set)
         if n_current > n_indexed
@@ -798,23 +810,52 @@ function eam_loop!(reasoner::N3Reasoner)
                     pat.predicate isa URIRef || continue
                     push!(get!(Set{Int}, ant_pred_idx, pat.predicate), i)
                 end
+                # Check for builtins in new rule
+                for pat in rule.antecedent
+                    if pat.predicate isa URIRef && is_builtin(pat.predicate)
+                        push!(has_builtins, i)
+                        break
+                    end
+                end
             end
         end
+
+        empty!(new_preds)
+        empty!(delta_triples)
+        changed = _eam_step_delta!(reasoner, active_rules, has_builtins,
+                                    delta_index, new_preds, delta_triples)
+        !changed && break
+        reasoner.inference_count >= reasoner.max_inferences && break
     end
     reasoner
 end
 
-# Selective EAM step: only evaluate rules in `active_rules` set.
-# Records predicates of newly added facts in `new_preds`.
-function _eam_step_selective!(reasoner::N3Reasoner, active_rules::Set{Int},
-                               new_preds::Set{URIRef})
+# EAM step with semi-naive delta matching.
+# When delta_index is nothing, does full matching (first iteration).
+# When delta_index is provided, uses delta matching for rules without builtins.
+function _eam_step_delta!(reasoner::N3Reasoner, active_rules::Set{Int},
+                           has_builtins::Set{Int},
+                           delta_index::Union{DeltaPredIndex, Nothing},
+                           new_preds::Set{URIRef},
+                           new_delta::Vector{Triple})
     new_facts = false
 
     for ri in active_rules
         ri > length(reasoner.ruleset.forward_rules) && continue
         rule = reasoner.ruleset.forward_rules[ri]
-        bindings_list = _match_with_builtins(rule.antecedent, reasoner.facts, Binding();
-                                              reasoner=reasoner)
+
+        # Choose matching strategy
+        bindings_list = if delta_index !== nothing && !(ri in has_builtins) &&
+                          !isempty(rule.antecedent) &&
+                          isempty(reasoner.ruleset.backward_rules)
+            # Semi-naive: match against delta
+            match_conjunction_delta(rule.antecedent, reasoner.facts,
+                                    delta_index, Binding())
+        else
+            # Full match (first iteration or rules with builtins/backward chaining)
+            _match_with_builtins(rule.antecedent, reasoner.facts, Binding();
+                                  reasoner=reasoner)
+        end
 
         consequent_bnodes = Set{BNode}()
         for cp in rule.consequent
@@ -867,6 +908,7 @@ function _eam_step_selective!(reasoner::N3Reasoner, active_rules::Set{Int},
 
                     add!(reasoner.facts, grounded)
                     push!(reasoner.derived, grounded)
+                    push!(new_delta, grounded)
                     reasoner.inference_count += 1
                     new_facts = true
                     grounded.predicate isa URIRef && push!(new_preds, grounded.predicate)
