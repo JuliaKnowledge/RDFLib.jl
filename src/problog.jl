@@ -149,12 +149,25 @@ function _parse_statement!(prog::ProbLogProgram, s::AbstractString, wc::Ref{Int}
         return
     end
 
+    # Skip :- unknown(...) directives (we already treat undefined atoms as 0.0)
+    m = match(r"^:-\s*unknown\(", s)
+    if m !== nothing
+        return
+    end
+
     # prob :: head :- body  OR  prob :: head <- body  OR  prob :: fact
+    # Also handles negative head: prob :: \+head :- body
     prob = 1.0
     rest = s
-    m = match(r"^([0-9]+(?:\.[0-9]+)?)\s*::\s*(.+)$", s)
+    m = match(r"^([0-9]+(?:\.[0-9]+)?(?:/[0-9]+(?:\.[0-9]+)?)?)\s*::\s*(.+)$", s)
     if m !== nothing
-        prob = parse(Float64, m.captures[1])
+        pstr = m.captures[1]
+        if occursin('/', pstr)
+            parts = split(pstr, '/')
+            prob = parse(Float64, parts[1]) / parse(Float64, parts[2])
+        else
+            prob = parse(Float64, pstr)
+        end
         rest = strip(m.captures[2])
     end
 
@@ -297,6 +310,13 @@ function _parse_body(s::AbstractString, wc::Ref{Int})::Vector{PrologAtom}
                                                   _process_arg(m.captures[2], wc)], false))
             continue
         end
+        # Handle = equality/unification: X = Y or X = constant
+        m = match(r"^(\w+)\s*=\s*(\w+)$", p)
+        if m !== nothing
+            push!(atoms, PrologAtom("__eq__", [_process_arg(m.captures[1], wc),
+                                                 _process_arg(m.captures[2], wc)], false))
+            continue
+        end
         push!(atoms, _parse_atom(p, wc))
     end
     return atoms
@@ -327,8 +347,9 @@ function _is_builtin_constraint(s::AbstractString)::Bool
     # Skip: true, X > 0, X is Y-1, X =:= Y, etc.
     s == "true" && return true
     occursin(r"\bis\b", s) && return true
-    occursin(r"[><=]", s) && !occursin(r"\\==", s) && return true
-    occursin(r"=:=|=\\=|=\.\.", s) && return true
+    # Skip comparison operators but NOT simple = (unification) or \== (inequality)
+    occursin(r"[><]", s) && return true
+    occursin(r"=:=|=\\=|=<|>=|=\.\.", s) && return true
     return false
 end
 
@@ -341,6 +362,30 @@ Handles negation-as-failure atoms and inequality constraints.
 """
 function ground_program(prog::ProbLogProgram)::Vector{Tuple{Float64, PrologAtom, Vector{PrologAtom}}}
     ground_atoms = Dict{String, Set{PrologAtom}}()
+
+    # Collect ALL constants from the program (Herbrand universe)
+    # This includes constants from clauses, queries, evidence, and constraints
+    _all_program_constants = Set{String}()
+    for clause in prog.clauses
+        for arg in clause.head.args
+            _is_variable(arg) || push!(_all_program_constants, arg)
+        end
+        for atom in clause.body
+            for arg in atom.args
+                _is_variable(arg) || push!(_all_program_constants, arg)
+            end
+        end
+    end
+    for q in prog.queries
+        for arg in q.args
+            _is_variable(arg) || push!(_all_program_constants, arg)
+        end
+    end
+    for (ev, _) in prog.evidence
+        for arg in ev.args
+            _is_variable(arg) || push!(_all_program_constants, arg)
+        end
+    end
 
     # First pass: collect all ground facts
     for clause in prog.clauses
@@ -392,7 +437,7 @@ function ground_program(prog::ProbLogProgram)::Vector{Tuple{Float64, PrologAtom,
 
             isempty(vars) && continue
 
-            substitutions = _find_groundings(clause, ground_atoms)
+            substitutions = _find_groundings(clause, ground_atoms, _all_program_constants)
             for subst in substitutions
                 g_head = _apply_subst(clause.head, subst)
                 g_body_raw = PrologAtom[_apply_subst(a, subst) for a in clause.body]
@@ -415,7 +460,7 @@ function ground_program(prog::ProbLogProgram)::Vector{Tuple{Float64, PrologAtom,
     return ground_clauses
 end
 
-"""Filter ground body: evaluate constraints (__neq__), keep regular atoms."""
+"""Filter ground body: evaluate constraints (__neq__, __eq__), keep regular atoms."""
 function _filter_ground_body(body::Vector{PrologAtom})::Union{Nothing, Vector{PrologAtom}}
     filtered = PrologAtom[]
     for atom in body
@@ -423,6 +468,11 @@ function _filter_ground_body(body::Vector{PrologAtom})::Union{Nothing, Vector{Pr
             # Inequality constraint: both args must be ground and different
             length(atom.args) == 2 || return nothing
             atom.args[1] == atom.args[2] && return nothing  # constraint violated
+            # Constraint satisfied — don't include in body
+        elseif atom.predicate == "__eq__"
+            # Equality constraint: both args must be ground and equal
+            length(atom.args) == 2 || return nothing
+            atom.args[1] != atom.args[2] && return nothing  # constraint violated
             # Constraint satisfied — don't include in body
         else
             push!(filtered, atom)
@@ -445,13 +495,15 @@ function _collect_vars(clause::PrologClause)::Set{String}
 end
 
 function _find_groundings(clause::PrologClause,
-                           ground_facts::Dict{String, Set{PrologAtom}})::Vector{Dict{String,String}}
+                           ground_facts::Dict{String, Set{PrologAtom}},
+                           program_constants::Set{String}=Set{String}())::Vector{Dict{String,String}}
     substitutions = Dict{String,String}[Dict{String,String}()]
 
     # For each non-negated, non-constraint body atom, constrain substitutions
     for atom in clause.body
         atom.negated && continue  # negated atoms don't provide bindings
         atom.predicate == "__neq__" && continue  # constraints checked after grounding
+        atom.predicate == "__eq__" && continue   # equality constraints checked after grounding
         facts = get(ground_facts, atom.predicate, Set{PrologAtom}())
         new_subs = Dict{String,String}[]
         for subst in substitutions
@@ -459,6 +511,37 @@ function _find_groundings(clause::PrologClause,
                 length(fact.args) == length(atom.args) || continue
                 new_subst = _try_match(atom, fact, subst)
                 new_subst !== nothing && push!(new_subs, new_subst)
+            end
+        end
+        substitutions = new_subs
+        isempty(substitutions) && return substitutions
+    end
+
+    # Apply equality constraints: X = Y or X = constant
+    # These provide bindings (unification) and filter
+    for atom in clause.body
+        atom.predicate == "__eq__" || continue
+        a1, a2 = atom.args[1], atom.args[2]
+        new_subs = Dict{String,String}[]
+        for subst in substitutions
+            v1 = _is_variable(a1) ? get(subst, a1, nothing) : a1
+            v2 = _is_variable(a2) ? get(subst, a2, nothing) : a2
+            if v1 === nothing && v2 === nothing
+                # Both unbound — skip (will be resolved later)
+                push!(new_subs, subst)
+            elseif v1 === nothing
+                # Bind a1 to v2
+                new_subst = copy(subst)
+                new_subst[a1] = v2
+                push!(new_subs, new_subst)
+            elseif v2 === nothing
+                # Bind a2 to v1
+                new_subst = copy(subst)
+                new_subst[a2] = v1
+                push!(new_subs, new_subst)
+            else
+                # Both bound — check equality
+                v1 == v2 && push!(new_subs, subst)
             end
         end
         substitutions = new_subs
@@ -478,23 +561,48 @@ function _find_groundings(clause::PrologClause,
         end
     end
 
-    # For facts with variables (head-only), ground against known constants
-    if isempty(clause.body) && any(_is_variable, clause.head.args)
-        all_constants = Set{String}()
-        for (_, facts) in ground_facts
-            for f in facts
-                for a in f.args
-                    push!(all_constants, a)
-                end
+    # Build domain constants from ground facts AND program constants
+    all_constants = copy(program_constants)
+    for (_, facts) in ground_facts
+        for f in facts
+            for a in f.args
+                push!(all_constants, a)
             end
         end
+    end
 
+    # For facts with variables (head-only), ground against known constants
+    if isempty(clause.body) && any(_is_variable, clause.head.args)
         new_subs = Dict{String,String}[]
         head_vars = [arg for arg in clause.head.args if _is_variable(arg)]
         for subst in substitutions
             _enumerate_substs!(new_subs, head_vars, 1, subst, collect(all_constants))
         end
         substitutions = new_subs
+    end
+
+    # For rules with unbound head variables (head var not in body)
+    if !isempty(clause.body)
+        head_vars_unbound = String[]
+        for arg in clause.head.args
+            if _is_variable(arg) && !any(s -> haskey(s, arg), substitutions)
+                if all(s -> !haskey(s, arg), substitutions) && arg ∉ head_vars_unbound
+                    push!(head_vars_unbound, arg)
+                end
+            end
+        end
+        if !isempty(head_vars_unbound) && !isempty(all_constants)
+            new_subs = Dict{String,String}[]
+            for subst in substitutions
+                unbound = [v for v in head_vars_unbound if !haskey(subst, v)]
+                if isempty(unbound)
+                    push!(new_subs, subst)
+                else
+                    _enumerate_substs!(new_subs, unbound, 1, subst, collect(all_constants))
+                end
+            end
+            substitutions = new_subs
+        end
     end
 
     return substitutions
@@ -789,21 +897,22 @@ function problog_infer(prog::ProbLogProgram;
         end
     end
 
-    # Group rules by head
-    rules_by_head = Dict{PrologAtom, Vector{Tuple{Float64, Vector{PrologAtom}}}}()
+    # Group rules by POSITIVE head (strip negation from head)
+    rules_by_head = Dict{PrologAtom, Vector{Tuple{Float64, Vector{PrologAtom}, Bool}}}()
     for (p, head, body) in rule_clauses
-        rules = get!(Vector{Tuple{Float64, Vector{PrologAtom}}}, rules_by_head, head)
-        push!(rules, (p, body))
+        pos_head = _pos(head)
+        rules = get!(Vector{Tuple{Float64, Vector{PrologAtom}, Bool}}, rules_by_head, pos_head)
+        push!(rules, (p, body, head.negated))  # track whether head is negated
     end
 
     # Allocate BDD variables for probabilistic rules up-front (not per-iteration)
     rule_vars = Dict{Int, Int32}()  # rule index → BDD node id
     rule_index = 0
-    rule_indexed = Tuple{Int, Float64, PrologAtom, Vector{PrologAtom}}[]
+    rule_indexed = Tuple{Int, Float64, PrologAtom, Vector{PrologAtom}, Bool}[]
     for (head, rules) in rules_by_head
-        for (rule_prob, body) in rules
+        for (rule_prob, body, neg) in rules
             rule_index += 1
-            push!(rule_indexed, (rule_index, rule_prob, head, body))
+            push!(rule_indexed, (rule_index, rule_prob, head, body, neg))
             if rule_prob < 1.0 && rule_prob > 0.0
                 rule_vars[rule_index] = _new_prob_var!(rule_prob)
             end
@@ -811,10 +920,10 @@ function problog_infer(prog::ProbLogProgram;
     end
 
     # Re-group indexed rules by head
-    indexed_by_head = Dict{PrologAtom, Vector{Tuple{Int, Float64, Vector{PrologAtom}}}}()
-    for (idx, rp, head, body) in rule_indexed
-        rs = get!(Vector{Tuple{Int, Float64, Vector{PrologAtom}}}, indexed_by_head, head)
-        push!(rs, (idx, rp, body))
+    indexed_by_head = Dict{PrologAtom, Vector{Tuple{Int, Float64, Vector{PrologAtom}, Bool}}}()
+    for (idx, rp, head, body, neg) in rule_indexed
+        rs = get!(Vector{Tuple{Int, Float64, Vector{PrologAtom}, Bool}}, indexed_by_head, head)
+        push!(rs, (idx, rp, body, neg))
     end
 
     # Iterative BDD construction (for recursive programs)
@@ -823,18 +932,19 @@ function problog_infer(prog::ProbLogProgram;
         for (head, rules) in indexed_by_head
             head_bdd = get(atom_bdd, head, Int32(1))  # existing BDD or FALSE
 
-            # Start from fact BDD (if any)
-            new_head_bdd = Int32(1)  # FALSE
+            # Start from fact BDD (if any) — positive contribution
+            pos_bdd = Int32(1)  # FALSE
+            neg_bdd = Int32(1)  # FALSE (no inhibition initially)
             if haskey(fact_prob, head)
                 p = fact_prob[head]
                 if p == 1.0
-                    new_head_bdd = Int32(2)
+                    pos_bdd = Int32(2)
                 elseif p > 0.0 && haskey(fact_node, head)
-                    new_head_bdd = fact_node[head]
+                    pos_bdd = fact_node[head]
                 end
             end
 
-            for (rule_idx, rule_prob, body) in rules
+            for (rule_idx, rule_prob, body, is_neg_head) in rules
                 rule_prob == 0.0 && continue
 
                 # Build body BDD: AND of all body atom BDDs
@@ -864,8 +974,18 @@ function problog_infer(prog::ProbLogProgram;
                     body_bdd = bdd_and!(mgr, body_bdd, rule_vars[rule_idx])
                 end
 
-                # OR into head BDD
-                new_head_bdd = bdd_or!(mgr, new_head_bdd, body_bdd)
+                # OR into positive or negative BDD depending on head negation
+                if is_neg_head
+                    neg_bdd = bdd_or!(mgr, neg_bdd, body_bdd)
+                else
+                    pos_bdd = bdd_or!(mgr, pos_bdd, body_bdd)
+                end
+            end
+
+            # Final BDD: positive AND NOT(negative)
+            new_head_bdd = pos_bdd
+            if !bdd_is_false(neg_bdd)
+                new_head_bdd = bdd_and!(mgr, pos_bdd, bdd_not!(mgr, neg_bdd))
             end
 
             if new_head_bdd != head_bdd
@@ -950,16 +1070,57 @@ function problog_query(source::String;
 
     result = Dict{String, Float64}()
     for q in prog.queries
-        key = string(q)
         if q.negated
             # Negated query: P(\+a) = 1 - P(a)
             pos = _pos(q)
-            result[key] = 1.0 - get(probs, pos, 0.0)
+            if any(_is_variable, pos.args)
+                # Expand non-ground negated query
+                for (atom, p) in probs
+                    if atom.predicate == pos.predicate && length(atom.args) == length(pos.args)
+                        if _query_matches(pos, atom)
+                            nq = PrologAtom(atom.predicate, atom.args, true)
+                            result[string(nq)] = 1.0 - p
+                        end
+                    end
+                end
+            else
+                key = string(q)
+                result[key] = 1.0 - get(probs, pos, 0.0)
+            end
+        elseif any(_is_variable, q.args)
+            # Non-ground query: expand to all matching ground atoms
+            for (atom, p) in probs
+                if atom.predicate == q.predicate && length(atom.args) == length(q.args)
+                    if _query_matches(q, atom)
+                        result[string(atom)] = p
+                    end
+                end
+            end
         else
+            key = string(q)
             result[key] = get(probs, q, 0.0)
         end
     end
     return result
+end
+
+"""Check if a possibly non-ground query pattern matches a ground atom."""
+function _query_matches(pattern::PrologAtom, ground::PrologAtom)::Bool
+    pattern.predicate == ground.predicate || return false
+    length(pattern.args) == length(ground.args) || return false
+    bindings = Dict{String,String}()
+    for (p, g) in zip(pattern.args, ground.args)
+        if _is_variable(p)
+            if haskey(bindings, p)
+                bindings[p] == g || return false  # same var must bind to same value
+            else
+                bindings[p] = g
+            end
+        else
+            p == g || return false
+        end
+    end
+    return true
 end
 
 """

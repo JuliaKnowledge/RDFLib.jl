@@ -610,4 +610,139 @@ end
     end
 end
 
+# ─── New Tests: Additional ProbLog Test Suite Coverage ─────────────────────
+
+@testset "00_trivial_undefined_failed.pl" begin
+    # :- unknown(fail) makes undefined atoms return 0 instead of error
+    r = problog_query(":- unknown(fail). query(a).")
+    @test r["a"] ≈ 0.0 atol=1e-10
+end
+
+@testset "00_trivial_undefined2_failed.pl" begin
+    r = problog_query(":- unknown(fail). p :- a. query(p).")
+    @test r["p"] ≈ 0.0 atol=1e-10
+end
+
+@testset "call_return_fail.pl — non-ground query" begin
+    r = problog_query("""
+        0.4::q(1,2).
+        0.3::q(1,1).
+        p(X) :- q(X,X).
+        query(p(X)).
+    """)
+    @test r["p(1)"] ≈ 0.3 atol=1e-10
+end
+
+@testset "query_same.pl — same-variable binding" begin
+    r = problog_query("""
+        a(2,3).
+        a(1,1).
+        p(X) :- a(X,X).
+        query(a(X,X)).
+        query(p(X)).
+    """)
+    @test r["a(1,1)"] ≈ 1.0 atol=1e-10
+    @test r["p(1)"] ≈ 1.0 atol=1e-10
+end
+
+@testset "negative_head_lits.pl — negative head literals" begin
+    r = problog_query("""
+        0.7::b.
+        0.2::c.
+        0.5::a :- b.
+        0.5::\\+a :- c.
+        0.5::d :- b.
+        \\+d :- c.
+        0.5::e :- b.
+        1.0::\\+e :- c.
+        query(a). query(d). query(e).
+    """)
+    @test r["a"] ≈ 0.315 atol=1e-10
+    @test r["d"] ≈ 0.28 atol=1e-10
+    @test r["e"] ≈ 0.28 atol=1e-10
+end
+
+@testset "bug_nonground.pl — equality unification" begin
+    r = problog_query("""
+        0.4::a(1). 0.5::a(2). 0.3::b(1). 0.6::b(2).
+        0.1::c(1,2). 0.3::c(2,1).
+        p(X, Y) :- a(X).
+        p(X, Y) :- b(Y).
+        p(X, Y) :- c(X, Y).
+        q(Y) :- p(X, Y), X = 3.
+        q(X, Y) :- p(X, Y).
+        query(q(1)).
+        query(q(1,2)).
+    """)
+    @test r["q(1)"] ≈ 0.3 atol=1e-10
+    @test r["q(1,2)"] ≈ 0.784 atol=1e-10
+end
+
+@testset "bug_nonground_more.pl — unbound head variables" begin
+    r = problog_query("""
+        0.4::a(1). 0.5::a(2). 0.3::b(1). 0.6::b(2). 0.1::c(1,2).
+        p(X, Y) :- a(X).
+        p(X, Y) :- b(Y).
+        p(X, Y) :- c(X, Y).
+        p1(X) :- p(X, _).
+        p2(X) :- p(_, X).
+        p :- p(_, _).
+        query(p(1,2)). query(p(2,1)). query(p(3,1)).
+        query(p1(1)). query(p1(2)).
+        query(p2(1)). query(p2(2)).
+        query(p).
+    """)
+    @test r["p(1,2)"] ≈ 0.784 atol=1e-6
+    @test r["p(2,1)"] ≈ 0.65 atol=1e-6
+    @test r["p(3,1)"] ≈ 0.3 atol=1e-6
+    @test r["p1(1)"] ≈ 0.8488 atol=1e-6
+    @test r["p1(2)"] ≈ 0.86 atol=1e-6
+    @test r["p2(1)"] ≈ 0.79 atol=1e-6
+    @test r["p2(2)"] ≈ 0.892 atol=1e-6
+    @test r["p"] ≈ 0.9244 atol=1e-6
+end
+
+@testset "non_ground_query.pl — non-ground queries with recursion" begin
+    r = problog_query("""
+        0.1::b(1). 0.2::b(2). 0.3::e(1). 0.4::e(3).
+        d(1). d(2). d(3).
+        a(X) :- b(2), c(X,Y).
+        c(X,Y) :- c(X,Z), c(Z,Y).
+        c(X,Y) :- d(X), d(Y).
+        query(a(X)).
+    """)
+    @test r["a(1)"] ≈ 0.2 atol=1e-10
+    @test r["a(2)"] ≈ 0.2 atol=1e-10
+    @test r["a(3)"] ≈ 0.2 atol=1e-10
+end
+
+@testset "tasks/some_heads.pl" begin
+    r = problog_query("""
+        0.5::heads1.
+        0.6::heads2.
+        someHeads :- heads1.
+        someHeads :- heads2.
+        query(someHeads).
+    """)
+    @test r["someHeads"] ≈ 0.8 atol=1e-10
+end
+
+@testset "tasks/map_probabilistic_graph.pl — evidence conditioning" begin
+    r = problog_query("""
+        0.6::edge(1,2).
+        0.1::edge(1,3).
+        0.4::edge(2,5).
+        0.3::edge(2,6).
+        0.3::edge(3,4).
+        0.8::edge(4,5).
+        0.2::edge(5,6).
+        path(X,Y) :- edge(X,Y).
+        path(X,Y) :- edge(X,Z), Y \\== Z, path(Z,Y).
+        query(edge(1,2)). query(edge(1,3)).
+        evidence(path(1,6),true).
+    """)
+    @test r["edge(1,2)"] ≈ 0.991141 atol=1e-4
+    @test r["edge(1,3)"] ≈ 0.112996 atol=1e-4
+end
+
 end
