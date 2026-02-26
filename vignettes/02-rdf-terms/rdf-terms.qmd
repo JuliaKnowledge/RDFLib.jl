@@ -106,12 +106,11 @@ println("DateTime: ", n3(now_lit))
 ### Extracting Values
 
 ```{julia}
-# julia_value() extracts the native Julia value from a Literal
-# (also available as toPython(), matching Python rdflib's method name)
-println("julia_value(Literal(42))     = ", julia_value(Literal(42)), " :: ", typeof(julia_value(Literal(42))))
-println("julia_value(Literal(3.14))   = ", julia_value(Literal(3.14)), " :: ", typeof(julia_value(Literal(3.14))))
-println("julia_value(Literal(true))   = ", julia_value(Literal(true)), " :: ", typeof(julia_value(Literal(true))))
-println("julia_value(Literal(\"hi\")) = ", julia_value(Literal("hi")), " :: ", typeof(julia_value(Literal("hi"))))
+# convert(Any, lit) extracts the native Julia value from a Literal
+println("convert(Any, Literal(42))     = ", convert(Any, Literal(42)), " :: ", typeof(convert(Any, Literal(42))))
+println("convert(Any, Literal(3.14))   = ", convert(Any, Literal(3.14)), " :: ", typeof(convert(Any, Literal(3.14))))
+println("convert(Any, Literal(true))   = ", convert(Any, Literal(true)), " :: ", typeof(convert(Any, Literal(true))))
+println("convert(Any, Literal(\"hi\")) = ", convert(Any, Literal("hi")), " :: ", typeof(convert(Any, Literal("hi"))))
 ```
 
 ## Blank Nodes (BNode)

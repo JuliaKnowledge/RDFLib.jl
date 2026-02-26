@@ -11,6 +11,14 @@ covers how to create and work with each type.
 using RDFLib
 ```
 
+    Precompiling packages...
+    Info Given RDFLib was explicitly requested, output will be shown live 
+    WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
+    ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+       1142.9 ms  ? RDFLib
+    WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
+    ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+
 ## URIs (URIRef)
 
 A URI (Uniform Resource Identifier) uniquely identifies a resource. In
@@ -127,23 +135,22 @@ println("DateTime: ", n3(now_lit))
 ```
 
     Date: "2026-02-26"^^<http://www.w3.org/2001/XMLSchema#date>
-    DateTime: "2026-02-26T09:11:31"^^<http://www.w3.org/2001/XMLSchema#dateTime>
+    DateTime: "2026-02-26T10:23:15"^^<http://www.w3.org/2001/XMLSchema#dateTime>
 
 ### Extracting Values
 
 ``` julia
-# julia_value() extracts the native Julia value from a Literal
-# (also available as toPython(), matching Python rdflib's method name)
-println("julia_value(Literal(42))     = ", julia_value(Literal(42)), " :: ", typeof(julia_value(Literal(42))))
-println("julia_value(Literal(3.14))   = ", julia_value(Literal(3.14)), " :: ", typeof(julia_value(Literal(3.14))))
-println("julia_value(Literal(true))   = ", julia_value(Literal(true)), " :: ", typeof(julia_value(Literal(true))))
-println("julia_value(Literal(\"hi\")) = ", julia_value(Literal("hi")), " :: ", typeof(julia_value(Literal("hi"))))
+# convert(Any, lit) extracts the native Julia value from a Literal
+println("convert(Any, Literal(42))     = ", convert(Any, Literal(42)), " :: ", typeof(convert(Any, Literal(42))))
+println("convert(Any, Literal(3.14))   = ", convert(Any, Literal(3.14)), " :: ", typeof(convert(Any, Literal(3.14))))
+println("convert(Any, Literal(true))   = ", convert(Any, Literal(true)), " :: ", typeof(convert(Any, Literal(true))))
+println("convert(Any, Literal(\"hi\")) = ", convert(Any, Literal("hi")), " :: ", typeof(convert(Any, Literal("hi"))))
 ```
 
-    julia_value(Literal(42))     = 42 :: Int64
-    julia_value(Literal(3.14))   = 3.14 :: Float64
-    julia_value(Literal(true))   = true :: Bool
-    julia_value(Literal("hi")) = hi :: String
+    convert(Any, Literal(42))     = 42 :: Int64
+    convert(Any, Literal(3.14))   = 3.14 :: Float64
+    convert(Any, Literal(true))   = true :: Bool
+    convert(Any, Literal("hi")) = hi :: String
 
 ## Blank Nodes (BNode)
 
@@ -161,7 +168,7 @@ println("Named BNode: ", b2, " (id=", b2.id, ")")
 println("N3 syntax: ", n3(b2))
 ```
 
-    Auto BNode: BNode("N28fdb8b43d794e5c956e86a15ab27bc4") (id=N28fdb8b43d794e5c956e86a15ab27bc4)
+    Auto BNode: BNode("Nd80b528b57534e49b1b08d6661a186cf") (id=Nd80b528b57534e49b1b08d6661a186cf)
     Named BNode: BNode("address1") (id=address1)
     N3 syntax: _:address1
 

@@ -103,6 +103,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>Every RDF triple is built from three kinds of <em>terms</em>: URIs (resources), Literals (values), and Blank Nodes (anonymous resources). This vignette covers how to create and work with each type.</p>
 <div id="2" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
+<span class="ansi-cyan-fg ansi-bold">Info</span> Given RDFLib was explicitly requested, output will be shown live 
+WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
+ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+   1015.6 ms<span class="ansi-yellow-fg">  ? </span>RDFLib
+WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
+ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
+</pre>
+</div>
+</div>
 </div>
 </section>
 <section id="uris-uriref" class="level2">
@@ -219,24 +231,24 @@ Decimal: Literal("98.6", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decim
 <span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>now_lit <span class="op">=</span> <span class="fu">xsd_literal</span>(<span class="fu">now</span>())</span>
 <span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"DateTime: "</span>, <span class="fu">n3</span>(now_lit))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Date: "2026-02-22"^^&lt;http://www.w3.org/2001/XMLSchema#date&gt;
-DateTime: "2026-02-22T07:46:44"^^&lt;http://www.w3.org/2001/XMLSchema#dateTime&gt;</code></pre>
+<pre><code>Date: "2026-02-26"^^&lt;http://www.w3.org/2001/XMLSchema#date&gt;
+DateTime: "2026-02-26T10:27:55"^^&lt;http://www.w3.org/2001/XMLSchema#dateTime&gt;</code></pre>
 </div>
 </div>
 </section>
 <section id="extracting-values" class="level3">
 <h3 class="anchored" data-anchor-id="extracting-values">Extracting Values</h3>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The toPython() function extracts the Julia value (named after rdflib's method)</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"toPython(Literal(42))     = "</span>, <span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="fl">42</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="fl">42</span>))))</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"toPython(Literal(3.14))   = "</span>, <span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="fl">3.14</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="fl">3.14</span>))))</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"toPython(Literal(true))   = "</span>, <span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="cn">true</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="cn">true</span>))))</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"toPython(Literal(</span><span class="sc">\"</span><span class="st">hi</span><span class="sc">\"</span><span class="st">)) = "</span>, <span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="st">"hi"</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">toPython</span>(<span class="fu">Literal</span>(<span class="st">"hi"</span>))))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># convert(Any, lit) extracts the native Julia value from a Literal</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(42))     = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">42</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">42</span>))))</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(3.14))   = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">3.14</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">3.14</span>))))</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(true))   = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="cn">true</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="cn">true</span>))))</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(</span><span class="sc">\"</span><span class="st">hi</span><span class="sc">\"</span><span class="st">)) = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="st">"hi"</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="st">"hi"</span>))))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>toPython(Literal(42))     = 42 :: Int64
-toPython(Literal(3.14))   = 3.14 :: Float64
-toPython(Literal(true))   = true :: Bool
-toPython(Literal("hi")) = hi :: String</code></pre>
+<pre><code>convert(Any, Literal(42))     = 42 :: Int64
+convert(Any, Literal(3.14))   = 3.14 :: Float64
+convert(Any, Literal(true))   = true :: Bool
+convert(Any, Literal("hi")) = hi :: String</code></pre>
 </div>
 </div>
 </section>
@@ -254,7 +266,7 @@ toPython(Literal("hi")) = hi :: String</code></pre>
 <span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Named BNode: "</span>, b2, <span class="st">" (id="</span>, b2.id, <span class="st">")"</span>)</span>
 <span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3 syntax: "</span>, <span class="fu">n3</span>(b2))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Auto BNode: BNode("N3e81b0cbbace4b07ad0a511eb527e5df") (id=N3e81b0cbbace4b07ad0a511eb527e5df)
+<pre><code>Auto BNode: BNode("N2c458ebe465647a68d1e5195528b502b") (id=N2c458ebe465647a68d1e5195528b502b)
 Named BNode: BNode("address1") (id=address1)
 N3 syntax: _:address1</code></pre>
 </div>

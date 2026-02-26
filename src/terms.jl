@@ -245,18 +245,13 @@ Base.convert(::Type{Date}, lit::Literal) = Date(lit.lexical, dateformat"yyyy-mm-
 Base.convert(::Type{String}, lit::Literal) = lit.lexical
 
 """
-    julia_value(lit::Literal)
+    convert(::Type{Any}, lit::Literal)
 
 Convert a Literal to its natural Julia value based on its XSD datatype.
 Integer→Int, double→Float64, boolean→Bool, dateTime→DateTime, etc.
 Plain string literals return the lexical string.
-
-Equivalent to Python rdflib's `Literal.toPython()`.
 """
-julia_value(lit::Literal) = _literal_to_julia(lit)
-
-"""Alias for `julia_value`, matching Python rdflib's method name."""
-const toPython = julia_value
+Base.convert(::Type{Any}, lit::Literal) = _literal_to_julia(lit)
 
 """
     n3(lit::Literal) -> String
