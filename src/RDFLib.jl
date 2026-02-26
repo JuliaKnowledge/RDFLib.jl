@@ -177,6 +177,9 @@ include("shex.jl")
 # CLI tools
 include("cli.jl")
 
+# Tabular ↔ RDF mapping (maplib-style)
+include("tabular.jl")
+
 # SPARQL/N3 Server (HTTP.jl)
 include("server.jl")
 
@@ -392,6 +395,13 @@ export
     # SPARQL Server
     SparqlServer, DatasetEndpoint,
     add_dataset!, remove_dataset!, get_dataset,
-    serve!, stop!
+    serve!, stop!,
+
+    # Tabular ↔ RDF mapping
+    RDFMapping, RDFTemplate,
+    ColumnType, IRIColumn, LiteralColumn, LangColumn, AutoColumn,
+    rdf_map!, map_default!, rdf_insert!,
+    rdf_query, rdf_update!,
+    table_to_rdf
 
 end # module

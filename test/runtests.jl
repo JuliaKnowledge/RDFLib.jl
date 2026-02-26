@@ -94,4 +94,5 @@ using RDFLib
     include("test_owl2_rl.jl")
     include("test_datalog.jl")
     include("test_problog.jl")
+    include("test_tabular.jl")
 end
