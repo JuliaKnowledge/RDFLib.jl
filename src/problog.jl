@@ -219,11 +219,21 @@ function _parse_atom(s::AbstractString, wc::Ref{Int})::PrologAtom
     if startswith(s, "\\+")
         negated = true
         s = strip(s[3:end])
+    elseif startswith(s, "not ")
+        # Prolog-style negation: `not atom` or `not predicate(...)`
+        negated = true
+        s = strip(s[5:end])
     end
 
     m = match(r"^(\w+)\((.+)\)$", s)
     if m !== nothing
         pred = m.captures[1]
+        # Handle not(atom) — pred="not", args contain the actual atom
+        if pred == "not" && !negated
+            inner = strip(m.captures[2])
+            inner_atom = _parse_atom(inner, wc)
+            return PrologAtom(inner_atom.predicate, inner_atom.args, true)
+        end
         args_str = m.captures[2]
         args = String[_process_arg(strip(a), wc) for a in _split_args(args_str)]
         return PrologAtom(pred, args, negated)
@@ -941,7 +951,13 @@ function problog_query(source::String;
     result = Dict{String, Float64}()
     for q in prog.queries
         key = string(q)
-        result[key] = get(probs, q, 0.0)
+        if q.negated
+            # Negated query: P(\+a) = 1 - P(a)
+            pos = _pos(q)
+            result[key] = 1.0 - get(probs, pos, 0.0)
+        else
+            result[key] = get(probs, q, 0.0)
+        end
     end
     return result
 end
@@ -955,14 +971,19 @@ function problog_query(source::String, queries::Vector{String};
                         max_iterations::Int=1000,
                         tol::Float64=1e-10)::Dict{String, Float64}
     prog = parse_problog(source)
-    # Override queries
-    prog.queries = PrologAtom[_parse_atom(q) for q in queries]
+    wc = Ref(0)
+    prog.queries = PrologAtom[_parse_atom(q, wc) for q in queries]
     probs = problog_infer(prog; max_iterations=max_iterations, tol=tol)
 
     result = Dict{String, Float64}()
     for q in prog.queries
         key = string(q)
-        result[key] = get(probs, q, 0.0)
+        if q.negated
+            pos = _pos(q)
+            result[key] = 1.0 - get(probs, pos, 0.0)
+        else
+            result[key] = get(probs, q, 0.0)
+        end
     end
     return result
 end

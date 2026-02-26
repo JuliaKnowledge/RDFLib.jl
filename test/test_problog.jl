@@ -405,4 +405,209 @@ end
     @test r["a(3)"] ≈ 0.2
 end
 
+# ─── Additional ProbLog Test Suite Cases ──────────────────────────────────
+
+@testset "00_trivial_fact.pl" begin
+    # problog/test/00_trivial_fact.pl
+    r = problog_query("0.3::a. 0.5::b. query(a). query(b).")
+    @test r["a"] ≈ 0.3
+    @test r["b"] ≈ 0.5
+end
+
+@testset "00_trivial_not_and.pl" begin
+    # problog/test/00_trivial_not_and.pl
+    r = problog_query("""
+        0.5::a. 0.3::b.
+        q :- a, b.
+        p :- \\+q.
+        query(p).
+    """)
+    @test r["p"] ≈ 0.85 atol=1e-10
+end
+
+@testset "00_trivial_fail.pl" begin
+    # problog/test/00_trivial_fail.pl — `fail` is undefined, so a=0.0
+    r = problog_query("a :- fail. query(a).")
+    @test r["a"] ≈ 0.0
+end
+
+@testset "00_trivial_duplicate.pl" begin
+    # problog/test/00_trivial_duplicate.pl — duplicate facts are independent
+    r = problog_query("""
+        0.3::p(1). 0.2::p(2). 0.6::p(1).
+        query(p(1)). query(p(2)).
+    """)
+    @test r["p(1)"] ≈ 0.72 atol=1e-10  # 1-(1-0.3)(1-0.6)
+    @test r["p(2)"] ≈ 0.2
+end
+
+@testset "negation.pl (complex negation)" begin
+    # problog/test/negation.pl
+    r = problog_query("""
+        0.2::a. 0.7::b.
+        c :- a, b.
+        c :- a, \\+b.
+        q1 :- b, c.
+        q2 :- \\+b, c.
+        query(q1). query(q2).
+    """)
+    @test r["q1"] ≈ 0.14 atol=1e-10
+    @test r["q2"] ≈ 0.06 atol=1e-10
+end
+
+@testset "negative_query.pl" begin
+    # problog/test/negative_query.pl — query(\\+p)
+    r = problog_query("0.3::p. query(\\+p).")
+    @test r["\\+p"] ≈ 0.7 atol=1e-10
+end
+
+@testset "4_1_bayesian_net.pl (<- syntax)" begin
+    # problog/test/4_1_bayesian_net.pl — same as 4_ but with <- syntax
+    r = problog_query("""
+        0.7::burglary. 0.2::earthquake.
+        0.9::alarm <- burglary, earthquake.
+        0.8::alarm <- burglary, \\+earthquake.
+        0.1::alarm <- \\+burglary, earthquake.
+        evidence(alarm, true).
+        query(burglary). query(earthquake).
+    """)
+    @test r["burglary"] ≈ 0.9896551724137932 atol=1e-10
+    @test r["earthquake"] ≈ 0.2275862068965517 atol=1e-10
+end
+
+@testset "evidence_bug.pl (unrelated evidence)" begin
+    # problog/test/evidence_bug.pl — evidence on q doesn't affect a1/a2
+    r = problog_query("""
+        0.4::a. 0.3::b. 0.5::q.
+        a1 :- b, a. a2 :- b.
+        query(a1). query(a2).
+        evidence(q, true).
+    """)
+    @test r["a1"] ≈ 0.12 atol=1e-10
+    @test r["a2"] ≈ 0.3 atol=1e-10
+end
+
+@testset "evidence_bug_alt.pl (reordered)" begin
+    # problog/test/evidence_bug_alt.pl
+    r = problog_query("""
+        0.4::a. 0.3::b. 0.5::q.
+        a2 :- b, a. a1 :- b.
+        query(a2). query(a1).
+        evidence(q, true).
+    """)
+    @test r["a2"] ≈ 0.12 atol=1e-10
+    @test r["a1"] ≈ 0.3 atol=1e-10
+end
+
+@testset "advars.pl (intensional probabilistic facts)" begin
+    # problog/test/advars.pl
+    r = problog_query("""
+        0.3::e1(X,Y) :- a1(X,Z), b1(Z,Y).
+        0.3::e2(X,Y) :- a2(X,Z), b2(Z,Y).
+        a1(1,2). b1(2,4).
+        a2(1,2). b2(2,4). a2(1,3). b2(3,4).
+        query(e1(1,4)). query(e2(1,4)).
+    """)
+    @test r["e1(1,4)"] ≈ 0.3 atol=1e-10
+    @test r["e2(1,4)"] ≈ 0.51 atol=1e-10
+end
+
+@testset "swap.pl (graph cycles)" begin
+    # problog/test/swap.pl — tests rule ordering doesn't matter
+    r = problog_query("""
+        0.5::f(1,2). 0.5::f(2,1). 0.5::f(1,3). 0.5::f(2,3).
+        0.5::b(X).
+        s1(X) :- b(X).
+        s1(X) :- f(X,Y), s1(Y).
+        s2(X) :- f(X,Y), s2(Y).
+        s2(X) :- b(X).
+        query(s1(1)). query(s2(1)).
+    """)
+    @test r["s1(1)"] ≈ 0.734375 atol=1e-6
+    @test r["s2(1)"] ≈ 0.734375 atol=1e-6
+end
+
+@testset "same_var.pl (same-variable binding)" begin
+    # problog/test/same_var.pl — in(a,b) doesn't match in(X,X) since a≠b
+    r = problog_query("in(a,b). score :- in(X,X). query(score).")
+    @test r["score"] ≈ 0.0
+end
+
+@testset "advars_smokers.pl (full smokers, single evidence)" begin
+    # problog/test/advars_smokers.pl — only evidence(smokes(2),true)
+    r = problog_query("""
+        0.3::stress(X) :- person(X).
+        0.2::influences(X,Y) :- person(X), person(Y).
+        smokes(X) :- stress(X).
+        smokes(X) :- friend(X,Y), influences(Y,X), smokes(Y).
+        0.4::asthma(X) :- smokes(X).
+        person(1). person(2). person(3). person(4).
+        friend(1,2). friend(2,1). friend(2,4). friend(3,2). friend(4,2).
+        evidence(smokes(2), true).
+        query(smokes(1)). query(smokes(2)). query(smokes(3)). query(smokes(4)).
+        query(asthma(1)). query(asthma(2)). query(asthma(3)). query(asthma(4)).
+    """)
+    @test r["smokes(1)"] ≈ 0.49795533 atol=1e-6
+    @test r["smokes(2)"] ≈ 1.0
+    @test r["smokes(3)"] ≈ 0.44 atol=1e-6
+    @test r["smokes(4)"] ≈ 0.49795533 atol=1e-6
+    @test r["asthma(1)"] ≈ 0.19918213 atol=1e-6
+    @test r["asthma(2)"] ≈ 0.4 atol=1e-6
+    @test r["asthma(3)"] ≈ 0.176 atol=1e-6
+    @test r["asthma(4)"] ≈ 0.19918213 atol=1e-6
+end
+
+@testset "advars_smokers_alt.pl (probabilistic influence rule)" begin
+    # problog/test/advars_smokers_alt.pl — 0.2::smokes(X) :- friend(X,Y), smokes(Y)
+    r = problog_query("""
+        0.3::stress(X) :- person(X).
+        smokes(X) :- stress(X).
+        0.2::smokes(X) :- friend(X,Y), smokes(Y).
+        0.4::asthma(X) :- smokes(X).
+        person(1). person(2). person(3). person(4).
+        friend(1,2). friend(2,1). friend(2,4). friend(3,2). friend(4,2).
+        evidence(smokes(2), true).
+        query(smokes(1)). query(smokes(3)). query(smokes(4)).
+        query(asthma(1)). query(asthma(3)). query(asthma(4)).
+    """)
+    @test r["smokes(1)"] ≈ 0.49795533 atol=1e-6
+    @test r["smokes(3)"] ≈ 0.44 atol=1e-6
+    @test r["smokes(4)"] ≈ 0.49795533 atol=1e-6
+    @test r["asthma(1)"] ≈ 0.19918213 atol=1e-6
+    @test r["asthma(3)"] ≈ 0.176 atol=1e-6
+    @test r["asthma(4)"] ≈ 0.19918213 atol=1e-6
+end
+
+@testset "some_cycles.pl (vulnerability propagation)" begin
+    # problog/test/some_cycles.pl
+    r = problog_query("""
+        1.0::isVulnerable(X) <- hasVuln(X,Z), vuln(Z).
+        1.0::isVulnerable(X) <- influencedBy(X,Y), isVulnerable(Y).
+        0.2::influencedBy(zz,q). 0.8::influencedBy(w,zz).
+        0.4::influencedBy(q,zz). 0.9::influencedBy(zz,w).
+        0.7::influencedBy(d,q). 0.3::influencedBy(d,w).
+        1.0::hasVuln(w,vw). 1.0::hasVuln(q,vq).
+        0.5::vuln(vw). 0.7::vuln(vq).
+        query(isVulnerable(d)).
+    """)
+    @test r["isVulnerable(d)"] ≈ 0.598 atol=1e-6
+end
+
+@testset "generated.pl (54-query propositional network)" begin
+    # problog/test/generated.pl — auto-generated BN with 54 queries
+    source = read(joinpath(@__DIR__, "..", "..", "problog", "test", "generated.pl"), String)
+    r = problog_query(source)
+    expected = Dict{String,Float64}()
+    for line in split(source, "\n")
+        m = match(r"^%\s+(\S+)\s+([\d.eE\+\-]+)\s*$", line)
+        if m !== nothing
+            expected[String(m.captures[1])] = parse(Float64, String(m.captures[2]))
+        end
+    end
+    @test length(r) == 54
+    for (k, exp) in expected
+        @test get(r, k, NaN) ≈ exp atol=1e-8
+    end
+end
+
 end
