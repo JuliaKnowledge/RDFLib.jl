@@ -170,3 +170,4 @@ This was a quick taste of RDFLib.jl. Subsequent vignettes cover:
 - **ProbLog** — probabilistic logic programming with exact BDD inference
 - **Property Paths** — navigate graphs with SPARQL path expressions
 - **Graph Utilities** — isomorphism, CBD, VoID, visualization
+- **Ecology Example** — an advanced end-to-end case study modeling a marine food web
