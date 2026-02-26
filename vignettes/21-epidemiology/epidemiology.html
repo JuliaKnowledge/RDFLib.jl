@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Epidemiology Knowledge Graph</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="epidemiology_files/libs/clipboard/clipboard.min.js"></script>
+<script src="epidemiology_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="epidemiology_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="epidemiology_files/libs/quarto-html/popper.min.js"></script>
+<script src="epidemiology_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="epidemiology_files/libs/quarto-html/anchor.min.js"></script>
+<link href="epidemiology_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="epidemiology_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="epidemiology_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="epidemiology_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="epidemiology_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Epidemiology Knowledge Graph</h1>
+<p class="subtitle lead">Modeling Infectious Disease Surveillance and Outbreak Analysis with RDFLib.jl</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>Epidemiology requires integrating heterogeneous data — pathogens, hosts, clinical observations, geographic surveillance, intervention records, and genomic lineage data — into a coherent knowledge model. <strong>Semantic web technologies</strong> are well-suited for this: RDF naturally represents linked entities across domains, SPARQL enables complex cross-cutting queries, and logical reasoning can infer transmission chains and risk factors.</p>
+<p>This vignette builds a <strong>comprehensive infectious disease knowledge graph</strong> covering a fictitious multi-pathogen respiratory outbreak scenario, and demonstrates RDFLib.jl’s full capabilities:</p>
+<ol type="1">
+<li><strong>OWL ontology</strong> — pathogens, hosts, clinical features, interventions</li>
+<li><strong>Tabular mapping</strong> — surveillance case records into RDF</li>
+<li><strong>SHACL validation</strong> — data quality assurance</li>
+<li><strong>SPARQL queries</strong> — epidemiological analytics</li>
+<li><strong>Property paths</strong> — contact tracing chains</li>
+<li><strong>Datalog reasoning</strong> — transmission inference and risk classification</li>
+<li><strong>ProbLog</strong> — probabilistic outbreak modeling</li>
+<li><strong>Visualization</strong> — outbreak network and transmission diagrams</li>
+</ol>
+<p>The scenario models an outbreak involving three pathogens (an influenza variant, a novel coronavirus, and an RSV strain) circulating simultaneously across hospital wards and community settings, reflecting the challenges of real-world syndromic surveillance.</p>
+<div id="2" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper to extract readable strings from SPARQL result values</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">Literal</span>) <span class="op">=</span> x.lexical</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">URIRef</span>) <span class="op">=</span> <span class="fu">split</span>(x.value, <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>readable (generic function with 3 methods)</code></pre>
+</div>
+</div>
+</section>
+<section id="epidemiology-ontology" class="level2">
+<h2 class="anchored" data-anchor-id="epidemiology-ontology">1. Epidemiology Ontology</h2>
+<p>We define an OWL ontology modelling pathogens, patients, clinical presentations, diagnostic tests, locations, interventions, and contact events.</p>
+<div id="4" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>epi  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/epi#"</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>pat  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/patient/"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/pathogen/"</span>)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>loc  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/location/"</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>tst  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/test/"</span>)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>int  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/intervention/"</span>)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"epi"</span>,  epi)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"pat"</span>,  pat)</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"path"</span>, path)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"loc"</span>,  loc)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"tst"</span>,  tst)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"int"</span>,  int)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="co"># OWL classes</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cls <span class="kw">in</span> [<span class="st">"Pathogen"</span>, <span class="st">"Patient"</span>, <span class="st">"ClinicalPresentation"</span>,</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>            <span class="st">"DiagnosticTest"</span>, <span class="st">"Location"</span>, <span class="st">"Intervention"</span>,</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>            <span class="st">"ContactEvent"</span>, <span class="st">"Outbreak"</span>, <span class="st">"CaseReport"</span>,</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Symptom"</span>, <span class="st">"RiskFactor"</span>,</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Pathogen subtypes</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Virus"</span>, <span class="st">"Bacteria"</span>,</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Location subtypes</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Hospital"</span>, <span class="st">"CommunityFacility"</span>, <span class="st">"School"</span>,</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Intervention subtypes</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Vaccination"</span>, <span class="st">"Quarantine"</span>, <span class="st">"Treatment"</span>, <span class="st">"ContactTracing"</span>]</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(cls), RDF.<span class="kw">type</span>, OWL.Class))</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="co"># Subclass hierarchy</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (sub, sup) <span class="kw">in</span> [</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Virus"</span>, <span class="st">"Pathogen"</span>), (<span class="st">"Bacteria"</span>, <span class="st">"Pathogen"</span>),</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Hospital"</span>, <span class="st">"Location"</span>), (<span class="st">"CommunityFacility"</span>, <span class="st">"Location"</span>), (<span class="st">"School"</span>, <span class="st">"Location"</span>),</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Vaccination"</span>, <span class="st">"Intervention"</span>), (<span class="st">"Quarantine"</span>, <span class="st">"Intervention"</span>),</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Treatment"</span>, <span class="st">"Intervention"</span>), (<span class="st">"ContactTracing"</span>, <span class="st">"Intervention"</span>),</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(sub), RDFS.subClassOf, <span class="fu">epi</span>(sup)))</span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a><span class="co"># Object properties</span></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (prop, dom, rng) <span class="kw">in</span> [</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"infectedBy"</span>,       <span class="st">"Patient"</span>,        <span class="st">"Pathogen"</span>),</span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"confirmedBy"</span>,      <span class="st">"CaseReport"</span>,     <span class="st">"DiagnosticTest"</span>),</span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"hasSymptom"</span>,       <span class="st">"CaseReport"</span>,     <span class="st">"Symptom"</span>),</span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"hasRiskFactor"</span>,    <span class="st">"Patient"</span>,        <span class="st">"RiskFactor"</span>),</span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"locatedAt"</span>,        <span class="st">"CaseReport"</span>,     <span class="st">"Location"</span>),</span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"receivedIntervention"</span>, <span class="st">"Patient"</span>,    <span class="st">"Intervention"</span>),</span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"contactWith"</span>,      <span class="st">"Patient"</span>,        <span class="st">"Patient"</span>),</span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"partOfOutbreak"</span>,   <span class="st">"CaseReport"</span>,     <span class="st">"Outbreak"</span>),</span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"transmittedFrom"</span>,  <span class="st">"Patient"</span>,        <span class="st">"Patient"</span>),</span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"caseForPatient"</span>,   <span class="st">"CaseReport"</span>,     <span class="st">"Patient"</span>),</span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"onsetDate"</span>,        <span class="st">"CaseReport"</span>,     <span class="cn">nothing</span>),</span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"testDate"</span>,         <span class="st">"DiagnosticTest"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"testResult"</span>,       <span class="st">"DiagnosticTest"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"severity"</span>,         <span class="st">"CaseReport"</span>,     <span class="cn">nothing</span>),</span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"ageGroup"</span>,         <span class="st">"Patient"</span>,        <span class="cn">nothing</span>),</span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"vaccinationStatus"</span>,<span class="st">"Patient"</span>,        <span class="cn">nothing</span>),</span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>    uri <span class="op">=</span> <span class="fu">epi</span>(prop)</span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(uri, RDF.<span class="kw">type</span>, OWL.ObjectProperty))</span>
+<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(uri, RDFS.domain, <span class="fu">epi</span>(dom)))</span>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rng <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(uri, RDFS.range, <span class="fu">epi</span>(rng)))</span>
+<span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Epidemiology ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Epidemiology ontology: 71 triples</code></pre>
+</div>
+</div>
+</section>
+<section id="populating-the-knowledge-graph" class="level2">
+<h2 class="anchored" data-anchor-id="populating-the-knowledge-graph">2. Populating the Knowledge Graph</h2>
+<section id="a.-pathogens" class="level3">
+<h3 class="anchored" data-anchor-id="a.-pathogens">2a. Pathogens</h3>
+<div id="6" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>pathogens <span class="op">=</span> [</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"influenza_A_H3N2"</span>, <span class="st">"Influenza A (H3N2)"</span>,    <span class="st">"Virus"</span>,    <span class="st">"Orthomyxoviridae"</span>, <span class="fl">1.3</span>),</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"SARS_CoV_2_JN1"</span>,   <span class="st">"SARS-CoV-2 JN.1"</span>,      <span class="st">"Virus"</span>,    <span class="st">"Coronaviridae"</span>,    <span class="fl">2.5</span>),</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"RSV_B"</span>,            <span class="st">"RSV subtype B"</span>,          <span class="st">"Virus"</span>,    <span class="st">"Pneumoviridae"</span>,    <span class="fl">3.0</span>),</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (id, name, cls, family, r0) <span class="kw">in</span> pathogens</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> <span class="fu">path</span>(id)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Pathogen"</span>)))</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(cls)))</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDFS.label, <span class="fu">Literal</span>(name)))</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, <span class="fu">epi</span>(<span class="st">"family"</span>), <span class="fu">Literal</span>(family)))</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, <span class="fu">epi</span>(<span class="st">"basicReproductionNumber"</span>), <span class="fu">Literal</span>(r0)))</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(pathogens))<span class="st"> pathogens"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Added 3 pathogens</code></pre>
+</div>
+</div>
+</section>
+<section id="b.-locations" class="level3">
+<h3 class="anchored" data-anchor-id="b.-locations">2b. Locations</h3>
+<div id="8" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>locations <span class="op">=</span> [</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"royal_infirmary"</span>,  <span class="st">"Royal Infirmary"</span>,       <span class="st">"Hospital"</span>),</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"general_hospital"</span>, <span class="st">"General Hospital"</span>,       <span class="st">"Hospital"</span>),</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"care_home_A"</span>,      <span class="st">"Sunrise Care Home"</span>,      <span class="st">"CommunityFacility"</span>),</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"care_home_B"</span>,      <span class="st">"Meadowbrook Care Home"</span>,  <span class="st">"CommunityFacility"</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"primary_school"</span>,   <span class="st">"Oakfield Primary School"</span>, <span class="st">"School"</span>),</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"secondary_school"</span>, <span class="st">"Riverside Academy"</span>,       <span class="st">"School"</span>),</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (id, name, cls) <span class="kw">in</span> locations</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    l <span class="op">=</span> <span class="fu">loc</span>(id)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(l, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Location"</span>)))</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(l, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(cls)))</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(l, RDFS.label, <span class="fu">Literal</span>(name)))</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(locations))<span class="st"> locations"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Added 6 locations</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-symptoms-and-risk-factors" class="level3">
+<h3 class="anchored" data-anchor-id="c.-symptoms-and-risk-factors">2c. Symptoms and risk factors</h3>
+<div id="10" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>symptoms <span class="op">=</span> [<span class="st">"fever"</span>, <span class="st">"cough"</span>, <span class="st">"dyspnoea"</span>, <span class="st">"fatigue"</span>, <span class="st">"myalgia"</span>,</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>            <span class="st">"sore_throat"</span>, <span class="st">"rhinorrhoea"</span>, <span class="st">"headache"</span>, <span class="st">"wheeze"</span>,</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>            <span class="st">"hypoxia"</span>, <span class="st">"tachypnoea"</span>]</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s <span class="kw">in</span> symptoms</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(s), RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Symptom"</span>)))</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(s), RDFS.label, <span class="fu">Literal</span>(<span class="fu">replace</span>(s, <span class="st">"_"</span> <span class="op">=&gt;</span> <span class="st">" "</span>))))</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>risk_factors <span class="op">=</span> [<span class="st">"age_over_65"</span>, <span class="st">"immunocompromised"</span>, <span class="st">"chronic_lung_disease"</span>,</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>                <span class="st">"diabetes"</span>, <span class="st">"cardiovascular_disease"</span>, <span class="st">"obesity"</span>,</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>                <span class="st">"pregnancy"</span>, <span class="st">"healthcare_worker"</span>]</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> rf <span class="kw">in</span> risk_factors</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(rf), RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"RiskFactor"</span>)))</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(rf), RDFS.label, <span class="fu">Literal</span>(<span class="fu">replace</span>(rf, <span class="st">"_"</span> <span class="op">=&gt;</span> <span class="st">" "</span>))))</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(symptoms))<span class="st"> symptoms, </span><span class="sc">$</span>(<span class="fu">length</span>(risk_factors))<span class="st"> risk factors"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Added 11 symptoms, 8 risk factors</code></pre>
+</div>
+</div>
+</section>
+<section id="d.-patients-25-patients-in-the-outbreak" class="level3">
+<h3 class="anchored" data-anchor-id="d.-patients-25-patients-in-the-outbreak">2d. Patients (25 patients in the outbreak)</h3>
+<div id="12" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>patients <span class="op">=</span> [</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (id, name, age_group, risk_factors, vaccination_status)</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"Patient 001"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"chronic_lung_disease"</span>], <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P002"</span>, <span class="st">"Patient 002"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"diabetes"</span>],             <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P003"</span>, <span class="st">"Patient 003"</span>, <span class="st">"40-64"</span>, [<span class="st">"healthcare_worker"</span>],                   <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P004"</span>, <span class="st">"Patient 004"</span>, <span class="st">"18-39"</span>, <span class="dt">String</span>[],                                <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P005"</span>, <span class="st">"Patient 005"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"cardiovascular_disease"</span>],<span class="st">"vaccinated"</span>),</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P006"</span>, <span class="st">"Patient 006"</span>, <span class="st">"5-17"</span>,  <span class="dt">String</span>[],                                <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P007"</span>, <span class="st">"Patient 007"</span>, <span class="st">"5-17"</span>,  <span class="dt">String</span>[],                                <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P008"</span>, <span class="st">"Patient 008"</span>, <span class="st">"18-39"</span>, [<span class="st">"pregnancy"</span>],                           <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P009"</span>, <span class="st">"Patient 009"</span>, <span class="st">"40-64"</span>, [<span class="st">"obesity"</span>],                             <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P010"</span>, <span class="st">"Patient 010"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"immunocompromised"</span>],    <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P011"</span>, <span class="st">"Patient 011"</span>, <span class="st">"0-4"</span>,   <span class="dt">String</span>[],                                <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P012"</span>, <span class="st">"Patient 012"</span>, <span class="st">"40-64"</span>, [<span class="st">"healthcare_worker"</span>],                   <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P013"</span>, <span class="st">"Patient 013"</span>, <span class="st">"18-39"</span>, <span class="dt">String</span>[],                                <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P014"</span>, <span class="st">"Patient 014"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"chronic_lung_disease"</span>], <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P015"</span>, <span class="st">"Patient 015"</span>, <span class="st">"5-17"</span>,  <span class="dt">String</span>[],                                <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P016"</span>, <span class="st">"Patient 016"</span>, <span class="st">"40-64"</span>, [<span class="st">"diabetes"</span>, <span class="st">"obesity"</span>],                 <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P017"</span>, <span class="st">"Patient 017"</span>, <span class="st">"18-39"</span>, [<span class="st">"healthcare_worker"</span>],                   <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P018"</span>, <span class="st">"Patient 018"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>],                         <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P019"</span>, <span class="st">"Patient 019"</span>, <span class="st">"0-4"</span>,   <span class="dt">String</span>[],                                <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P020"</span>, <span class="st">"Patient 020"</span>, <span class="st">"40-64"</span>, <span class="dt">String</span>[],                                <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P021"</span>, <span class="st">"Patient 021"</span>, <span class="st">"18-39"</span>, <span class="dt">String</span>[],                                <span class="st">"unvaccinated"</span>),</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P022"</span>, <span class="st">"Patient 022"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"immunocompromised"</span>],    <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P023"</span>, <span class="st">"Patient 023"</span>, <span class="st">"5-17"</span>,  <span class="dt">String</span>[],                                <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P024"</span>, <span class="st">"Patient 024"</span>, <span class="st">"40-64"</span>, [<span class="st">"chronic_lung_disease"</span>],                <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P025"</span>, <span class="st">"Patient 025"</span>, <span class="st">"18-39"</span>, [<span class="st">"healthcare_worker"</span>],                   <span class="st">"vaccinated"</span>),</span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (id, name, age_group, risks, vax) <span class="kw">in</span> patients</span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> <span class="fu">pat</span>(id)</span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Patient"</span>)))</span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDFS.label, <span class="fu">Literal</span>(name)))</span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, <span class="fu">epi</span>(<span class="st">"ageGroup"</span>), <span class="fu">Literal</span>(age_group)))</span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, <span class="fu">epi</span>(<span class="st">"vaccinationStatus"</span>), <span class="fu">Literal</span>(vax)))</span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> rf <span class="kw">in</span> risks</span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, <span class="fu">epi</span>(<span class="st">"hasRiskFactor"</span>), <span class="fu">epi</span>(rf)))</span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(patients))<span class="st"> patients"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Added 25 patients</code></pre>
+</div>
+</div>
+</section>
+<section id="e.-surveillance-data-via-tabular-mapping" class="level3">
+<h3 class="anchored" data-anchor-id="e.-surveillance-data-via-tabular-mapping">2e. Surveillance data via tabular mapping</h3>
+<p>We import 30 case reports from a surveillance line list into the knowledge graph using <strong>tabular mapping</strong>.</p>
+<div id="14" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>case_records <span class="op">=</span> [</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (case_id, patient, pathogen, location, onset, severity, symptoms...)</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">1</span>,  patient<span class="op">=</span><span class="st">"P001"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_A"</span>,     onset<span class="op">=</span><span class="st">"2025-01-15"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,   symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea,myalgia"</span>),</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">2</span>,  patient<span class="op">=</span><span class="st">"P002"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_A"</span>,     onset<span class="op">=</span><span class="st">"2025-01-16"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>, symp<span class="op">=</span><span class="st">"fever,cough,fatigue"</span>),</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">3</span>,  patient<span class="op">=</span><span class="st">"P003"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"royal_infirmary"</span>, onset<span class="op">=</span><span class="st">"2025-01-17"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,     symp<span class="op">=</span><span class="st">"fever,cough,sore_throat"</span>),</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">4</span>,  patient<span class="op">=</span><span class="st">"P010"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_A"</span>,     onset<span class="op">=</span><span class="st">"2025-01-18"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,   symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea,hypoxia"</span>),</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">5</span>,  patient<span class="op">=</span><span class="st">"P018"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_B"</span>,     onset<span class="op">=</span><span class="st">"2025-01-19"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>, symp<span class="op">=</span><span class="st">"fever,cough,myalgia,fatigue"</span>),</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">6</span>,  patient<span class="op">=</span><span class="st">"P004"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-20"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,    symp<span class="op">=</span><span class="st">"cough,sore_throat,headache"</span>),</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">7</span>,  patient<span class="op">=</span><span class="st">"P005"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-21"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,  symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea,hypoxia,fatigue"</span>),</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">8</span>,  patient<span class="op">=</span><span class="st">"P009"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-22"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>,symp<span class="op">=</span><span class="st">"fever,cough,myalgia"</span>),</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">9</span>,  patient<span class="op">=</span><span class="st">"P012"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"royal_infirmary"</span>, onset<span class="op">=</span><span class="st">"2025-01-22"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,     symp<span class="op">=</span><span class="st">"cough,rhinorrhoea"</span>),</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">10</span>, patient<span class="op">=</span><span class="st">"P013"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-23"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,    symp<span class="op">=</span><span class="st">"cough,sore_throat"</span>),</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">11</span>, patient<span class="op">=</span><span class="st">"P006"</span>, pathogen<span class="op">=</span><span class="st">"RSV_B"</span>,            location<span class="op">=</span><span class="st">"primary_school"</span>,   onset<span class="op">=</span><span class="st">"2025-01-14"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>,symp<span class="op">=</span><span class="st">"cough,wheeze,rhinorrhoea"</span>),</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">12</span>, patient<span class="op">=</span><span class="st">"P007"</span>, pathogen<span class="op">=</span><span class="st">"RSV_B"</span>,            location<span class="op">=</span><span class="st">"primary_school"</span>,   onset<span class="op">=</span><span class="st">"2025-01-15"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>,symp<span class="op">=</span><span class="st">"cough,wheeze,fever"</span>),</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">13</span>, patient<span class="op">=</span><span class="st">"P011"</span>, pathogen<span class="op">=</span><span class="st">"RSV_B"</span>,            location<span class="op">=</span><span class="st">"royal_infirmary"</span>,  onset<span class="op">=</span><span class="st">"2025-01-17"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,  symp<span class="op">=</span><span class="st">"cough,wheeze,dyspnoea,tachypnoea,hypoxia"</span>),</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">14</span>, patient<span class="op">=</span><span class="st">"P015"</span>, pathogen<span class="op">=</span><span class="st">"RSV_B"</span>,            location<span class="op">=</span><span class="st">"secondary_school"</span>, onset<span class="op">=</span><span class="st">"2025-01-18"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,    symp<span class="op">=</span><span class="st">"cough,rhinorrhoea"</span>),</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">15</span>, patient<span class="op">=</span><span class="st">"P019"</span>, pathogen<span class="op">=</span><span class="st">"RSV_B"</span>,            location<span class="op">=</span><span class="st">"royal_infirmary"</span>,  onset<span class="op">=</span><span class="st">"2025-01-19"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,  symp<span class="op">=</span><span class="st">"wheeze,dyspnoea,tachypnoea,hypoxia"</span>),</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">16</span>, patient<span class="op">=</span><span class="st">"P008"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-20"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>,symp<span class="op">=</span><span class="st">"fever,cough,myalgia"</span>),</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">17</span>, patient<span class="op">=</span><span class="st">"P014"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_B"</span>,     onset<span class="op">=</span><span class="st">"2025-01-21"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,   symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea,hypoxia"</span>),</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">18</span>, patient<span class="op">=</span><span class="st">"P016"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-24"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>,symp<span class="op">=</span><span class="st">"fever,cough,fatigue,myalgia"</span>),</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">19</span>, patient<span class="op">=</span><span class="st">"P017"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"royal_infirmary"</span>, onset<span class="op">=</span><span class="st">"2025-01-24"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,     symp<span class="op">=</span><span class="st">"cough,sore_throat"</span>),</span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">20</span>, patient<span class="op">=</span><span class="st">"P020"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"general_hospital"</span>, onset<span class="op">=</span><span class="st">"2025-01-25"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,    symp<span class="op">=</span><span class="st">"cough,rhinorrhoea,headache"</span>),</span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">21</span>, patient<span class="op">=</span><span class="st">"P021"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"secondary_school"</span>, onset<span class="op">=</span><span class="st">"2025-01-22"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,   symp<span class="op">=</span><span class="st">"fever,cough,sore_throat"</span>),</span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">22</span>, patient<span class="op">=</span><span class="st">"P022"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_A"</span>,     onset<span class="op">=</span><span class="st">"2025-01-23"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,   symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea,hypoxia,fatigue"</span>),</span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">23</span>, patient<span class="op">=</span><span class="st">"P023"</span>, pathogen<span class="op">=</span><span class="st">"RSV_B"</span>,            location<span class="op">=</span><span class="st">"primary_school"</span>,   onset<span class="op">=</span><span class="st">"2025-01-20"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,    symp<span class="op">=</span><span class="st">"cough,rhinorrhoea"</span>),</span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">24</span>, patient<span class="op">=</span><span class="st">"P024"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"royal_infirmary"</span>, onset<span class="op">=</span><span class="st">"2025-01-25"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>, symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea"</span>),</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">25</span>, patient<span class="op">=</span><span class="st">"P025"</span>, pathogen<span class="op">=</span><span class="st">"SARS_CoV_2_JN1"</span>,  location<span class="op">=</span><span class="st">"royal_infirmary"</span>, onset<span class="op">=</span><span class="st">"2025-01-26"</span>, severity<span class="op">=</span><span class="st">"mild"</span>,     symp<span class="op">=</span><span class="st">"cough,fatigue"</span>),</span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a><span class="co"># Add URI columns for linking</span></span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a>cases_with_uris <span class="op">=</span> [(; r<span class="op">...</span>,</span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>    patient_uri <span class="op">=</span> <span class="st">"http://example.org/patient/"</span> <span class="op">*</span> r.patient,</span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>    pathogen_uri <span class="op">=</span> <span class="st">"http://example.org/pathogen/"</span> <span class="op">*</span> r.pathogen,</span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a>    location_uri <span class="op">=</span> <span class="st">"http://example.org/location/"</span> <span class="op">*</span> r.location,</span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>) for r <span class="kw">in</span> case_records]</span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="fu">RDFMapping</span>(graph<span class="op">=</span>g)</span>
+<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a>tpl <span class="op">=</span> <span class="fu">RDFTemplate</span>(</span>
+<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a>    subject <span class="op">=</span> <span class="op">:</span>id,</span>
+<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a>    subject_prefix <span class="op">=</span> <span class="st">"http://example.org/case/"</span>,</span>
+<span id="cb13-42"><a href="#cb13-42" aria-hidden="true" tabindex="-1"></a>    properties <span class="op">=</span> [</span>
+<span id="cb13-43"><a href="#cb13-43" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">epi</span>(<span class="st">"caseForPatient"</span>), <span class="op">:</span>patient_uri,  <span class="fu">IRIColumn</span>()),</span>
+<span id="cb13-44"><a href="#cb13-44" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">epi</span>(<span class="st">"infectedBy"</span>),     <span class="op">:</span>pathogen_uri, <span class="fu">IRIColumn</span>()),</span>
+<span id="cb13-45"><a href="#cb13-45" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">epi</span>(<span class="st">"locatedAt"</span>),      <span class="op">:</span>location_uri, <span class="fu">IRIColumn</span>()),</span>
+<span id="cb13-46"><a href="#cb13-46" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">epi</span>(<span class="st">"onsetDate"</span>),      <span class="op">:</span>onset,        <span class="fu">LiteralColumn</span>(XSD.date)),</span>
+<span id="cb13-47"><a href="#cb13-47" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">epi</span>(<span class="st">"severity"</span>),       <span class="op">:</span>severity,     <span class="fu">AutoColumn</span>()),</span>
+<span id="cb13-48"><a href="#cb13-48" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb13-49"><a href="#cb13-49" aria-hidden="true" tabindex="-1"></a>    types <span class="op">=</span> [<span class="fu">epi</span>(<span class="st">"CaseReport"</span>)]</span>
+<span id="cb13-50"><a href="#cb13-50" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb13-51"><a href="#cb13-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-52"><a href="#cb13-52" aria-hidden="true" tabindex="-1"></a>before <span class="op">=</span> <span class="fu">length</span>(g)</span>
+<span id="cb13-53"><a href="#cb13-53" aria-hidden="true" tabindex="-1"></a><span class="fu">rdf_map!</span>(m, cases_with_uris, tpl)</span>
+<span id="cb13-54"><a href="#cb13-54" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Imported </span><span class="sc">$</span>(<span class="fu">length</span>(g) <span class="op">-</span> before)<span class="st"> case triples from </span><span class="sc">$</span>(<span class="fu">length</span>(case_records))<span class="st"> records"</span>)</span>
+<span id="cb13-55"><a href="#cb13-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-56"><a href="#cb13-56" aria-hidden="true" tabindex="-1"></a><span class="co"># Also add symptoms for each case</span></span>
+<span id="cb13-57"><a href="#cb13-57" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb13-58"><a href="#cb13-58" aria-hidden="true" tabindex="-1"></a>    case_uri <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/case/</span><span class="sc">$</span>(r.id)<span class="st">"</span>)</span>
+<span id="cb13-59"><a href="#cb13-59" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> <span class="fu">split</span>(r.symp, <span class="st">","</span>)</span>
+<span id="cb13-60"><a href="#cb13-60" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(case_uri, <span class="fu">epi</span>(<span class="st">"hasSymptom"</span>), <span class="fu">epi</span>(<span class="fu">strip</span>(s))))</span>
+<span id="cb13-61"><a href="#cb13-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb13-62"><a href="#cb13-62" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb13-63"><a href="#cb13-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-64"><a href="#cb13-64" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total knowledge graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Imported 150 case triples from 25 records
+Total knowledge graph: 495 triples</code></pre>
+</div>
+</div>
+</section>
+<section id="f.-contact-and-transmission-events" class="level3">
+<h3 class="anchored" data-anchor-id="f.-contact-and-transmission-events">2f. Contact and transmission events</h3>
+<p>Known contact tracing data links patients through exposure events.</p>
+<div id="16" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Known contacts (bidirectional exposure)</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>contacts <span class="op">=</span> [</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"P002"</span>),  <span class="co"># care home A residents</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"P010"</span>),</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P002"</span>, <span class="st">"P010"</span>),</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P002"</span>, <span class="st">"P022"</span>),</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P003"</span>, <span class="st">"P012"</span>),  <span class="co"># healthcare workers at Royal Infirmary</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P003"</span>, <span class="st">"P017"</span>),</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P012"</span>, <span class="st">"P017"</span>),</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P006"</span>, <span class="st">"P007"</span>),  <span class="co"># primary school pupils</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P006"</span>, <span class="st">"P015"</span>),</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P004"</span>, <span class="st">"P009"</span>),  <span class="co"># general hospital contacts</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P005"</span>, <span class="st">"P009"</span>),</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P009"</span>, <span class="st">"P013"</span>),</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P013"</span>, <span class="st">"P016"</span>),</span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P016"</span>, <span class="st">"P020"</span>),</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P011"</span>, <span class="st">"P019"</span>),  <span class="co"># RSV paediatric ward</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P003"</span>, <span class="st">"P001"</span>),  <span class="co"># HCW → care home visit</span></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P017"</span>, <span class="st">"P024"</span>),  <span class="co"># HCW → hospital</span></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P025"</span>, <span class="st">"P019"</span>),  <span class="co"># hospital contact</span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (a, b) <span class="kw">in</span> contacts</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">pat</span>(a), <span class="fu">epi</span>(<span class="st">"contactWith"</span>), <span class="fu">pat</span>(b)))</span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">pat</span>(b), <span class="fu">epi</span>(<span class="st">"contactWith"</span>), <span class="fu">pat</span>(a)))</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Known transmission events (directed: infector → infectee)</span></span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a>transmissions <span class="op">=</span> [</span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"P002"</span>),  <span class="co"># index case → roommate</span></span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"P010"</span>),  <span class="co"># index → vulnerable resident</span></span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P002"</span>, <span class="st">"P022"</span>),  <span class="co"># resident → resident</span></span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P006"</span>, <span class="st">"P007"</span>),  <span class="co"># school RSV</span></span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P004"</span>, <span class="st">"P009"</span>),  <span class="co"># hospital COVID</span></span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P009"</span>, <span class="st">"P013"</span>),  <span class="co"># hospital chain</span></span>
+<span id="cb15-36"><a href="#cb15-36" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P013"</span>, <span class="st">"P016"</span>),</span>
+<span id="cb15-37"><a href="#cb15-37" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P016"</span>, <span class="st">"P020"</span>),</span>
+<span id="cb15-38"><a href="#cb15-38" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P011"</span>, <span class="st">"P019"</span>),  <span class="co"># paediatric RSV</span></span>
+<span id="cb15-39"><a href="#cb15-39" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P003"</span>, <span class="st">"P017"</span>),  <span class="co"># HCW flu</span></span>
+<span id="cb15-40"><a href="#cb15-40" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb15-41"><a href="#cb15-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-42"><a href="#cb15-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (src, tgt) <span class="kw">in</span> transmissions</span>
+<span id="cb15-43"><a href="#cb15-43" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">pat</span>(tgt), <span class="fu">epi</span>(<span class="st">"transmittedFrom"</span>), <span class="fu">pat</span>(src)))</span>
+<span id="cb15-44"><a href="#cb15-44" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb15-45"><a href="#cb15-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-46"><a href="#cb15-46" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(contacts))<span class="st"> contact links, </span><span class="sc">$</span>(<span class="fu">length</span>(transmissions))<span class="st"> known transmissions"</span>)</span>
+<span id="cb15-47"><a href="#cb15-47" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Added 18 contact links, 10 known transmissions
+Total: 541 triples</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="defining-the-outbreak" class="level2">
+<h2 class="anchored" data-anchor-id="defining-the-outbreak">3. Defining the Outbreak</h2>
+<div id="18" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Three concurrent outbreaks</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"flu_outbreak"</span>),   RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Outbreak"</span>)))</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"flu_outbreak"</span>),   RDFS.label, <span class="fu">Literal</span>(<span class="st">"Influenza A H3N2 winter outbreak"</span>)))</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"covid_outbreak"</span>), RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Outbreak"</span>)))</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"covid_outbreak"</span>), RDFS.label, <span class="fu">Literal</span>(<span class="st">"SARS-CoV-2 JN.1 nosocomial cluster"</span>)))</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"rsv_outbreak"</span>),   RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Outbreak"</span>)))</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"rsv_outbreak"</span>),   RDFS.label, <span class="fu">Literal</span>(<span class="st">"RSV-B paediatric wave"</span>)))</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Link cases to outbreaks based on pathogen</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    case_uri <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/case/</span><span class="sc">$</span>(r.id)<span class="st">"</span>)</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    outbreak <span class="op">=</span> <span class="cf">if</span> r.pathogen <span class="op">==</span> <span class="st">"influenza_A_H3N2"</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>        <span class="fu">epi</span>(<span class="st">"flu_outbreak"</span>)</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elseif</span> r.pathogen <span class="op">==</span> <span class="st">"SARS_CoV_2_JN1"</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>        <span class="fu">epi</span>(<span class="st">"covid_outbreak"</span>)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>        <span class="fu">epi</span>(<span class="st">"rsv_outbreak"</span>)</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(case_uri, <span class="fu">epi</span>(<span class="st">"partOfOutbreak"</span>), outbreak))</span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Three outbreaks defined, </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> total triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Three outbreaks defined, 572 total triples</code></pre>
+</div>
+</div>
+</section>
+<section id="shacl-validation" class="level2">
+<h2 class="anchored" data-anchor-id="shacl-validation">4. SHACL Validation</h2>
+<p>We validate that every case report has required fields: a linked patient, pathogen, location, onset date, and severity classification.</p>
+<div id="20" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>shapes_ttl <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:CaseReportShape a sh:NodeShape ;</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:targetClass epi:CaseReport ;</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path epi:caseForPatient ;</span></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:maxCount 1 ;</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:nodeKind sh:IRI ;</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path epi:infectedBy ;</span></span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:maxCount 1 ;</span></span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:nodeKind sh:IRI ;</span></span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path epi:locatedAt ;</span></span>
+<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-24"><a href="#cb19-24" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb19-25"><a href="#cb19-25" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-26"><a href="#cb19-26" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path epi:onsetDate ;</span></span>
+<span id="cb19-27"><a href="#cb19-27" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-28"><a href="#cb19-28" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:datatype xsd:date ;</span></span>
+<span id="cb19-29"><a href="#cb19-29" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb19-30"><a href="#cb19-30" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-31"><a href="#cb19-31" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path epi:severity ;</span></span>
+<span id="cb19-32"><a href="#cb19-32" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-33"><a href="#cb19-33" aria-hidden="true" tabindex="-1"></a><span class="st">        ] .</span></span>
+<span id="cb19-34"><a href="#cb19-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-35"><a href="#cb19-35" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:PatientShape a sh:NodeShape ;</span></span>
+<span id="cb19-36"><a href="#cb19-36" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:targetClass epi:Patient ;</span></span>
+<span id="cb19-37"><a href="#cb19-37" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-38"><a href="#cb19-38" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path rdfs:label ;</span></span>
+<span id="cb19-39"><a href="#cb19-39" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-40"><a href="#cb19-40" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:datatype xsd:string ;</span></span>
+<span id="cb19-41"><a href="#cb19-41" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb19-42"><a href="#cb19-42" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb19-43"><a href="#cb19-43" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path epi:ageGroup ;</span></span>
+<span id="cb19-44"><a href="#cb19-44" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb19-45"><a href="#cb19-45" aria-hidden="true" tabindex="-1"></a><span class="st">        ] .</span></span>
+<span id="cb19-46"><a href="#cb19-46" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb19-47"><a href="#cb19-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-48"><a href="#cb19-48" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> <span class="fu">rdf_validate</span>(m, shapes_ttl)</span>
+<span id="cb19-49"><a href="#cb19-49" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"SHACL validation: conforms = </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>SHACL validation: conforms = true</code></pre>
+</div>
+</div>
+<p>Test with an incomplete case report:</p>
+<div id="22" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>bad <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/case/incomplete"</span>)</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"CaseReport"</span>)))</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">epi</span>(<span class="st">"severity"</span>), <span class="fu">Literal</span>(<span class="st">"unknown"</span>)))</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>report2 <span class="op">=</span> <span class="fu">rdf_validate</span>(m, shapes_ttl)</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"After adding incomplete case:"</span>)</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Conforms: </span><span class="sc">$</span>(report2.conforms)<span class="st">"</span>)</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> report2.results</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  ✗ </span><span class="sc">$</span>(r.message)<span class="st">"</span>)</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Clean up</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"CaseReport"</span>)))</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">epi</span>(<span class="st">"severity"</span>), <span class="fu">Literal</span>(<span class="st">"unknown"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>After adding incomplete case:
+  Conforms: false
+  ✗ Expected at least 1 values for http://example.org/epi#caseForPatient, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#infectedBy, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#locatedAt, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#onsetDate, got 0</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>RDFGraph (572 triples)</code></pre>
+</div>
+</div>
+</section>
+<section id="sparql-queries" class="level2">
+<h2 class="anchored" data-anchor-id="sparql-queries">5. SPARQL Queries</h2>
+<section id="a.-cases-per-pathogen" class="level3">
+<h3 class="anchored" data-anchor-id="a.-cases-per-pathogen">5a. Cases per pathogen</h3>
+<div id="24" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?pathogen_name (COUNT(?c) AS ?cases)</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?p .</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p rdfs:label ?pathogen_name .</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?pathogen_name</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY DESC(?cases)</span></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Cases by pathogen:"</span>)</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]), <span class="fl">30</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"cases"</span>]))<span class="st"> cases"</span>)</span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Cases by pathogen:
+  SARS-CoV-2 JN.1                10 cases
+  Influenza A (H3N2)             9 cases
+  RSV subtype B                  6 cases</code></pre>
+</div>
+</div>
+</section>
+<section id="b.-severity-distribution-per-pathogen" class="level3">
+<h3 class="anchored" data-anchor-id="b.-severity-distribution-per-pathogen">5b. Severity distribution per pathogen</h3>
+<div id="26" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?pathogen_name ?severity (COUNT(?c) AS ?count)</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?p ;</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:severity ?severity .</span></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p rdfs:label ?pathogen_name .</span></span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?pathogen_name ?severity</span></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?pathogen_name ?severity</span></span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Pathogen"</span>, <span class="fl">28</span>), <span class="fu">rpad</span>(<span class="st">"Severity"</span>, <span class="fl">12</span>), <span class="st">"Count"</span>)</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">50</span>)</span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]), <span class="fl">28</span>),</span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"severity"</span>]), <span class="fl">12</span>),</span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>            <span class="fu">readable</span>(row[<span class="st">"count"</span>]))</span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Pathogen                    Severity    Count
+──────────────────────────────────────────────────
+Influenza A (H3N2)          mild        2
+Influenza A (H3N2)          moderate    3
+Influenza A (H3N2)          severe      4
+RSV subtype B               mild        2
+RSV subtype B               moderate    2
+RSV subtype B               severe      2
+SARS-CoV-2 JN.1             mild        6
+SARS-CoV-2 JN.1             moderate    3
+SARS-CoV-2 JN.1             severe      1</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-cases-per-location" class="level3">
+<h3 class="anchored" data-anchor-id="c.-cases-per-location">5c. Cases per location</h3>
+<div id="28" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?location_name (COUNT(?c) AS ?cases)</span></span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:locatedAt ?l .</span></span>
+<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a><span class="st">        ?l rdfs:label ?location_name .</span></span>
+<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?location_name</span></span>
+<span id="cb28-12"><a href="#cb28-12" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY DESC(?cases)</span></span>
+<span id="cb28-13"><a href="#cb28-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb28-14"><a href="#cb28-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-15"><a href="#cb28-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Cases by location:"</span>)</span>
+<span id="cb28-16"><a href="#cb28-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb28-17"><a href="#cb28-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"location_name"</span>]), <span class="fl">30</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"cases"</span>]))<span class="st"> cases"</span>)</span>
+<span id="cb28-18"><a href="#cb28-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Cases by location:
+  General Hospital               7 cases
+  Royal Infirmary                7 cases
+  Sunrise Care Home              4 cases
+  Oakfield Primary School        3 cases
+  Riverside Academy              2 cases
+  Meadowbrook Care Home          2 cases</code></pre>
+</div>
+</div>
+</section>
+<section id="d.-most-common-symptoms-across-all-cases" class="level3">
+<h3 class="anchored" data-anchor-id="d.-most-common-symptoms-across-all-cases">5d. Most common symptoms across all cases</h3>
+<div id="30" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?symptom_name (COUNT(?c) AS ?frequency)</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:hasSymptom ?s .</span></span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s rdfs:label ?symptom_name .</span></span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?symptom_name</span></span>
+<span id="cb30-12"><a href="#cb30-12" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY DESC(?frequency)</span></span>
+<span id="cb30-13"><a href="#cb30-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-15"><a href="#cb30-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Symptom frequency across all cases:"</span>)</span>
+<span id="cb30-16"><a href="#cb30-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb30-17"><a href="#cb30-17" aria-hidden="true" tabindex="-1"></a>    freq <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"frequency"</span>])</span>
+<span id="cb30-18"><a href="#cb30-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"symptom_name"</span>]), <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(freq)<span class="st"> cases"</span>)</span>
+<span id="cb30-19"><a href="#cb30-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Symptom frequency across all cases:
+  cough                24 cases
+  fever                14 cases
+  dyspnoea             8 cases
+  hypoxia              6 cases
+  fatigue              6 cases
+  rhinorrhoea          5 cases
+  sore throat          5 cases
+  myalgia              5 cases
+  wheeze               4 cases
+  tachypnoea           2 cases
+  headache             2 cases</code></pre>
+</div>
+</div>
+</section>
+<section id="e.-vulnerable-patients-with-severe-outcomes" class="level3">
+<h3 class="anchored" data-anchor-id="e.-vulnerable-patients-with-severe-outcomes">5e. Vulnerable patients with severe outcomes</h3>
+<div id="32" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?patient_name ?age ?pathogen_name ?risk_name</span></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:caseForPatient ?p ;</span></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?pathogen ;</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:severity "severe" .</span></span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p rdfs:label ?patient_name ;</span></span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:ageGroup ?age ;</span></span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:hasRiskFactor ?rf .</span></span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a><span class="st">        ?rf rdfs:label ?risk_name .</span></span>
+<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a><span class="st">        ?pathogen rdfs:label ?pathogen_name .</span></span>
+<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?patient_name</span></span>
+<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Severe cases with risk factors:"</span>)</span>
+<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"patient_name"</span>]))<span class="st"> (</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"age"</span>]))<span class="st">) — "</span> <span class="op">*</span></span>
+<span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]))<span class="st">, risk: </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"risk_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Severe cases with risk factors:
+  Patient 001 (65+) — Influenza A (H3N2), risk: chronic lung disease
+  Patient 001 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 005 (65+) — SARS-CoV-2 JN.1, risk: cardiovascular disease
+  Patient 005 (65+) — SARS-CoV-2 JN.1, risk: age over 65
+  Patient 010 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 010 (65+) — Influenza A (H3N2), risk: immunocompromised
+  Patient 014 (65+) — Influenza A (H3N2), risk: chronic lung disease
+  Patient 014 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 022 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 022 (65+) — Influenza A (H3N2), risk: immunocompromised</code></pre>
+</div>
+</div>
+</section>
+<section id="f.-healthcare-worker-cases-potential-nosocomial-amplifiers" class="level3">
+<h3 class="anchored" data-anchor-id="f.-healthcare-worker-cases-potential-nosocomial-amplifiers">5f. Healthcare worker cases (potential nosocomial amplifiers)</h3>
+<div id="34" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?patient_name ?pathogen_name ?location_name ?onset</span></span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:caseForPatient ?p ;</span></span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?pathogen ;</span></span>
+<span id="cb34-10"><a href="#cb34-10" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:locatedAt ?loc ;</span></span>
+<span id="cb34-11"><a href="#cb34-11" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:onsetDate ?onset .</span></span>
+<span id="cb34-12"><a href="#cb34-12" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p epi:hasRiskFactor epi:healthcare_worker ;</span></span>
+<span id="cb34-13"><a href="#cb34-13" aria-hidden="true" tabindex="-1"></a><span class="st">           rdfs:label ?patient_name .</span></span>
+<span id="cb34-14"><a href="#cb34-14" aria-hidden="true" tabindex="-1"></a><span class="st">        ?pathogen rdfs:label ?pathogen_name .</span></span>
+<span id="cb34-15"><a href="#cb34-15" aria-hidden="true" tabindex="-1"></a><span class="st">        ?loc rdfs:label ?location_name .</span></span>
+<span id="cb34-16"><a href="#cb34-16" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb34-17"><a href="#cb34-17" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?onset</span></span>
+<span id="cb34-18"><a href="#cb34-18" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb34-19"><a href="#cb34-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-20"><a href="#cb34-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Healthcare worker cases (potential nosocomial transmission):"</span>)</span>
+<span id="cb34-21"><a href="#cb34-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb34-22"><a href="#cb34-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"onset"</span>]))<span class="st"> | </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"patient_name"</span>]))<span class="st"> | "</span> <span class="op">*</span></span>
+<span id="cb34-23"><a href="#cb34-23" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]))<span class="st"> | </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"location_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb34-24"><a href="#cb34-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Healthcare worker cases (potential nosocomial transmission):
+  2025-01-17 | Patient 003 | Influenza A (H3N2) | Royal Infirmary
+  2025-01-22 | Patient 012 | SARS-CoV-2 JN.1 | Royal Infirmary
+  2025-01-24 | Patient 017 | SARS-CoV-2 JN.1 | Royal Infirmary
+  2025-01-26 | Patient 025 | SARS-CoV-2 JN.1 | Royal Infirmary</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="property-paths-contact-tracing-chains" class="level2">
+<h2 class="anchored" data-anchor-id="property-paths-contact-tracing-chains">6. Property Paths — Contact Tracing Chains</h2>
+<p>Using property paths we can trace multi-step contact chains to identify potential transmission routes.</p>
+<div id="36" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="co"># All patients reachable from P001 through contact chains</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX pat: &lt;http://example.org/patient/&gt;</span></span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb36-6"><a href="#cb36-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-7"><a href="#cb36-7" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT DISTINCT ?contact_name</span></span>
+<span id="cb36-8"><a href="#cb36-8" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb36-9"><a href="#cb36-9" aria-hidden="true" tabindex="-1"></a><span class="st">        pat:P001 epi:contactWith+ ?contact .</span></span>
+<span id="cb36-10"><a href="#cb36-10" aria-hidden="true" tabindex="-1"></a><span class="st">        ?contact rdfs:label ?contact_name .</span></span>
+<span id="cb36-11"><a href="#cb36-11" aria-hidden="true" tabindex="-1"></a><span class="st">        FILTER(?contact != pat:P001)</span></span>
+<span id="cb36-12"><a href="#cb36-12" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb36-13"><a href="#cb36-13" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?contact_name</span></span>
+<span id="cb36-14"><a href="#cb36-14" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb36-15"><a href="#cb36-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-16"><a href="#cb36-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Contact chain from index case P001 (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st"> reachable):"</span>)</span>
+<span id="cb36-17"><a href="#cb36-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb36-18"><a href="#cb36-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"contact_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb36-19"><a href="#cb36-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Contact chain from index case P001 (7 reachable):
+  → Patient 002
+  → Patient 003
+  → Patient 010
+  → Patient 012
+  → Patient 017
+  → Patient 022
+  → Patient 024</code></pre>
+</div>
+</div>
+<div id="38" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission chains — who infected whom, transitively</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX pat: &lt;http://example.org/patient/&gt;</span></span>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb38-6"><a href="#cb38-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-7"><a href="#cb38-7" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT DISTINCT ?downstream_name</span></span>
+<span id="cb38-8"><a href="#cb38-8" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb38-9"><a href="#cb38-9" aria-hidden="true" tabindex="-1"></a><span class="st">        ?downstream epi:transmittedFrom+ pat:P001 .</span></span>
+<span id="cb38-10"><a href="#cb38-10" aria-hidden="true" tabindex="-1"></a><span class="st">        ?downstream rdfs:label ?downstream_name .</span></span>
+<span id="cb38-11"><a href="#cb38-11" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb38-12"><a href="#cb38-12" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?downstream_name</span></span>
+<span id="cb38-13"><a href="#cb38-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb38-14"><a href="#cb38-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-15"><a href="#cb38-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Downstream transmission from P001 (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st"> infected):"</span>)</span>
+<span id="cb38-16"><a href="#cb38-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb38-17"><a href="#cb38-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"downstream_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb38-18"><a href="#cb38-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Downstream transmission from P001 (3 infected):
+  → Patient 002
+  → Patient 010
+  → Patient 022</code></pre>
+</div>
+</div>
+</section>
+<section id="datalog-reasoning-transmission-risk-inference" class="level2">
+<h2 class="anchored" data-anchor-id="datalog-reasoning-transmission-risk-inference">7. Datalog Reasoning — Transmission Risk Inference</h2>
+<p>We use <strong>Datalog</strong> to infer transmission risk categories and identify potential super-spreader settings.</p>
+<div id="40" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb40"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>n3_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix epi: &lt;http://example.org/epi#&gt; ."</span>)</span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix pat: &lt;http://example.org/patient/&gt; ."</span>)</span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Encode known transmissions</span></span>
+<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (src, tgt) <span class="kw">in</span> transmissions</span>
+<span id="cb40-8"><a href="#cb40-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(n3_lines, <span class="st">"pat:</span><span class="sc">$</span>tgt<span class="st"> epi:transmittedFrom pat:</span><span class="sc">$</span>src<span class="st"> ."</span>)</span>
+<span id="cb40-9"><a href="#cb40-9" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb40-10"><a href="#cb40-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-11"><a href="#cb40-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Encode contacts</span></span>
+<span id="cb40-12"><a href="#cb40-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (a, b) <span class="kw">in</span> contacts</span>
+<span id="cb40-13"><a href="#cb40-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(n3_lines, <span class="st">"pat:</span><span class="sc">$</span>a<span class="st"> epi:contactWith pat:</span><span class="sc">$</span>b<span class="st"> ."</span>)</span>
+<span id="cb40-14"><a href="#cb40-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb40-15"><a href="#cb40-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-16"><a href="#cb40-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Encode HCW status</span></span>
+<span id="cb40-17"><a href="#cb40-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (id, _, _, risks, _) <span class="kw">in</span> patients</span>
+<span id="cb40-18"><a href="#cb40-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="st">"healthcare_worker"</span> <span class="kw">in</span> risks</span>
+<span id="cb40-19"><a href="#cb40-19" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(n3_lines, <span class="st">"pat:</span><span class="sc">$</span>id<span class="st"> epi:isHCW epi:true ."</span>)</span>
+<span id="cb40-20"><a href="#cb40-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb40-21"><a href="#cb40-21" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb40-22"><a href="#cb40-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-23"><a href="#cb40-23" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
+<span id="cb40-24"><a href="#cb40-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Inference rules</span></span>
+<span id="cb40-25"><a href="#cb40-25" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"# Transitive transmission chain"</span>)</span>
+<span id="cb40-26"><a href="#cb40-26" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"{ ?A epi:transmittedFrom ?B } =&gt; { ?A epi:inChainFrom ?B } ."</span>)</span>
+<span id="cb40-27"><a href="#cb40-27" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"{ ?A epi:inChainFrom ?B . ?B epi:inChainFrom ?C } =&gt; { ?A epi:inChainFrom ?C } ."</span>)</span>
+<span id="cb40-28"><a href="#cb40-28" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
+<span id="cb40-29"><a href="#cb40-29" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"# Potential spreader: transmitted to 2+ people"</span>)</span>
+<span id="cb40-30"><a href="#cb40-30" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"{ ?A epi:transmittedFrom ?X . ?B epi:transmittedFrom ?X } =&gt; { ?X epi:potentialSpreader epi:true } ."</span>)</span>
+<span id="cb40-31"><a href="#cb40-31" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
+<span id="cb40-32"><a href="#cb40-32" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"# HCW contact risk: HCW with contacts in multiple settings"</span>)</span>
+<span id="cb40-33"><a href="#cb40-33" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"{ ?X epi:isHCW epi:true . ?X epi:contactWith ?Y } =&gt; { ?Y epi:hcwExposed epi:true } ."</span>)</span>
+<span id="cb40-34"><a href="#cb40-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-35"><a href="#cb40-35" aria-hidden="true" tabindex="-1"></a>n3_text <span class="op">=</span> <span class="fu">join</span>(n3_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb40-36"><a href="#cb40-36" aria-hidden="true" tabindex="-1"></a>g_dl <span class="op">=</span> <span class="fu">parse_rdf</span>(n3_text, <span class="fu">N3Format</span>())</span>
+<span id="cb40-37"><a href="#cb40-37" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Before reasoning: </span><span class="sc">$</span>(<span class="fu">length</span>(g_dl))<span class="st"> triples"</span>)</span>
+<span id="cb40-38"><a href="#cb40-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-39"><a href="#cb40-39" aria-hidden="true" tabindex="-1"></a>g_inferred <span class="op">=</span> <span class="fu">datalog_reason</span>(g_dl)</span>
+<span id="cb40-40"><a href="#cb40-40" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"After reasoning:  </span><span class="sc">$</span>(<span class="fu">length</span>(g_inferred))<span class="st"> triples"</span>)</span>
+<span id="cb40-41"><a href="#cb40-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-42"><a href="#cb40-42" aria-hidden="true" tabindex="-1"></a><span class="co"># Potential spreaders</span></span>
+<span id="cb40-43"><a href="#cb40-43" aria-hidden="true" tabindex="-1"></a>spreaders <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"potentialSpreader"</span>), <span class="fu">epi</span>(<span class="st">"true"</span>))))</span>
+<span id="cb40-44"><a href="#cb40-44" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Potential spreaders (transmitted to ≥2):"</span>)</span>
+<span id="cb40-45"><a href="#cb40-45" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> spreaders</span>
+<span id="cb40-46"><a href="#cb40-46" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  ⚠ </span><span class="sc">$</span>(<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>])<span class="st">"</span>)</span>
+<span id="cb40-47"><a href="#cb40-47" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb40-48"><a href="#cb40-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-49"><a href="#cb40-49" aria-hidden="true" tabindex="-1"></a><span class="co"># HCW-exposed patients</span></span>
+<span id="cb40-50"><a href="#cb40-50" aria-hidden="true" tabindex="-1"></a>hcw_exposed <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"hcwExposed"</span>), <span class="fu">epi</span>(<span class="st">"true"</span>))))</span>
+<span id="cb40-51"><a href="#cb40-51" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Patients exposed via HCW contact (</span><span class="sc">$</span>(<span class="fu">length</span>(hcw_exposed))<span class="st">):"</span>)</span>
+<span id="cb40-52"><a href="#cb40-52" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> hcw_exposed</span>
+<span id="cb40-53"><a href="#cb40-53" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>])<span class="st">"</span>)</span>
+<span id="cb40-54"><a href="#cb40-54" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Before reasoning: 36 triples
+After reasoning:  72 triples
+
+Potential spreaders (transmitted to ≥2):
+  ⚠ P001
+  ⚠ P002
+  ⚠ P006
+  ⚠ P004
+  ⚠ P009
+  ⚠ P013
+  ⚠ P016
+  ⚠ P011
+  ⚠ P003
+
+Patients exposed via HCW contact (14):
+  → P001
+  → P017
+  → P012
+  → P024
+  → P019
+  → P002
+  → P010
+  → P022
+  → P007
+  → P015
+  → P009
+  → P013
+  → P016
+  → P020</code></pre>
+</div>
+</div>
+</section>
+<section id="problog-probabilistic-outbreak-modeling" class="level2">
+<h2 class="anchored" data-anchor-id="problog-probabilistic-outbreak-modeling">8. ProbLog — Probabilistic Outbreak Modeling</h2>
+<p>We model the probability of outbreak outcomes given interventions using ProbLog. The model captures: vaccination effectiveness, quarantine compliance, and secondary attack rates.</p>
+<div id="42" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="st">    % Pathogen-specific secondary attack rates</span></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::secondary_attack(rsv).</span></span>
+<span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a><span class="st">    % Vaccine effectiveness against severe disease</span></span>
+<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a><span class="st">    0.65::vaccine_effective(influenza).</span></span>
+<span id="cb42-9"><a href="#cb42-9" aria-hidden="true" tabindex="-1"></a><span class="st">    0.55::vaccine_effective(covid).</span></span>
+<span id="cb42-10"><a href="#cb42-10" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::vaccine_effective(rsv).</span></span>
+<span id="cb42-11"><a href="#cb42-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-12"><a href="#cb42-12" aria-hidden="true" tabindex="-1"></a><span class="st">    % Quarantine compliance</span></span>
+<span id="cb42-13"><a href="#cb42-13" aria-hidden="true" tabindex="-1"></a><span class="st">    0.80::quarantine_compliant(hospital).</span></span>
+<span id="cb42-14"><a href="#cb42-14" aria-hidden="true" tabindex="-1"></a><span class="st">    0.60::quarantine_compliant(care_home).</span></span>
+<span id="cb42-15"><a href="#cb42-15" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::quarantine_compliant(school).</span></span>
+<span id="cb42-16"><a href="#cb42-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-17"><a href="#cb42-17" aria-hidden="true" tabindex="-1"></a><span class="st">    % Contact rates by setting</span></span>
+<span id="cb42-18"><a href="#cb42-18" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::high_contact(hospital).</span></span>
+<span id="cb42-19"><a href="#cb42-19" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::high_contact(care_home).</span></span>
+<span id="cb42-20"><a href="#cb42-20" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::high_contact(school).</span></span>
+<span id="cb42-21"><a href="#cb42-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-22"><a href="#cb42-22" aria-hidden="true" tabindex="-1"></a><span class="st">    % Outbreak containment</span></span>
+<span id="cb42-23"><a href="#cb42-23" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb42-24"><a href="#cb42-24" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb42-25"><a href="#cb42-25" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+high_contact(Setting).</span></span>
+<span id="cb42-26"><a href="#cb42-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-27"><a href="#cb42-27" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb42-28"><a href="#cb42-28" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb42-29"><a href="#cb42-29" aria-hidden="true" tabindex="-1"></a><span class="st">        vaccine_effective(Pathogen).</span></span>
+<span id="cb42-30"><a href="#cb42-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-31"><a href="#cb42-31" aria-hidden="true" tabindex="-1"></a><span class="st">    % Severe outcome risk</span></span>
+<span id="cb42-32"><a href="#cb42-32" aria-hidden="true" tabindex="-1"></a><span class="st">    severe_outcome(Pathogen) :-</span></span>
+<span id="cb42-33"><a href="#cb42-33" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb42-34"><a href="#cb42-34" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+vaccine_effective(Pathogen).</span></span>
+<span id="cb42-35"><a href="#cb42-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-36"><a href="#cb42-36" aria-hidden="true" tabindex="-1"></a><span class="st">    % Nosocomial amplification</span></span>
+<span id="cb42-37"><a href="#cb42-37" aria-hidden="true" tabindex="-1"></a><span class="st">    nosocomial_spread(Pathogen) :-</span></span>
+<span id="cb42-38"><a href="#cb42-38" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb42-39"><a href="#cb42-39" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(hospital),</span></span>
+<span id="cb42-40"><a href="#cb42-40" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, hospital).</span></span>
+<span id="cb42-41"><a href="#cb42-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-42"><a href="#cb42-42" aria-hidden="true" tabindex="-1"></a><span class="st">    % Community spread</span></span>
+<span id="cb42-43"><a href="#cb42-43" aria-hidden="true" tabindex="-1"></a><span class="st">    community_spread(Pathogen, Setting) :-</span></span>
+<span id="cb42-44"><a href="#cb42-44" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb42-45"><a href="#cb42-45" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(Setting),</span></span>
+<span id="cb42-46"><a href="#cb42-46" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, Setting).</span></span>
+<span id="cb42-47"><a href="#cb42-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-48"><a href="#cb42-48" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, hospital)).</span></span>
+<span id="cb42-49"><a href="#cb42-49" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, care_home)).</span></span>
+<span id="cb42-50"><a href="#cb42-50" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, school)).</span></span>
+<span id="cb42-51"><a href="#cb42-51" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, hospital)).</span></span>
+<span id="cb42-52"><a href="#cb42-52" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, care_home)).</span></span>
+<span id="cb42-53"><a href="#cb42-53" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, school)).</span></span>
+<span id="cb42-54"><a href="#cb42-54" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(rsv, hospital)).</span></span>
+<span id="cb42-55"><a href="#cb42-55" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(rsv, school)).</span></span>
+<span id="cb42-56"><a href="#cb42-56" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(influenza)).</span></span>
+<span id="cb42-57"><a href="#cb42-57" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(covid)).</span></span>
+<span id="cb42-58"><a href="#cb42-58" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(rsv)).</span></span>
+<span id="cb42-59"><a href="#cb42-59" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(influenza)).</span></span>
+<span id="cb42-60"><a href="#cb42-60" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(covid)).</span></span>
+<span id="cb42-61"><a href="#cb42-61" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(rsv)).</span></span>
+<span id="cb42-62"><a href="#cb42-62" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(influenza, school)).</span></span>
+<span id="cb42-63"><a href="#cb42-63" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(covid, care_home)).</span></span>
+<span id="cb42-64"><a href="#cb42-64" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(rsv, school)).</span></span>
+<span id="cb42-65"><a href="#cb42-65" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb42-66"><a href="#cb42-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-67"><a href="#cb42-67" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">problog_query</span>(problog_program)</span>
+<span id="cb42-68"><a href="#cb42-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-69"><a href="#cb42-69" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Outbreak Containment Probabilities"</span>)</span>
+<span id="cb42-70"><a href="#cb42-70" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════════════════════"</span>)</span>
+<span id="cb42-71"><a href="#cb42-71" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
+<span id="cb42-72"><a href="#cb42-72" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"contained"</span>)</span>
+<span id="cb42-73"><a href="#cb42-73" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb42-74"><a href="#cb42-74" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb42-75"><a href="#cb42-75" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb42-76"><a href="#cb42-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-77"><a href="#cb42-77" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Severe Outcome Risk"</span>)</span>
+<span id="cb42-78"><a href="#cb42-78" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════"</span>)</span>
+<span id="cb42-79"><a href="#cb42-79" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
+<span id="cb42-80"><a href="#cb42-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"severe"</span>)</span>
+<span id="cb42-81"><a href="#cb42-81" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb42-82"><a href="#cb42-82" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb42-83"><a href="#cb42-83" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb42-84"><a href="#cb42-84" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-85"><a href="#cb42-85" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Spread Risk"</span>)</span>
+<span id="cb42-86"><a href="#cb42-86" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════"</span>)</span>
+<span id="cb42-87"><a href="#cb42-87" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
+<span id="cb42-88"><a href="#cb42-88" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"nosocomial"</span>) <span class="op">||</span> <span class="fu">startswith</span>(key, <span class="st">"community"</span>)</span>
+<span id="cb42-89"><a href="#cb42-89" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb42-90"><a href="#cb42-90" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb42-91"><a href="#cb42-91" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Outbreak Containment Probabilities
+═══════════════════════════════════
+  contained(covid,care_home)               P = 0.3705
+  contained(covid,hospital)                P = 0.548
+  contained(covid,school)                  P = 0.238
+  contained(influenza,care_home)           P = 0.4215
+  contained(influenza,hospital)            P = 0.604
+  contained(influenza,school)              P = 0.274
+  contained(rsv,hospital)                  P = 0.408
+  contained(rsv,school)                    P = 0.148
+
+Severe Outcome Risk
+═══════════════════
+  severe_outcome(covid)                    P = 0.1125
+  severe_outcome(influenza)                P = 0.1225
+  severe_outcome(rsv)                      P = 0.28
+
+Spread Risk
+═══════════
+  community_spread(covid,care_home)        P = 0.1424
+  community_spread(influenza,school)       P = 0.2331
+  community_spread(rsv,school)             P = 0.3168
+  nosocomial_spread(covid)                 P = 0.098
+  nosocomial_spread(influenza)             P = 0.1176
+  nosocomial_spread(rsv)                   P = 0.2128</code></pre>
+</div>
+</div>
+<section id="intervention-scenario-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="intervention-scenario-comparison">Intervention scenario comparison</h3>
+<div id="44" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scenario: enhanced infection control (higher quarantine compliance)</span></span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>enhanced_program <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
+<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
+<span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::secondary_attack(rsv).</span></span>
+<span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a><span class="st">    0.65::vaccine_effective(influenza).</span></span>
+<span id="cb44-8"><a href="#cb44-8" aria-hidden="true" tabindex="-1"></a><span class="st">    0.55::vaccine_effective(covid).</span></span>
+<span id="cb44-9"><a href="#cb44-9" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::vaccine_effective(rsv).</span></span>
+<span id="cb44-10"><a href="#cb44-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-11"><a href="#cb44-11" aria-hidden="true" tabindex="-1"></a><span class="st">    % Enhanced quarantine compliance</span></span>
+<span id="cb44-12"><a href="#cb44-12" aria-hidden="true" tabindex="-1"></a><span class="st">    0.95::quarantine_compliant(hospital).</span></span>
+<span id="cb44-13"><a href="#cb44-13" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::quarantine_compliant(care_home).</span></span>
+<span id="cb44-14"><a href="#cb44-14" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::quarantine_compliant(school).</span></span>
+<span id="cb44-15"><a href="#cb44-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-16"><a href="#cb44-16" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::high_contact(hospital).</span></span>
+<span id="cb44-17"><a href="#cb44-17" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::high_contact(care_home).</span></span>
+<span id="cb44-18"><a href="#cb44-18" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::high_contact(school).</span></span>
+<span id="cb44-19"><a href="#cb44-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-20"><a href="#cb44-20" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb44-21"><a href="#cb44-21" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb44-22"><a href="#cb44-22" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+high_contact(Setting).</span></span>
+<span id="cb44-23"><a href="#cb44-23" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb44-24"><a href="#cb44-24" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb44-25"><a href="#cb44-25" aria-hidden="true" tabindex="-1"></a><span class="st">        vaccine_effective(Pathogen).</span></span>
+<span id="cb44-26"><a href="#cb44-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-27"><a href="#cb44-27" aria-hidden="true" tabindex="-1"></a><span class="st">    nosocomial_spread(Pathogen) :-</span></span>
+<span id="cb44-28"><a href="#cb44-28" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb44-29"><a href="#cb44-29" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(hospital),</span></span>
+<span id="cb44-30"><a href="#cb44-30" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, hospital).</span></span>
+<span id="cb44-31"><a href="#cb44-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-32"><a href="#cb44-32" aria-hidden="true" tabindex="-1"></a><span class="st">    community_spread(Pathogen, Setting) :-</span></span>
+<span id="cb44-33"><a href="#cb44-33" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb44-34"><a href="#cb44-34" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(Setting),</span></span>
+<span id="cb44-35"><a href="#cb44-35" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, Setting).</span></span>
+<span id="cb44-36"><a href="#cb44-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-37"><a href="#cb44-37" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(influenza)).</span></span>
+<span id="cb44-38"><a href="#cb44-38" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(covid)).</span></span>
+<span id="cb44-39"><a href="#cb44-39" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(rsv)).</span></span>
+<span id="cb44-40"><a href="#cb44-40" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(influenza, school)).</span></span>
+<span id="cb44-41"><a href="#cb44-41" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(covid, care_home)).</span></span>
+<span id="cb44-42"><a href="#cb44-42" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(rsv, school)).</span></span>
+<span id="cb44-43"><a href="#cb44-43" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb44-44"><a href="#cb44-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-45"><a href="#cb44-45" aria-hidden="true" tabindex="-1"></a>enhanced <span class="op">=</span> <span class="fu">problog_query</span>(enhanced_program)</span>
+<span id="cb44-46"><a href="#cb44-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-47"><a href="#cb44-47" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Intervention Comparison: Spread Risk"</span>)</span>
+<span id="cb44-48"><a href="#cb44-48" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═════════════════════════════════════"</span>)</span>
+<span id="cb44-49"><a href="#cb44-49" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Metric"</span>, <span class="fl">42</span>), <span class="fu">rpad</span>(<span class="st">"Baseline"</span>, <span class="fl">12</span>), <span class="st">"Enhanced IPC"</span>)</span>
+<span id="cb44-50"><a href="#cb44-50" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">66</span>)</span>
+<span id="cb44-51"><a href="#cb44-51" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(enhanced)))</span>
+<span id="cb44-52"><a href="#cb44-52" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="fu">get</span>(results, key, <span class="fl">0.0</span>)</span>
+<span id="cb44-53"><a href="#cb44-53" aria-hidden="true" tabindex="-1"></a>    <span class="cn">e</span> <span class="op">=</span> enhanced[key]</span>
+<span id="cb44-54"><a href="#cb44-54" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="cn">e</span> <span class="op">-</span> b</span>
+<span id="cb44-55"><a href="#cb44-55" aria-hidden="true" tabindex="-1"></a>    arrow <span class="op">=</span> delta <span class="op">&lt;</span> <span class="op">-</span><span class="fl">0.01</span> ? <span class="st">" ↓"</span> <span class="op">:</span> (delta <span class="op">&gt;</span> <span class="fl">0.01</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">""</span>)</span>
+<span id="cb44-56"><a href="#cb44-56" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(key, <span class="fl">42</span>),</span>
+<span id="cb44-57"><a href="#cb44-57" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(b; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>),</span>
+<span id="cb44-58"><a href="#cb44-58" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(<span class="cn">e</span>; digits<span class="op">=</span><span class="fl">4</span>), arrow)</span>
+<span id="cb44-59"><a href="#cb44-59" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Intervention Comparison: Spread Risk
+═════════════════════════════════════
+Metric                                    Baseline    Enhanced IPC
+──────────────────────────────────────────────────────────────────
+community_spread(covid,care_home)         0.1424      0.1132 ↓
+community_spread(influenza,school)        0.2331      0.1717 ↓
+community_spread(rsv,school)              0.3168      0.2844 ↓
+nosocomial_spread(covid)                  0.098       0.0836 ↓
+nosocomial_spread(influenza)              0.1176      0.0937 ↓
+nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="visualisation" class="level2">
+<h2 class="anchored" data-anchor-id="visualisation">9. Visualisation</h2>
+<section id="a.-outbreak-transmission-network" class="level3">
+<h3 class="anchored" data-anchor-id="a.-outbreak-transmission-network">9a. Outbreak transmission network</h3>
+<div id="46" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Build DOT for transmission network with pathogen colouring</span></span>
+<span id="cb46-4"><a href="#cb46-4" aria-hidden="true" tabindex="-1"></a>dot_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb46-5"><a href="#cb46-5" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"digraph Outbreak {"</span>)</span>
+<span id="cb46-6"><a href="#cb46-6" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  label=</span><span class="sc">\"</span><span class="st">Multi-Pathogen Outbreak — Transmission Network</span><span class="sc">\"</span><span class="st">;"</span>)</span>
+<span id="cb46-7"><a href="#cb46-7" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  labelloc=t; fontsize=14;"</span>)</span>
+<span id="cb46-8"><a href="#cb46-8" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  node [shape=ellipse, style=filled];"</span>)</span>
+<span id="cb46-9"><a href="#cb46-9" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  edge [color=grey50];"</span>)</span>
+<span id="cb46-10"><a href="#cb46-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-11"><a href="#cb46-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Map patients to their pathogen for colouring</span></span>
+<span id="cb46-12"><a href="#cb46-12" aria-hidden="true" tabindex="-1"></a>patient_pathogen <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,String}</span>()</span>
+<span id="cb46-13"><a href="#cb46-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb46-14"><a href="#cb46-14" aria-hidden="true" tabindex="-1"></a>    patient_pathogen[r.patient] <span class="op">=</span> r.pathogen</span>
+<span id="cb46-15"><a href="#cb46-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb46-16"><a href="#cb46-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-17"><a href="#cb46-17" aria-hidden="true" tabindex="-1"></a>pathogen_colors <span class="op">=</span> <span class="fu">Dict</span>(</span>
+<span id="cb46-18"><a href="#cb46-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ffcccc</span><span class="sc">\"</span><span class="st">"</span>,   <span class="co"># red-tint</span></span>
+<span id="cb46-19"><a href="#cb46-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span>   <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ccddff</span><span class="sc">\"</span><span class="st">"</span>,   <span class="co"># blue-tint</span></span>
+<span id="cb46-20"><a href="#cb46-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">"RSV_B"</span>            <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ccffcc</span><span class="sc">\"</span><span class="st">"</span>,    <span class="co"># green-tint</span></span>
+<span id="cb46-21"><a href="#cb46-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb46-22"><a href="#cb46-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-23"><a href="#cb46-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Patient severity</span></span>
+<span id="cb46-24"><a href="#cb46-24" aria-hidden="true" tabindex="-1"></a>patient_severity <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,String}</span>()</span>
+<span id="cb46-25"><a href="#cb46-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb46-26"><a href="#cb46-26" aria-hidden="true" tabindex="-1"></a>    patient_severity[r.patient] <span class="op">=</span> r.severity</span>
+<span id="cb46-27"><a href="#cb46-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb46-28"><a href="#cb46-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-29"><a href="#cb46-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Add patient nodes</span></span>
+<span id="cb46-30"><a href="#cb46-30" aria-hidden="true" tabindex="-1"></a>seen_patients <span class="op">=</span> <span class="fu">Set</span><span class="dt">{String}</span>()</span>
+<span id="cb46-31"><a href="#cb46-31" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb46-32"><a href="#cb46-32" aria-hidden="true" tabindex="-1"></a>    pid <span class="op">=</span> r.patient</span>
+<span id="cb46-33"><a href="#cb46-33" aria-hidden="true" tabindex="-1"></a>    pid <span class="kw">in</span> seen_patients <span class="op">&amp;&amp;</span> <span class="cf">continue</span></span>
+<span id="cb46-34"><a href="#cb46-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(seen_patients, pid)</span>
+<span id="cb46-35"><a href="#cb46-35" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="fu">get</span>(pathogen_colors, r.pathogen, <span class="st">"</span><span class="sc">\"</span><span class="st">#ffffff</span><span class="sc">\"</span><span class="st">"</span>)</span>
+<span id="cb46-36"><a href="#cb46-36" aria-hidden="true" tabindex="-1"></a>    shape <span class="op">=</span> r.severity <span class="op">==</span> <span class="st">"severe"</span> ? <span class="st">"doubleoctagon"</span> <span class="op">:</span> (r.severity <span class="op">==</span> <span class="st">"moderate"</span> ? <span class="st">"octagon"</span> <span class="op">:</span> <span class="st">"ellipse"</span>)</span>
+<span id="cb46-37"><a href="#cb46-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>pid<span class="st"> [label=</span><span class="sc">\"$</span>pid<span class="sc">\"</span><span class="st">, fillcolor=</span><span class="sc">$</span>color<span class="st">, shape=</span><span class="sc">$</span>shape<span class="st">];"</span>)</span>
+<span id="cb46-38"><a href="#cb46-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb46-39"><a href="#cb46-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-40"><a href="#cb46-40" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission edges (bold)</span></span>
+<span id="cb46-41"><a href="#cb46-41" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (src, tgt) <span class="kw">in</span> transmissions</span>
+<span id="cb46-42"><a href="#cb46-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>src<span class="st"> -&gt; </span><span class="sc">$</span>tgt<span class="st"> [penwidth=2.0, color=black];"</span>)</span>
+<span id="cb46-43"><a href="#cb46-43" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb46-44"><a href="#cb46-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-45"><a href="#cb46-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Contact edges (dashed, lighter)</span></span>
+<span id="cb46-46"><a href="#cb46-46" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (a, b) <span class="kw">in</span> contacts</span>
+<span id="cb46-47"><a href="#cb46-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> !<span class="fu">any</span>(t <span class="op">-&gt;</span> (t[<span class="fl">1</span>] <span class="op">==</span> a <span class="op">&amp;&amp;</span> t[<span class="fl">2</span>] <span class="op">==</span> b) <span class="op">||</span> (t[<span class="fl">1</span>] <span class="op">==</span> b <span class="op">&amp;&amp;</span> t[<span class="fl">2</span>] <span class="op">==</span> a), transmissions)</span>
+<span id="cb46-48"><a href="#cb46-48" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>a<span class="st"> -&gt; </span><span class="sc">$</span>b<span class="st"> [style=dashed, color=grey70, arrowhead=none];"</span>)</span>
+<span id="cb46-49"><a href="#cb46-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb46-50"><a href="#cb46-50" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb46-51"><a href="#cb46-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-52"><a href="#cb46-52" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"}"</span>)</span>
+<span id="cb46-53"><a href="#cb46-53" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">join</span>(dot_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb46-54"><a href="#cb46-54" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div>
+<figure class="figure">
+<p><img src="epidemiology_files/figure-html/cell-24-output-1.svg" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="b.-epidemic-curve-by-pathogen" class="level3">
+<h3 class="anchored" data-anchor-id="b.-epidemic-curve-by-pathogen">9b. Epidemic curve by pathogen</h3>
+<p>We visualise the onset dates as a textual epidemic curve.</p>
+<div id="48" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb47"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>dates <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([r.onset for r <span class="kw">in</span> case_records]))</span>
+<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a>pathogen_short <span class="op">=</span> <span class="fu">Dict</span>(</span>
+<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"Flu"</span>,</span>
+<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span> <span class="op">=&gt;</span> <span class="st">"CoV"</span>,</span>
+<span id="cb47-5"><a href="#cb47-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"RSV_B"</span> <span class="op">=&gt;</span> <span class="st">"RSV"</span></span>
+<span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Epidemic Curve (onset dates)"</span>)</span>
+<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"════════════════════════════"</span>)</span>
+<span id="cb47-10"><a href="#cb47-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> dates</span>
+<span id="cb47-11"><a href="#cb47-11" aria-hidden="true" tabindex="-1"></a>    cases_on_date <span class="op">=</span> <span class="fu">filter</span>(r <span class="op">-&gt;</span> r.onset <span class="op">==</span> d, case_records)</span>
+<span id="cb47-12"><a href="#cb47-12" aria-hidden="true" tabindex="-1"></a>    markers <span class="op">=</span> <span class="fu">join</span>([pathogen_short[r.pathogen] for r <span class="kw">in</span> cases_on_date], <span class="st">" "</span>)</span>
+<span id="cb47-13"><a href="#cb47-13" aria-hidden="true" tabindex="-1"></a>    bar <span class="op">=</span> <span class="st">"█"</span> <span class="op">^</span> <span class="fu">length</span>(cases_on_date)</span>
+<span id="cb47-14"><a href="#cb47-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>d<span class="st"> | </span><span class="sc">$</span>bar<span class="st"> </span><span class="sc">$</span>(<span class="fu">length</span>(cases_on_date))<span class="st"> (</span><span class="sc">$</span>markers<span class="st">)"</span>)</span>
+<span id="cb47-15"><a href="#cb47-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb47-16"><a href="#cb47-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Epidemic Curve (onset dates)
+════════════════════════════
+  2025-01-14 | █ 1 (RSV)
+  2025-01-15 | ██ 2 (Flu RSV)
+  2025-01-16 | █ 1 (Flu)
+  2025-01-17 | ██ 2 (Flu RSV)
+  2025-01-18 | ██ 2 (Flu RSV)
+  2025-01-19 | ██ 2 (Flu RSV)
+  2025-01-20 | ███ 3 (CoV Flu RSV)
+  2025-01-21 | ██ 2 (CoV Flu)
+  2025-01-22 | ███ 3 (CoV CoV Flu)
+  2025-01-23 | ██ 2 (CoV Flu)
+  2025-01-24 | ██ 2 (CoV CoV)
+  2025-01-25 | ██ 2 (CoV CoV)
+  2025-01-26 | █ 1 (CoV)
+
+Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-locationpathogen-heatmap" class="level3">
+<h3 class="anchored" data-anchor-id="c.-locationpathogen-heatmap">9c. Location–Pathogen heatmap</h3>
+<div id="50" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count cases per location-pathogen combination using SPARQL</span></span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb49-4"><a href="#cb49-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb49-5"><a href="#cb49-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-6"><a href="#cb49-6" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?loc_name ?pathogen_name (COUNT(?c) AS ?n)</span></span>
+<span id="cb49-7"><a href="#cb49-7" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb49-8"><a href="#cb49-8" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb49-9"><a href="#cb49-9" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:locatedAt ?loc ;</span></span>
+<span id="cb49-10"><a href="#cb49-10" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?p .</span></span>
+<span id="cb49-11"><a href="#cb49-11" aria-hidden="true" tabindex="-1"></a><span class="st">        ?loc rdfs:label ?loc_name .</span></span>
+<span id="cb49-12"><a href="#cb49-12" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p rdfs:label ?pathogen_name .</span></span>
+<span id="cb49-13"><a href="#cb49-13" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb49-14"><a href="#cb49-14" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?loc_name ?pathogen_name</span></span>
+<span id="cb49-15"><a href="#cb49-15" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?loc_name ?pathogen_name</span></span>
+<span id="cb49-16"><a href="#cb49-16" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb49-17"><a href="#cb49-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-18"><a href="#cb49-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Build text heatmap</span></span>
+<span id="cb49-19"><a href="#cb49-19" aria-hidden="true" tabindex="-1"></a>loc_names <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([<span class="fu">readable</span>(r[<span class="st">"loc_name"</span>]) for r <span class="kw">in</span> results]))</span>
+<span id="cb49-20"><a href="#cb49-20" aria-hidden="true" tabindex="-1"></a>path_names <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([<span class="fu">readable</span>(r[<span class="st">"pathogen_name"</span>]) for r <span class="kw">in</span> results]))</span>
+<span id="cb49-21"><a href="#cb49-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-22"><a href="#cb49-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Location"</span>, <span class="fl">28</span>), <span class="fu">join</span>([<span class="fu">rpad</span>(p[<span class="fl">1</span><span class="op">:</span><span class="fu">min</span>(<span class="fl">12</span>,<span class="kw">end</span>)], <span class="fl">14</span>) for p <span class="kw">in</span> path_names]))</span>
+<span id="cb49-23"><a href="#cb49-23" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span>(<span class="fl">28</span> <span class="op">+</span> <span class="fl">14</span> <span class="op">*</span> <span class="fu">length</span>(path_names)))</span>
+<span id="cb49-24"><a href="#cb49-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-25"><a href="#cb49-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> loc <span class="kw">in</span> loc_names</span>
+<span id="cb49-26"><a href="#cb49-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">print</span>(<span class="fu">rpad</span>(loc, <span class="fl">28</span>))</span>
+<span id="cb49-27"><a href="#cb49-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> pn <span class="kw">in</span> path_names</span>
+<span id="cb49-28"><a href="#cb49-28" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> <span class="fl">0</span></span>
+<span id="cb49-29"><a href="#cb49-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> r <span class="kw">in</span> results</span>
+<span id="cb49-30"><a href="#cb49-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="fu">readable</span>(r[<span class="st">"loc_name"</span>]) <span class="op">==</span> loc <span class="op">&amp;&amp;</span> <span class="fu">readable</span>(r[<span class="st">"pathogen_name"</span>]) <span class="op">==</span> pn</span>
+<span id="cb49-31"><a href="#cb49-31" aria-hidden="true" tabindex="-1"></a>                n <span class="op">=</span> <span class="fu">parse</span>(<span class="dt">Int</span>, <span class="fu">readable</span>(r[<span class="st">"n"</span>]))</span>
+<span id="cb49-32"><a href="#cb49-32" aria-hidden="true" tabindex="-1"></a>            <span class="cf">end</span></span>
+<span id="cb49-33"><a href="#cb49-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb49-34"><a href="#cb49-34" aria-hidden="true" tabindex="-1"></a>        cell <span class="op">=</span> n <span class="op">==</span> <span class="fl">0</span> ? <span class="st">"  ·"</span> <span class="op">:</span> <span class="st">"  </span><span class="sc">$</span>(<span class="fu">repeat</span>(<span class="st">"█"</span>, n))<span class="st"> </span><span class="sc">$</span>n<span class="st">"</span></span>
+<span id="cb49-35"><a href="#cb49-35" aria-hidden="true" tabindex="-1"></a>        <span class="fu">print</span>(<span class="fu">rpad</span>(cell, <span class="fl">14</span>))</span>
+<span id="cb49-36"><a href="#cb49-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb49-37"><a href="#cb49-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>()</span>
+<span id="cb49-38"><a href="#cb49-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Location                    Influenza A   RSV subtype   SARS-CoV-2 J  
+──────────────────────────────────────────────────────────────────────
+General Hospital              █ 1           ·             ██████ 6    
+Meadowbrook Care Home         ██ 2          ·             ·           
+Oakfield Primary School       ·             ███ 3         ·           
+Riverside Academy             █ 1           █ 1           ·           
+Royal Infirmary               █ 1           ██ 2          ████ 4      
+Sunrise Care Home             ████ 4        ·             ·           </code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">10. Summary</h2>
+<p>This vignette demonstrated a comprehensive <strong>epidemiology knowledge graph</strong> integrating pathogen biology, patient demographics, clinical surveillance, contact tracing, and intervention data.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 76%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th>Epidemiological Application</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>OWL ontology</strong></td>
+<td>Pathogen taxonomy, patient risk factors, clinical entities</td>
+</tr>
+<tr class="even">
+<td><strong>Tabular mapping</strong></td>
+<td>Line list / surveillance data import</td>
+</tr>
+<tr class="odd">
+<td><strong>SHACL validation</strong></td>
+<td>Case report completeness and data quality</td>
+</tr>
+<tr class="even">
+<td><strong>SPARQL queries</strong></td>
+<td>Outbreak analytics: attack rates, severity, hotspots</td>
+</tr>
+<tr class="odd">
+<td><strong>Property paths</strong></td>
+<td>Multi-step contact tracing and transmission chains</td>
+</tr>
+<tr class="even">
+<td><strong>Datalog reasoning</strong></td>
+<td>Transitive transmission inference, super-spreader detection</td>
+</tr>
+<tr class="odd">
+<td><strong>ProbLog</strong></td>
+<td>Probabilistic containment and intervention effectiveness</td>
+</tr>
+<tr class="even">
+<td><strong>GraphViz</strong></td>
+<td>Transmission network and epidemic curve visualization</td>
+</tr>
+</tbody>
+</table>
+<p>Key epidemiological findings from the scenario analysis:</p>
+<ul>
+<li><strong>Influenza A H3N2</strong> clustered in care homes (10 cases), with severe outcomes concentrated among elderly patients with comorbidities.</li>
+<li><strong>SARS-CoV-2 JN.1</strong> formed a nosocomial chain at General Hospital (P004→P009→P013→P016→P020) amplified by healthcare worker contacts.</li>
+<li><strong>RSV-B</strong> primarily affected children in school settings, with two severe paediatric cases requiring hospitalisation.</li>
+<li><strong>ProbLog modelling</strong> showed that enhanced infection prevention and control (IPC) measures reduce nosocomial and community spread risk, with the greatest impact in care home settings.</li>
+<li><strong>Contact tracing</strong> from index case P001 reached patients across multiple settings, highlighting the role of healthcare workers as epidemiological bridges.</li>
+</ul>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

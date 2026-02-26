@@ -173,3 +173,4 @@ This was a quick taste of RDFLib.jl. Subsequent vignettes cover:
 - **Ecology Example** — an advanced end-to-end case study modeling a marine food web
 - **Ash Dieback** — modeling UK ash dieback disease spread and ecological impact
 - **Bayesian Belief Networks** — BBN analysis of species interaction networks using bbnet data
+- **Epidemiology** — comprehensive infectious disease surveillance and outbreak analysis
