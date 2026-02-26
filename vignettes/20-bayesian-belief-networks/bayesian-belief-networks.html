@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Bayesian Belief Networks for Ecology</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="bayesian-belief-networks_files/libs/clipboard/clipboard.min.js"></script>
+<script src="bayesian-belief-networks_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="bayesian-belief-networks_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="bayesian-belief-networks_files/libs/quarto-html/popper.min.js"></script>
+<script src="bayesian-belief-networks_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="bayesian-belief-networks_files/libs/quarto-html/anchor.min.js"></script>
+<link href="bayesian-belief-networks_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="bayesian-belief-networks_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="bayesian-belief-networks_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="bayesian-belief-networks_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="bayesian-belief-networks_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Bayesian Belief Networks for Ecology</h1>
+<p class="subtitle lead">Modeling Species Interactions with RDFLib.jl and the bbnet Rocky Shore Dataset</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p><strong>Bayesian Belief Networks (BBNs)</strong> are widely used in ecology to model how perturbations propagate through species interaction networks. The R package <a href="https://github.com/cran/bbnet"><code>bbnet</code></a> provides tools for building and simulating such networks, using an interaction matrix where entries on a −4 to +4 scale encode how one species affects another (negative = suppression, positive = facilitation).</p>
+<p>This vignette demonstrates how RDFLib.jl can:</p>
+<ol type="1">
+<li><strong>Represent</strong> a BBN as an RDF knowledge graph — species as nodes, weighted interactions as typed edges.</li>
+<li><strong>Validate</strong> the network structure with SHACL.</li>
+<li><strong>Query</strong> the network with SPARQL.</li>
+<li><strong>Trace</strong> indirect interaction chains with property paths.</li>
+<li><strong>Reason</strong> about network properties with Datalog.</li>
+<li><strong>Model</strong> probabilistic outcomes with ProbLog.</li>
+<li><strong>Simulate</strong> the bbnet propagation algorithm directly.</li>
+<li><strong>Visualise</strong> the network with GraphViz.</li>
+</ol>
+<p>We use two datasets from the bbnet package: a <strong>rocky shore intertidal community</strong> (9 species) and a <strong>marine protected area (MPA) management network</strong> (11 nodes).</p>
+<div id="2" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper to extract readable string from SPARQL result values</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">Literal</span>) <span class="op">=</span> x.lexical</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">URIRef</span>) <span class="op">=</span> <span class="fu">split</span>(x.value, <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>readable (generic function with 3 methods)</code></pre>
+</div>
+</div>
+</section>
+<section id="rocky-shore-bbn-ontology" class="level2">
+<h2 class="anchored" data-anchor-id="rocky-shore-bbn-ontology">1. Rocky Shore BBN — Ontology</h2>
+<p>We define a lightweight BBN ontology: nodes have types (predator, grazer, sessile, primary producer) and directed weighted interactions.</p>
+<div id="4" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>bbn  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/bbn#"</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>node <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/node/"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"bbn"</span>,  bbn)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"node"</span>, node)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co"># OWL classes</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cls <span class="kw">in</span> [<span class="st">"Node"</span>, <span class="st">"Predator"</span>, <span class="st">"Grazer"</span>, <span class="st">"Sessile"</span>, <span class="st">"PrimaryProducer"</span>,</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Interaction"</span>, <span class="st">"Scenario"</span>]</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">bbn</span>(cls), RDF.<span class="kw">type</span>, OWL.Class))</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Subclass hierarchy: ecological roles are types of Node</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sub <span class="kw">in</span> [<span class="st">"Predator"</span>, <span class="st">"Grazer"</span>, <span class="st">"Sessile"</span>, <span class="st">"PrimaryProducer"</span>]</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">bbn</span>(sub), RDFS.subClassOf, <span class="fu">bbn</span>(<span class="st">"Node"</span>)))</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Properties</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (prop, dom, rng) <span class="kw">in</span> [</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"hasInteraction"</span>, <span class="st">"Node"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"fromNode"</span>,       <span class="st">"Interaction"</span>, <span class="st">"Node"</span>),</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"toNode"</span>,         <span class="st">"Interaction"</span>, <span class="st">"Node"</span>),</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"weight"</span>,         <span class="st">"Interaction"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"nodeType"</span>,       <span class="st">"Node"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"scenarioName"</span>,   <span class="st">"Scenario"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"perturbation"</span>,   <span class="st">"Scenario"</span>, <span class="cn">nothing</span>),</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    uri <span class="op">=</span> <span class="fu">bbn</span>(prop)</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(uri, RDF.<span class="kw">type</span>, OWL.ObjectProperty))</span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(uri, RDFS.domain, <span class="fu">bbn</span>(dom)))</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> rng <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(uri, RDFS.range, <span class="fu">bbn</span>(rng)))</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Ontology: 27 triples</code></pre>
+</div>
+</div>
+</section>
+<section id="populating-the-rocky-shore-network" class="level2">
+<h2 class="anchored" data-anchor-id="populating-the-rocky-shore-network">2. Populating the Rocky Shore Network</h2>
+<p>The rocky shore BBN from Stafford et al.&nbsp;(2015) models 9 species with interaction weights on a −4 to +4 scale. We encode the interaction matrix directly from the bbnet <code>my_BBN</code> dataset.</p>
+<div id="6" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Species: (name, id, type)</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>species <span class="op">=</span> [</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Dogwhelk"</span>,       <span class="st">"dogwhelk"</span>,       <span class="st">"Predator"</span>),</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Topshell"</span>,       <span class="st">"topshell"</span>,       <span class="st">"Grazer"</span>),</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Limpet"</span>,         <span class="st">"limpet"</span>,         <span class="st">"Grazer"</span>),</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Periwinkle"</span>,     <span class="st">"periwinkle"</span>,     <span class="st">"Grazer"</span>),</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Barnacle"</span>,       <span class="st">"barnacle"</span>,       <span class="st">"Sessile"</span>),</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Green Algae"</span>,    <span class="st">"green_algae"</span>,    <span class="st">"PrimaryProducer"</span>),</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Biofilm"</span>,        <span class="st">"biofilm"</span>,        <span class="st">"PrimaryProducer"</span>),</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Coralline Algae"</span>,<span class="st">"coralline_algae"</span>,<span class="st">"PrimaryProducer"</span>),</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Fucoid Algae"</span>,   <span class="st">"fucoid_algae"</span>,   <span class="st">"PrimaryProducer"</span>),</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (name, id, typ) <span class="kw">in</span> species</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="fu">node</span>(id)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, RDF.<span class="kw">type</span>, <span class="fu">bbn</span>(<span class="st">"Node"</span>)))</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, RDF.<span class="kw">type</span>, <span class="fu">bbn</span>(typ)))</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, RDFS.label, <span class="fu">Literal</span>(name)))</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Interaction matrix from bbnet my_BBN dataset</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Rows = source (influencer), Cols = target (influenced)</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Order: Dogwhelk, Topshell, Limpet, Periwinkle, Barnacle,</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="co">#        Green Algae, Biofilm, Coralline Algae, Fucoid Algae</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a><span class="co"># nothing = no interaction (NA in R)</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>interaction_matrix <span class="op">=</span> [</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="co">#  Dw    Ts    Li    Pw    Ba    GA    Bf    CA    FA</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">1</span>    <span class="op">-</span><span class="fl">2</span>    <span class="op">-</span><span class="fl">2</span>    <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Dogwhelk</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">1</span>    <span class="op">-</span><span class="fl">1</span>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">3</span>    <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Topshell</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">2</span>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">2</span>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">4</span>    <span class="op">-</span><span class="fl">4</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Limpet</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">1</span>    <span class="op">-</span><span class="fl">1</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">3</span>    <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Periwinkle</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Barnacle</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">2</span>    <span class="op">-</span><span class="fl">3</span>    <span class="op">-</span><span class="fl">1</span>;  <span class="co"># Green Algae</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Biofilm</span></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Coralline Algae</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Fucoid Algae</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>species_ids <span class="op">=</span> [id for (_, id, _) <span class="kw">in</span> species]</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>interaction_count <span class="op">=</span> <span class="fl">0</span></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span>, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> interaction_matrix[i, j]</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> w <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>        <span class="kw">global</span> interaction_count <span class="op">+=</span> <span class="fl">1</span></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>        iid <span class="op">=</span> <span class="st">"interaction_</span><span class="sc">$</span>(interaction_count)<span class="st">"</span></span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">bbn</span>(iid), RDF.<span class="kw">type</span>, <span class="fu">bbn</span>(<span class="st">"Interaction"</span>)))</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">bbn</span>(iid), <span class="fu">bbn</span>(<span class="st">"fromNode"</span>), <span class="fu">node</span>(species_ids[i])))</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">bbn</span>(iid), <span class="fu">bbn</span>(<span class="st">"toNode"</span>), <span class="fu">node</span>(species_ids[j])))</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">bbn</span>(iid), <span class="fu">bbn</span>(<span class="st">"weight"</span>), <span class="fu">Literal</span>(w)))</span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">node</span>(species_ids[i]), <span class="fu">bbn</span>(<span class="st">"hasInteraction"</span>), <span class="fu">bbn</span>(iid)))</span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Rocky shore network: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples, </span><span class="sc">$</span>interaction_count<span class="st"> interactions"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Rocky shore network: 149 triples, 19 interactions</code></pre>
+</div>
+</div>
+</section>
+<section id="scenarios" class="level2">
+<h2 class="anchored" data-anchor-id="scenarios">3. Scenarios</h2>
+<p>The bbnet package provides three perturbation scenarios for the rocky shore: removal of dogwhelk, increase in periwinkle, and a combined scenario.</p>
+<div id="8" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>scenarios <span class="op">=</span> [</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Dogwhelk removal"</span>,    [(<span class="st">"dogwhelk"</span>, <span class="op">-</span><span class="fl">4</span>)]),</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Periwinkle increase"</span>, [(<span class="st">"periwinkle"</span>, <span class="fl">3</span>)]),</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Combined"</span>,            [(<span class="st">"dogwhelk"</span>, <span class="op">-</span><span class="fl">4</span>), (<span class="st">"periwinkle"</span>, <span class="fl">3</span>)]),</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (name, perturbations) <span class="kw">in</span> scenarios</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    sid <span class="op">=</span> <span class="fu">replace</span>(<span class="fu">lowercase</span>(name), <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="fu">bbn</span>(sid)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, RDF.<span class="kw">type</span>, <span class="fu">bbn</span>(<span class="st">"Scenario"</span>)))</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, RDFS.label, <span class="fu">Literal</span>(name)))</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (nid, val) <span class="kw">in</span> perturbations</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">bbn</span>(<span class="st">"perturbation"</span>), <span class="fu">node</span>(nid)))</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">bbn</span>(<span class="st">"perturbationValue_</span><span class="sc">$</span>nid<span class="st">"</span>), <span class="fu">Literal</span>(val)))</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total triples: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Total triples: 163</code></pre>
+</div>
+</div>
+</section>
+<section id="shacl-validation" class="level2">
+<h2 class="anchored" data-anchor-id="shacl-validation">4. SHACL Validation</h2>
+<p>We validate that every interaction has a valid weight (integer between −4 and +4), and that all nodes have labels.</p>
+<div id="10" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>shacl_ttl <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix bbn: &lt;http://example.org/bbn#&gt; .</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="st">bbn:InteractionShape a sh:NodeShape ;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="st">    sh:targetClass bbn:Interaction ;</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="st">    sh:property [</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:path bbn:fromNode ;</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:minCount 1 ;</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:maxCount 1 ;</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="st">    ] ;</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="st">    sh:property [</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:path bbn:toNode ;</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:minCount 1 ;</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:maxCount 1 ;</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="st">    ] ;</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="st">    sh:property [</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:path bbn:weight ;</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:minCount 1 ;</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:maxCount 1 ;</span></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:datatype xsd:integer ;</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:minInclusive -4 ;</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:maxInclusive 4 ;</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a><span class="st">    ] .</span></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a><span class="st">bbn:NodeShape a sh:NodeShape ;</span></span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a><span class="st">    sh:targetClass bbn:Node ;</span></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a><span class="st">    sh:property [</span></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:path rdfs:label ;</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:minCount 1 ;</span></span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:datatype xsd:string ;</span></span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a><span class="st">    ] .</span></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>shapes_graph <span class="op">=</span> <span class="fu">parse_rdf</span>(shacl_ttl, <span class="fu">TurtleFormat</span>())</span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> <span class="fu">validate</span>(g, shapes_graph)</span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"SHACL valid: </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> !report.conforms</span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> v <span class="kw">in</span> report.results</span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  ⚠ </span><span class="sc">$</span>(v.message)<span class="st">"</span>)</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>SHACL valid: true</code></pre>
+</div>
+</div>
+</section>
+<section id="sparql-queries" class="level2">
+<h2 class="anchored" data-anchor-id="sparql-queries">5. SPARQL Queries</h2>
+<section id="a.-all-interactions-with-their-weights" class="level3">
+<h3 class="anchored" data-anchor-id="a.-all-interactions-with-their-weights">5a. All interactions with their weights</h3>
+<div id="12" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?from_name ?to_name ?w</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?i a bbn:Interaction ;</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:fromNode ?from ;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:toNode ?to ;</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:weight ?w .</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="st">        ?from rdfs:label ?from_name .</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="st">        ?to rdfs:label ?to_name .</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?from_name ?to_name</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Interaction          | Weight"</span>)</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────────|───────"</span>)</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    from <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"from_name"</span>])</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    to   <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"to_name"</span>])</span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>    w    <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"w"</span>])</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"</span><span class="sc">$</span>from<span class="st"> → </span><span class="sc">$</span>to<span class="st">"</span>, <span class="fl">21</span>), <span class="st">"| "</span>, w)</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Interaction          | Weight
+─────────────────────|───────
+Dogwhelk → Barnacle  | -3
+Dogwhelk → Limpet    | -2
+Dogwhelk → Periwinkle| -2
+Dogwhelk → Topshell  | -1
+Green Algae → Biofilm| -2
+Green Algae → Coralline Algae| -3
+Green Algae → Fucoid Algae| -1
+Limpet → Biofilm     | -4
+Limpet → Green Algae | -4
+Limpet → Periwinkle  | -2
+Limpet → Topshell    | -2
+Periwinkle → Biofilm | -3
+Periwinkle → Green Algae| -3
+Periwinkle → Limpet  | -1
+Periwinkle → Topshell| -1
+Topshell → Biofilm   | -3
+Topshell → Green Algae| -3
+Topshell → Limpet    | -1
+Topshell → Periwinkle| -1</code></pre>
+</div>
+</div>
+</section>
+<section id="b.-node-degrees-most-connected-species" class="level3">
+<h3 class="anchored" data-anchor-id="b.-node-degrees-most-connected-species">5b. Node degrees — most connected species</h3>
+<div id="14" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name (COUNT(?i) AS ?out_degree)</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?n a bbn:Node ;</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="st">           rdfs:label ?name ;</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:hasInteraction ?i .</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?name</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY DESC(?out_degree)</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Species          | Out-degree"</span>)</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────|───────────"</span>)</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">17</span>), <span class="st">"| "</span>, <span class="fu">readable</span>(row[<span class="st">"out_degree"</span>]))</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Species          | Out-degree
+─────────────────|───────────
+Periwinkle       | 4
+Dogwhelk         | 4
+Topshell         | 4
+Limpet           | 4
+Green Algae      | 3</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-strongest-suppressors" class="level3">
+<h3 class="anchored" data-anchor-id="c.-strongest-suppressors">5c. Strongest suppressors</h3>
+<div id="16" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?from_name ?to_name ?w</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?i a bbn:Interaction ;</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:fromNode ?from ;</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:toNode ?to ;</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="st">           bbn:weight ?w .</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="st">        ?from rdfs:label ?from_name .</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="st">        ?to rdfs:label ?to_name .</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="st">        FILTER(?w &lt;= -3)</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?w</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Strong suppressions (weight ≤ −3):"</span>)</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"from_name"</span>]))<span class="st"> ──</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"w"</span>]))<span class="st">──▶ </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"to_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Strong suppressions (weight ≤ −3):
+  Limpet ──-4──▶ Biofilm
+  Limpet ──-4──▶ Green Algae
+  Periwinkle ──-3──▶ Green Algae
+  Topshell ──-3──▶ Green Algae
+  Green Algae ──-3──▶ Coralline Algae
+  Periwinkle ──-3──▶ Biofilm
+  Topshell ──-3──▶ Biofilm
+  Dogwhelk ──-3──▶ Barnacle</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="property-paths-indirect-interaction-chains" class="level2">
+<h2 class="anchored" data-anchor-id="property-paths-indirect-interaction-chains">6. Property Paths — Indirect Interaction Chains</h2>
+<p>Using property paths, we can find which species are indirectly connected through chains of interactions.</p>
+<div id="18" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Species reachable from Dogwhelk through any chain of interactions</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX node: &lt;http://example.org/node/&gt;</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT DISTINCT ?target_name</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="st">        node:dogwhelk bbn:hasInteraction/bbn:toNode+/bbn:hasInteraction*/bbn:toNode ?target .</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="st">        ?target rdfs:label ?target_name .</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="st">        FILTER(?target != node:dogwhelk)</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Species reachable from Dogwhelk via interaction chains:"</span>)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"target_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Species reachable from Dogwhelk via interaction chains:
+  → Limpet
+  → Periwinkle
+  → Green Algae
+  → Biofilm
+  → Topshell</code></pre>
+</div>
+</div>
+</section>
+<section id="datalog-reasoning" class="level2">
+<h2 class="anchored" data-anchor-id="datalog-reasoning">7. Datalog Reasoning</h2>
+<p>We use Datalog to infer indirect effects: if A suppresses B and B suppresses C, then A indirectly benefits C through a trophic cascade. We encode the interactions and rules as N3.</p>
+<div id="20" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build N3 with interactions and inference rules</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>n3_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix bbn: &lt;http://example.org/bbn#&gt; ."</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix node: &lt;http://example.org/node/&gt; ."</span>)</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Encode suppression edges</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span>, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> interaction_matrix[i, j]</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> w <span class="op">!==</span> <span class="cn">nothing</span> <span class="op">&amp;&amp;</span> w <span class="op">&lt;</span> <span class="fl">0</span></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(n3_lines, <span class="st">"node:</span><span class="sc">$</span>(species_ids[i])<span class="st"> bbn:suppresses node:</span><span class="sc">$</span>(species_ids[j])<span class="st"> ."</span>)</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a><span class="co"># N3 inference rules for trophic cascades</span></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"# Transitive suppression"</span>)</span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"{ ?X bbn:suppresses ?Y . ?Y bbn:suppresses ?Z } =&gt; { ?X bbn:indirectly_benefits ?Z } ."</span>)</span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"# Two-step cascade"</span>)</span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"{ ?X bbn:suppresses ?Y . ?Y bbn:suppresses ?Z . ?Z bbn:suppresses ?W } =&gt; { ?X bbn:cascade_benefits ?W } ."</span>)</span>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a>n3_text <span class="op">=</span> <span class="fu">join</span>(n3_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a>g_dl <span class="op">=</span> <span class="fu">parse_rdf</span>(n3_text, <span class="fu">N3Format</span>())</span>
+<span id="cb19-24"><a href="#cb19-24" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Before reasoning: </span><span class="sc">$</span>(<span class="fu">length</span>(g_dl))<span class="st"> triples"</span>)</span>
+<span id="cb19-25"><a href="#cb19-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-26"><a href="#cb19-26" aria-hidden="true" tabindex="-1"></a>g_inferred <span class="op">=</span> <span class="fu">datalog_reason</span>(g_dl)</span>
+<span id="cb19-27"><a href="#cb19-27" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"After reasoning:  </span><span class="sc">$</span>(<span class="fu">length</span>(g_inferred))<span class="st"> triples"</span>)</span>
+<span id="cb19-28"><a href="#cb19-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-29"><a href="#cb19-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Find indirect benefits</span></span>
+<span id="cb19-30"><a href="#cb19-30" aria-hidden="true" tabindex="-1"></a>benefits <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">bbn</span>(<span class="st">"indirectly_benefits"</span>), <span class="cn">nothing</span>)))</span>
+<span id="cb19-31"><a href="#cb19-31" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Indirect facilitation (A suppresses B, B suppresses C):"</span>)</span>
+<span id="cb19-32"><a href="#cb19-32" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> benefits</span>
+<span id="cb19-33"><a href="#cb19-33" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb19-34"><a href="#cb19-34" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.object), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb19-35"><a href="#cb19-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>x<span class="st"> ──cascade──▶ </span><span class="sc">$</span>z<span class="st">"</span>)</span>
+<span id="cb19-36"><a href="#cb19-36" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Before reasoning: 21 triples
+After reasoning:  81 triples
+
+Indirect facilitation (A suppresses B, B suppresses C):
+  dogwhelk ──cascade──▶ limpet
+  dogwhelk ──cascade──▶ periwinkle
+  dogwhelk ──cascade──▶ biofilm
+  dogwhelk ──cascade──▶ green_algae
+  dogwhelk ──cascade──▶ topshell
+  topshell ──cascade──▶ topshell
+  topshell ──cascade──▶ periwinkle
+  topshell ──cascade──▶ biofilm
+  topshell ──cascade──▶ green_algae
+  topshell ──cascade──▶ limpet
+  topshell ──cascade──▶ fucoid_algae
+  topshell ──cascade──▶ coralline_algae
+  limpet ──cascade──▶ limpet
+  limpet ──cascade──▶ periwinkle
+  limpet ──cascade──▶ biofilm
+  limpet ──cascade──▶ green_algae
+  limpet ──cascade──▶ topshell
+  limpet ──cascade──▶ fucoid_algae
+  limpet ──cascade──▶ coralline_algae
+  periwinkle ──cascade──▶ limpet
+  periwinkle ──cascade──▶ periwinkle
+  periwinkle ──cascade──▶ biofilm
+  periwinkle ──cascade──▶ green_algae
+  periwinkle ──cascade──▶ topshell
+  periwinkle ──cascade──▶ fucoid_algae
+  periwinkle ──cascade──▶ coralline_algae</code></pre>
+</div>
+</div>
+</section>
+<section id="bbn-propagation-algorithm" class="level2">
+<h2 class="anchored" data-anchor-id="bbn-propagation-algorithm">8. BBN Propagation Algorithm</h2>
+<p>The core bbnet algorithm converts the −4 to +4 scale to probabilities (0.1–0.9), then iteratively propagates perturbations using Bayesian combination rules from Stafford et al.&nbsp;(2015).</p>
+<div id="22" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="st">Convert bbnet integer scale (-4 to +4) to probability (0.1 to 0.9).</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="st">0 maps to 0.5 (no change).</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">scale_to_prob</span>(x<span class="op">::</span><span class="dt">Int</span>)</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    mapping <span class="op">=</span> <span class="fu">Dict</span>(<span class="op">-</span><span class="fl">4</span><span class="op">=&gt;</span><span class="fl">0.1</span>, <span class="op">-</span><span class="fl">3</span><span class="op">=&gt;</span><span class="fl">0.2</span>, <span class="op">-</span><span class="fl">2</span><span class="op">=&gt;</span><span class="fl">0.3</span>, <span class="op">-</span><span class="fl">1</span><span class="op">=&gt;</span><span class="fl">0.4</span>,</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>                    <span class="fl">0</span><span class="op">=&gt;</span><span class="fl">0.5</span>,  <span class="fl">1</span><span class="op">=&gt;</span><span class="fl">0.6</span>,  <span class="fl">2</span><span class="op">=&gt;</span><span class="fl">0.7</span>,  <span class="fl">3</span><span class="op">=&gt;</span><span class="fl">0.8</span>, <span class="fl">4</span><span class="op">=&gt;</span><span class="fl">0.9</span>)</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> mapping[x]</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="st">Convert probability back to bbnet scale for display.</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">prob_to_scale</span>(p<span class="op">::</span><span class="dt">Float64</span>)</span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> p <span class="op">≈</span> <span class="fl">0.5</span></span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">0.0</span></span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elseif</span> p <span class="op">&gt;</span> <span class="fl">0.5</span></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> (p <span class="op">-</span> <span class="fl">0.5</span>) <span class="op">/</span> <span class="fl">0.05</span>  <span class="co"># linear interpolation</span></span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span></span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fu">-</span>(<span class="fl">0.5</span> <span class="op">-</span> p) <span class="op">/</span> <span class="fl">0.05</span></span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a><span class="st">Combine multiple posterior probabilities using bbnet's combination rule</span></span>
+<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a><span class="st">(Stafford et al. 2015): if posteriors tend upward, combine additively</span></span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a><span class="st">to increase certainty; if downward, combine to decrease.</span></span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">combine_posteriors</span>(posteriors<span class="op">::</span><span class="dt">Vector{Float64}</span>)</span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">isempty</span>(posteriors) <span class="op">&amp;&amp;</span> <span class="cf">return</span> <span class="fl">0.5</span></span>
+<span id="cb21-31"><a href="#cb21-31" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(p <span class="op">-&gt;</span> p <span class="op">≈</span> <span class="fl">0.5</span>, posteriors) <span class="op">&amp;&amp;</span> <span class="cf">return</span> <span class="fl">0.5</span></span>
+<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-33"><a href="#cb21-33" aria-hidden="true" tabindex="-1"></a>    μ <span class="op">=</span> <span class="fu">sum</span>(posteriors) <span class="op">/</span> <span class="fu">length</span>(posteriors)</span>
+<span id="cb21-34"><a href="#cb21-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> μ <span class="op">&gt;=</span> <span class="fl">0.5</span></span>
+<span id="cb21-35"><a href="#cb21-35" aria-hidden="true" tabindex="-1"></a>        sorted <span class="op">=</span> <span class="fu">sort</span>(posteriors, rev<span class="op">=</span><span class="cn">true</span>)</span>
+<span id="cb21-36"><a href="#cb21-36" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> sorted[<span class="fl">1</span>]</span>
+<span id="cb21-37"><a href="#cb21-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">2</span><span class="op">:</span><span class="fu">length</span>(sorted)</span>
+<span id="cb21-38"><a href="#cb21-38" aria-hidden="true" tabindex="-1"></a>            result <span class="op">=</span> result <span class="op">+</span> (sorted[i] <span class="op">-</span> <span class="fl">0.5</span>) <span class="op">*</span> (<span class="fl">1.0</span> <span class="op">-</span> result)</span>
+<span id="cb21-39"><a href="#cb21-39" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb21-40"><a href="#cb21-40" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span></span>
+<span id="cb21-41"><a href="#cb21-41" aria-hidden="true" tabindex="-1"></a>        sorted <span class="op">=</span> <span class="fu">sort</span>(posteriors)</span>
+<span id="cb21-42"><a href="#cb21-42" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> sorted[<span class="fl">1</span>]</span>
+<span id="cb21-43"><a href="#cb21-43" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">2</span><span class="op">:</span><span class="fu">length</span>(sorted)</span>
+<span id="cb21-44"><a href="#cb21-44" aria-hidden="true" tabindex="-1"></a>            result <span class="op">=</span> result <span class="op">-</span> (<span class="fl">0.5</span> <span class="op">-</span> sorted[i]) <span class="op">*</span> result</span>
+<span id="cb21-45"><a href="#cb21-45" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb21-46"><a href="#cb21-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb21-47"><a href="#cb21-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result</span>
+<span id="cb21-48"><a href="#cb21-48" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb21-49"><a href="#cb21-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-50"><a href="#cb21-50" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-51"><a href="#cb21-51" aria-hidden="true" tabindex="-1"></a><span class="st">Run bbnet BBN propagation.</span></span>
+<span id="cb21-52"><a href="#cb21-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-53"><a href="#cb21-53" aria-hidden="true" tabindex="-1"></a><span class="st">Arguments:</span></span>
+<span id="cb21-54"><a href="#cb21-54" aria-hidden="true" tabindex="-1"></a><span class="st">- `interaction`: N×N matrix (nothing for no interaction, integer weight otherwise)</span></span>
+<span id="cb21-55"><a href="#cb21-55" aria-hidden="true" tabindex="-1"></a><span class="st">- `priors`: Vector of initial perturbation values (-4 to +4 scale, 0 = no change)</span></span>
+<span id="cb21-56"><a href="#cb21-56" aria-hidden="true" tabindex="-1"></a><span class="st">- `iterations`: Number of propagation steps (default 4, as in bbnet)</span></span>
+<span id="cb21-57"><a href="#cb21-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-58"><a href="#cb21-58" aria-hidden="true" tabindex="-1"></a><span class="st">Returns: Vector of final posterior probabilities for each node.</span></span>
+<span id="cb21-59"><a href="#cb21-59" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb21-60"><a href="#cb21-60" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">bbn_propagate</span>(interaction<span class="op">::</span><span class="dt">Matrix</span>, priors<span class="op">::</span><span class="dt">Vector{Int}</span>;</span>
+<span id="cb21-61"><a href="#cb21-61" aria-hidden="true" tabindex="-1"></a>                       iterations<span class="op">::</span><span class="dt">Int</span>=<span class="fl">4</span>)</span>
+<span id="cb21-62"><a href="#cb21-62" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="fu">size</span>(interaction, <span class="fl">1</span>)</span>
+<span id="cb21-63"><a href="#cb21-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-64"><a href="#cb21-64" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Convert interaction matrix to probability scale</span></span>
+<span id="cb21-65"><a href="#cb21-65" aria-hidden="true" tabindex="-1"></a>    prob_matrix <span class="op">=</span> <span class="fu">Matrix</span><span class="dt">{Union{Nothing, Float64}}</span>(<span class="cn">nothing</span>, n, n)</span>
+<span id="cb21-66"><a href="#cb21-66" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n</span>
+<span id="cb21-67"><a href="#cb21-67" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> interaction[i,j] <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb21-68"><a href="#cb21-68" aria-hidden="true" tabindex="-1"></a>            prob_matrix[i,j] <span class="op">=</span> <span class="fu">scale_to_prob</span>(interaction[i,j])</span>
+<span id="cb21-69"><a href="#cb21-69" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb21-70"><a href="#cb21-70" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb21-71"><a href="#cb21-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-72"><a href="#cb21-72" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Convert priors to probability</span></span>
+<span id="cb21-73"><a href="#cb21-73" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> [<span class="fu">scale_to_prob</span>(p) for p <span class="kw">in</span> priors]</span>
+<span id="cb21-74"><a href="#cb21-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-75"><a href="#cb21-75" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Store trajectory</span></span>
+<span id="cb21-76"><a href="#cb21-76" aria-hidden="true" tabindex="-1"></a>    trajectory <span class="op">=</span> <span class="fu">zeros</span>(n, iterations)</span>
+<span id="cb21-77"><a href="#cb21-77" aria-hidden="true" tabindex="-1"></a>    trajectory[<span class="op">:</span>, <span class="fl">1</span>] <span class="op">=</span> state</span>
+<span id="cb21-78"><a href="#cb21-78" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-79"><a href="#cb21-79" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> iter <span class="kw">in</span> <span class="fl">2</span><span class="op">:</span>iterations</span>
+<span id="cb21-80"><a href="#cb21-80" aria-hidden="true" tabindex="-1"></a>        new_state <span class="op">=</span> <span class="fu">copy</span>(state)</span>
+<span id="cb21-81"><a href="#cb21-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-82"><a href="#cb21-82" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n  <span class="co"># for each target node</span></span>
+<span id="cb21-83"><a href="#cb21-83" aria-hidden="true" tabindex="-1"></a>            posteriors <span class="op">=</span> <span class="dt">Float64</span>[]</span>
+<span id="cb21-84"><a href="#cb21-84" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-85"><a href="#cb21-85" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n  <span class="co"># for each source node</span></span>
+<span id="cb21-86"><a href="#cb21-86" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> prob_matrix[i,j] <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb21-87"><a href="#cb21-87" aria-hidden="true" tabindex="-1"></a>                    <span class="co"># Bayes: P(target↑|source) × P(source↑) + P(target↑|source↓) × P(source↓)</span></span>
+<span id="cb21-88"><a href="#cb21-88" aria-hidden="true" tabindex="-1"></a>                    p_inc <span class="op">=</span> prob_matrix[i,j]</span>
+<span id="cb21-89"><a href="#cb21-89" aria-hidden="true" tabindex="-1"></a>                    p_dec <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> p_inc</span>
+<span id="cb21-90"><a href="#cb21-90" aria-hidden="true" tabindex="-1"></a>                    posterior <span class="op">=</span> p_inc <span class="op">*</span> state[i] <span class="op">+</span> p_dec <span class="op">*</span> (<span class="fl">1.0</span> <span class="op">-</span> state[i])</span>
+<span id="cb21-91"><a href="#cb21-91" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">push!</span>(posteriors, posterior)</span>
+<span id="cb21-92"><a href="#cb21-92" aria-hidden="true" tabindex="-1"></a>                <span class="cf">end</span></span>
+<span id="cb21-93"><a href="#cb21-93" aria-hidden="true" tabindex="-1"></a>            <span class="cf">end</span></span>
+<span id="cb21-94"><a href="#cb21-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-95"><a href="#cb21-95" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="fu">isempty</span>(posteriors)</span>
+<span id="cb21-96"><a href="#cb21-96" aria-hidden="true" tabindex="-1"></a>                new_state[j] <span class="op">=</span> state[j]</span>
+<span id="cb21-97"><a href="#cb21-97" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span></span>
+<span id="cb21-98"><a href="#cb21-98" aria-hidden="true" tabindex="-1"></a>                combined <span class="op">=</span> <span class="fu">combine_posteriors</span>(posteriors)</span>
+<span id="cb21-99"><a href="#cb21-99" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Only move further from 0.5 than current state</span></span>
+<span id="cb21-100"><a href="#cb21-100" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> state[j] <span class="op">&gt;</span> <span class="fl">0.5</span> <span class="op">&amp;&amp;</span> combined <span class="op">&gt;</span> state[j]</span>
+<span id="cb21-101"><a href="#cb21-101" aria-hidden="true" tabindex="-1"></a>                    new_state[j] <span class="op">=</span> combined</span>
+<span id="cb21-102"><a href="#cb21-102" aria-hidden="true" tabindex="-1"></a>                <span class="cf">elseif</span> state[j] <span class="op">&lt;</span> <span class="fl">0.5</span> <span class="op">&amp;&amp;</span> combined <span class="op">&lt;</span> state[j]</span>
+<span id="cb21-103"><a href="#cb21-103" aria-hidden="true" tabindex="-1"></a>                    new_state[j] <span class="op">=</span> combined</span>
+<span id="cb21-104"><a href="#cb21-104" aria-hidden="true" tabindex="-1"></a>                <span class="cf">elseif</span> state[j] <span class="op">≈</span> <span class="fl">0.5</span></span>
+<span id="cb21-105"><a href="#cb21-105" aria-hidden="true" tabindex="-1"></a>                    new_state[j] <span class="op">=</span> combined</span>
+<span id="cb21-106"><a href="#cb21-106" aria-hidden="true" tabindex="-1"></a>                <span class="cf">else</span></span>
+<span id="cb21-107"><a href="#cb21-107" aria-hidden="true" tabindex="-1"></a>                    new_state[j] <span class="op">=</span> state[j]</span>
+<span id="cb21-108"><a href="#cb21-108" aria-hidden="true" tabindex="-1"></a>                <span class="cf">end</span></span>
+<span id="cb21-109"><a href="#cb21-109" aria-hidden="true" tabindex="-1"></a>            <span class="cf">end</span></span>
+<span id="cb21-110"><a href="#cb21-110" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb21-111"><a href="#cb21-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-112"><a href="#cb21-112" aria-hidden="true" tabindex="-1"></a>        state <span class="op">=</span> new_state</span>
+<span id="cb21-113"><a href="#cb21-113" aria-hidden="true" tabindex="-1"></a>        trajectory[<span class="op">:</span>, iter] <span class="op">=</span> state</span>
+<span id="cb21-114"><a href="#cb21-114" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb21-115"><a href="#cb21-115" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-116"><a href="#cb21-116" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> state, trajectory</span>
+<span id="cb21-117"><a href="#cb21-117" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb21-118"><a href="#cb21-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-119"><a href="#cb21-119" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"BBN propagation engine defined ✓"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>BBN propagation engine defined ✓</code></pre>
+</div>
+</div>
+<section id="a.-scenario-dogwhelk-removal" class="level3">
+<h3 class="anchored" data-anchor-id="a.-scenario-dogwhelk-removal">8a. Scenario: Dogwhelk Removal</h3>
+<div id="24" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>names <span class="op">=</span> [n for (n, _, _) <span class="kw">in</span> species]</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Dogwhelk removal: -4 for dogwhelk, 0 for all others</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>dogwhelk_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>state, traj <span class="op">=</span> <span class="fu">bbn_propagate</span>(interaction_matrix, dogwhelk_priors)</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Dogwhelk Removal Scenario"</span>)</span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────────────────────────────"</span>)</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Species"</span>, <span class="fl">20</span>), <span class="fu">rpad</span>(<span class="st">"Prior"</span>, <span class="fl">8</span>), <span class="fu">rpad</span>(<span class="st">"Posterior"</span>, <span class="fl">10</span>), <span class="st">"Δ Scale"</span>)</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">50</span>)</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    prior_p <span class="op">=</span> <span class="fu">scale_to_prob</span>(dogwhelk_priors[i])</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>    posterior_p <span class="op">=</span> state[i]</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="fu">prob_to_scale</span>(posterior_p)</span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>    marker <span class="op">=</span> <span class="fu">abs</span>(delta) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (delta <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">" ↓"</span>) <span class="op">:</span> <span class="st">""</span></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(names[i], <span class="fl">20</span>),</span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(posterior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
+<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
+<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Dogwhelk Removal Scenario
+─────────────────────────────────────────
+Species             Prior   Posterior Δ Scale
+──────────────────────────────────────────────────
+Dogwhelk            0.1     0.1       -8.0 ↓
+Topshell            0.5     0.58      1.6 ↑
+Limpet              0.5     0.66      3.2 ↑
+Periwinkle          0.5     0.66      3.2 ↑
+Barnacle            0.5     0.74      4.8 ↑
+Green Algae         0.5     0.32      -3.6 ↓
+Biofilm             0.5     0.32      -3.6 ↓
+Coralline Algae     0.5     0.608     2.2 ↑
+Fucoid Algae        0.5     0.536     0.7 ↑</code></pre>
+</div>
+</div>
+</section>
+<section id="b.-scenario-periwinkle-increase" class="level3">
+<h3 class="anchored" data-anchor-id="b.-scenario-periwinkle-increase">8b. Scenario: Periwinkle Increase</h3>
+<div id="26" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>winkle_priors <span class="op">=</span> [<span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>state, traj <span class="op">=</span> <span class="fu">bbn_propagate</span>(interaction_matrix, winkle_priors)</span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Periwinkle Increase Scenario"</span>)</span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────────────────────────────"</span>)</span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Species"</span>, <span class="fl">20</span>), <span class="fu">rpad</span>(<span class="st">"Prior"</span>, <span class="fl">8</span>), <span class="fu">rpad</span>(<span class="st">"Posterior"</span>, <span class="fl">10</span>), <span class="st">"Δ Scale"</span>)</span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">50</span>)</span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>    prior_p <span class="op">=</span> <span class="fu">scale_to_prob</span>(winkle_priors[i])</span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="fu">prob_to_scale</span>(state[i])</span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>    marker <span class="op">=</span> <span class="fu">abs</span>(delta) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (delta <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">" ↓"</span>) <span class="op">:</span> <span class="st">""</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(names[i], <span class="fl">20</span>),</span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Periwinkle Increase Scenario
+─────────────────────────────────────────
+Species             Prior   Posterior Δ Scale
+──────────────────────────────────────────────────
+Dogwhelk            0.5     0.5       0.0
+Topshell            0.5     0.44      -1.2 ↓
+Limpet              0.5     0.44      -1.2 ↓
+Periwinkle          0.8     0.8       6.0 ↑
+Barnacle            0.5     0.5       0.0
+Green Algae         0.5     0.32      -3.6 ↓
+Biofilm             0.5     0.32      -3.6 ↓
+Coralline Algae     0.5     0.608     2.2 ↑
+Fucoid Algae        0.5     0.536     0.7 ↑</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-combined-scenario" class="level3">
+<h3 class="anchored" data-anchor-id="c.-combined-scenario">8c. Combined Scenario</h3>
+<div id="28" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>combined_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>state, traj <span class="op">=</span> <span class="fu">bbn_propagate</span>(interaction_matrix, combined_priors)</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Combined Scenario (Dogwhelk removal + Periwinkle increase)"</span>)</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────────────────────────────"</span>)</span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Species"</span>, <span class="fl">20</span>), <span class="fu">rpad</span>(<span class="st">"Prior"</span>, <span class="fl">8</span>), <span class="fu">rpad</span>(<span class="st">"Posterior"</span>, <span class="fl">10</span>), <span class="st">"Δ Scale"</span>)</span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">50</span>)</span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>    prior_p <span class="op">=</span> <span class="fu">scale_to_prob</span>(combined_priors[i])</span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="fu">prob_to_scale</span>(state[i])</span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>    marker <span class="op">=</span> <span class="fu">abs</span>(delta) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (delta <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">" ↓"</span>) <span class="op">:</span> <span class="st">""</span></span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(names[i], <span class="fl">20</span>),</span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Combined Scenario (Dogwhelk removal + Periwinkle increase)
+─────────────────────────────────────────
+Species             Prior   Posterior Δ Scale
+──────────────────────────────────────────────────
+Dogwhelk            0.1     0.1       -8.0 ↓
+Topshell            0.5     0.555     1.1 ↑
+Limpet              0.5     0.64      2.8 ↑
+Periwinkle          0.8     0.8       6.0 ↑
+Barnacle            0.5     0.74      4.8 ↑
+Green Algae         0.5     0.275     -4.5 ↓
+Biofilm             0.5     0.295     -4.1 ↓
+Coralline Algae     0.5     0.635     2.7 ↑
+Fucoid Algae        0.5     0.545     0.9 ↑</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="problog-probabilistic-interaction-modeling" class="level2">
+<h2 class="anchored" data-anchor-id="problog-probabilistic-interaction-modeling">9. ProbLog — Probabilistic Interaction Modeling</h2>
+<p>We can model the BBN interactions as probabilistic logic rules. Each interaction becomes a probabilistic fact encoding how likely one species is to affect another.</p>
+<div id="30" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build ProbLog program from interaction matrix</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>problog_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Encode each interaction as a probabilistic fact</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span>, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">9</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> interaction_matrix[i, j]</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> w <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Convert weight to probability (0.1-0.9)</span></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> <span class="fu">scale_to_prob</span>(w)</span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>        src <span class="op">=</span> species_ids[i]</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>        tgt <span class="op">=</span> species_ids[j]</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(problog_lines, <span class="st">"</span><span class="sc">$</span>(p)<span class="st">::suppresses(</span><span class="sc">$</span>src<span class="st">, </span><span class="sc">$</span>tgt<span class="st">)."</span>)</span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Add rules for cascade effects</span></span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(problog_lines, <span class="st">""</span>)</span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(problog_lines, <span class="st">"cascade(X, Z) :- suppresses(X, Y), suppresses(Y, Z)."</span>)</span>
+<span id="cb29-19"><a href="#cb29-19" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(problog_lines, <span class="st">"long_cascade(X, W) :- suppresses(X, Y), suppresses(Y, Z), suppresses(Z, W)."</span>)</span>
+<span id="cb29-20"><a href="#cb29-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-21"><a href="#cb29-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Queries</span></span>
+<span id="cb29-22"><a href="#cb29-22" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(problog_lines, <span class="st">""</span>)</span>
+<span id="cb29-23"><a href="#cb29-23" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(problog_lines, <span class="st">"query(cascade(dogwhelk, X))."</span>)</span>
+<span id="cb29-24"><a href="#cb29-24" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(problog_lines, <span class="st">"query(long_cascade(dogwhelk, X))."</span>)</span>
+<span id="cb29-25"><a href="#cb29-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-26"><a href="#cb29-26" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="fu">join</span>(problog_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb29-27"><a href="#cb29-27" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"ProbLog program (</span><span class="sc">$</span>(<span class="fu">length</span>(problog_lines))<span class="st"> lines):"</span>)</span>
+<span id="cb29-28"><a href="#cb29-28" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(problog_program[<span class="fl">1</span><span class="op">:</span><span class="fu">min</span>(<span class="fl">500</span>, <span class="fu">length</span>(problog_program))])</span>
+<span id="cb29-29"><a href="#cb29-29" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"..."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>ProbLog program (25 lines):
+0.4::suppresses(dogwhelk, topshell).
+0.3::suppresses(dogwhelk, limpet).
+0.3::suppresses(dogwhelk, periwinkle).
+0.2::suppresses(dogwhelk, barnacle).
+0.4::suppresses(topshell, limpet).
+0.4::suppresses(topshell, periwinkle).
+0.2::suppresses(topshell, green_algae).
+0.2::suppresses(topshell, biofilm).
+0.3::suppresses(limpet, topshell).
+0.3::suppresses(limpet, periwinkle).
+0.1::suppresses(limpet, green_algae).
+0.1::suppresses(limpet, biofilm).
+0.4::suppresses(periwinkle, topshell).
+0.4::suppresses(per
+...</code></pre>
+</div>
+</div>
+<div id="32" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run ProbLog inference</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>prob_results <span class="op">=</span> <span class="fu">problog_query</span>(problog_program)</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">ProbLog: Cascade effects from Dogwhelk"</span>)</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"───────────────────────────────────────"</span>)</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (atom, prob) <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(prob_results), by<span class="op">=</span>x<span class="op">-&gt;</span>x[<span class="fl">2</span>], rev<span class="op">=</span><span class="cn">true</span>)</span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> prob <span class="op">&gt;</span> <span class="fl">0.001</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(atom, <span class="fl">45</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(prob, digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+ProbLog: Cascade effects from Dogwhelk
+───────────────────────────────────────
+  cascade(dogwhelk,limpet)                      P = 0.2608
+  cascade(dogwhelk,periwinkle)                  P = 0.2356
+  cascade(dogwhelk,topshell)                    P = 0.1992
+  long_cascade(dogwhelk,limpet)                 P = 0.1642
+  long_cascade(dogwhelk,topshell)               P = 0.1614
+  cascade(dogwhelk,biofilm)                     P = 0.1611
+  cascade(dogwhelk,green_algae)                 P = 0.1611
+  long_cascade(dogwhelk,periwinkle)             P = 0.1486
+  long_cascade(dogwhelk,biofilm)                P = 0.1475
+  long_cascade(dogwhelk,green_algae)            P = 0.1073
+  long_cascade(dogwhelk,fucoid_algae)           P = 0.0645
+  long_cascade(dogwhelk,coralline_algae)        P = 0.0322</code></pre>
+</div>
+</div>
+</section>
+<section id="mpa-network" class="level2">
+<h2 class="anchored" data-anchor-id="mpa-network">10. MPA Network</h2>
+<p>The marine protected area (MPA) network from bbnet models the effects of fishery management on a marine ecosystem with 11 nodes including fisheries, species, and economic outcomes.</p>
+<div id="34" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>mpa_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>mpa <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/mpa#"</span>)</span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>mn  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/mpa/node/"</span>)</span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(mpa_g, <span class="st">"mpa"</span>, mpa)</span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(mpa_g, <span class="st">"mn"</span>,  mn)</span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a>mpa_species <span class="op">=</span> [</span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Lobster fishery"</span>,    <span class="st">"lobster_fishery"</span>),</span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Finfish fishery"</span>,    <span class="st">"finfish_fishery"</span>),</span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Fish density"</span>,       <span class="st">"fish_density"</span>),</span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Seals"</span>,              <span class="st">"seals"</span>),</span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Lobster Recruitment"</span>,<span class="st">"lobster_recruitment"</span>),</span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Divers"</span>,             <span class="st">"divers"</span>),</span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Spiny lobster"</span>,      <span class="st">"spiny_lobster"</span>),</span>
+<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Lobster"</span>,            <span class="st">"lobster"</span>),</span>
+<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Snails"</span>,             <span class="st">"snails"</span>),</span>
+<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Algae"</span>,              <span class="st">"algae"</span>),</span>
+<span id="cb33-19"><a href="#cb33-19" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Revenue"</span>,            <span class="st">"revenue"</span>),</span>
+<span id="cb33-20"><a href="#cb33-20" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb33-21"><a href="#cb33-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-22"><a href="#cb33-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (name, id) <span class="kw">in</span> mpa_species</span>
+<span id="cb33-23"><a href="#cb33-23" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="fu">mn</span>(id)</span>
+<span id="cb33-24"><a href="#cb33-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(mpa_g, <span class="fu">Triple</span>(s, RDF.<span class="kw">type</span>, <span class="fu">mpa</span>(<span class="st">"Node"</span>)))</span>
+<span id="cb33-25"><a href="#cb33-25" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(mpa_g, <span class="fu">Triple</span>(s, RDFS.label, <span class="fu">Literal</span>(name)))</span>
+<span id="cb33-26"><a href="#cb33-26" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb33-27"><a href="#cb33-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-28"><a href="#cb33-28" aria-hidden="true" tabindex="-1"></a><span class="co"># MPA interaction matrix (from bbnet MPANetwork)</span></span>
+<span id="cb33-29"><a href="#cb33-29" aria-hidden="true" tabindex="-1"></a>mpa_matrix <span class="op">=</span> [</span>
+<span id="cb33-30"><a href="#cb33-30" aria-hidden="true" tabindex="-1"></a><span class="co">#  LobF  FinF  Fish  Seal  LobR  Div   SpLob Lob   Sna   Alg   Rev</span></span>
+<span id="cb33-31"><a href="#cb33-31" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">3</span>    <span class="op">-</span><span class="fl">4</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">4</span>;  <span class="co"># Lobster fishery</span></span>
+<span id="cb33-32"><a href="#cb33-32" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>;  <span class="co"># Finfish fishery</span></span>
+<span id="cb33-33"><a href="#cb33-33" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>    <span class="op">-</span><span class="fl">2</span>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Fish density</span></span>
+<span id="cb33-34"><a href="#cb33-34" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">2</span>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">3</span>    <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Seals</span></span>
+<span id="cb33-35"><a href="#cb33-35" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">4</span>     <span class="fl">4</span>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Lobster Recruitment</span></span>
+<span id="cb33-36"><a href="#cb33-36" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">1</span>    <span class="op">-</span><span class="fl">2</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>;  <span class="co"># Divers</span></span>
+<span id="cb33-37"><a href="#cb33-37" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">1</span>    <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Spiny lobster</span></span>
+<span id="cb33-38"><a href="#cb33-38" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>    <span class="op">-</span><span class="fl">1</span>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Lobster</span></span>
+<span id="cb33-39"><a href="#cb33-39" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>     <span class="fl">3</span>  <span class="cn">nothing</span>  <span class="op">-</span><span class="fl">2</span>  <span class="cn">nothing</span>;  <span class="co"># Snails</span></span>
+<span id="cb33-40"><a href="#cb33-40" aria-hidden="true" tabindex="-1"></a>    <span class="fl">3</span>   <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>   <span class="fl">3</span>     <span class="fl">3</span>     <span class="fl">3</span>  <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Algae</span></span>
+<span id="cb33-41"><a href="#cb33-41" aria-hidden="true" tabindex="-1"></a>  <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span> <span class="cn">nothing</span>;  <span class="co"># Revenue</span></span>
+<span id="cb33-42"><a href="#cb33-42" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb33-43"><a href="#cb33-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-44"><a href="#cb33-44" aria-hidden="true" tabindex="-1"></a>mpa_ids <span class="op">=</span> [id for (_, id) <span class="kw">in</span> mpa_species]</span>
+<span id="cb33-45"><a href="#cb33-45" aria-hidden="true" tabindex="-1"></a>mpa_interaction_count <span class="op">=</span> <span class="fl">0</span></span>
+<span id="cb33-46"><a href="#cb33-46" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">11</span>, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">11</span></span>
+<span id="cb33-47"><a href="#cb33-47" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> mpa_matrix[i, j]</span>
+<span id="cb33-48"><a href="#cb33-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> w <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb33-49"><a href="#cb33-49" aria-hidden="true" tabindex="-1"></a>        <span class="kw">global</span> mpa_interaction_count <span class="op">+=</span> <span class="fl">1</span></span>
+<span id="cb33-50"><a href="#cb33-50" aria-hidden="true" tabindex="-1"></a>        iid <span class="op">=</span> <span class="st">"mpa_int_</span><span class="sc">$</span>(mpa_interaction_count)<span class="st">"</span></span>
+<span id="cb33-51"><a href="#cb33-51" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(mpa_g, <span class="fu">Triple</span>(<span class="fu">mpa</span>(iid), RDF.<span class="kw">type</span>, <span class="fu">mpa</span>(<span class="st">"Interaction"</span>)))</span>
+<span id="cb33-52"><a href="#cb33-52" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(mpa_g, <span class="fu">Triple</span>(<span class="fu">mpa</span>(iid), <span class="fu">mpa</span>(<span class="st">"fromNode"</span>), <span class="fu">mn</span>(mpa_ids[i])))</span>
+<span id="cb33-53"><a href="#cb33-53" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(mpa_g, <span class="fu">Triple</span>(<span class="fu">mpa</span>(iid), <span class="fu">mpa</span>(<span class="st">"toNode"</span>), <span class="fu">mn</span>(mpa_ids[j])))</span>
+<span id="cb33-54"><a href="#cb33-54" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(mpa_g, <span class="fu">Triple</span>(<span class="fu">mpa</span>(iid), <span class="fu">mpa</span>(<span class="st">"weight"</span>), <span class="fu">Literal</span>(w)))</span>
+<span id="cb33-55"><a href="#cb33-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb33-56"><a href="#cb33-56" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb33-57"><a href="#cb33-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-58"><a href="#cb33-58" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"MPA network: </span><span class="sc">$</span>(<span class="fu">length</span>(mpa_g))<span class="st"> triples, </span><span class="sc">$</span>mpa_interaction_count<span class="st"> interactions"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>MPA network: 134 triples, 28 interactions</code></pre>
+</div>
+</div>
+<section id="a.-mpa-scenario-no-potting" class="level3">
+<h3 class="anchored" data-anchor-id="a.-mpa-scenario-no-potting">10a. MPA Scenario: No Potting</h3>
+<div id="36" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>mpa_names <span class="op">=</span> [n for (n, _) <span class="kw">in</span> mpa_species]</span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="co"># No potting: lobster fishery -4</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>no_potting_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a>state, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(mpa_matrix, no_potting_priors)</span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"No Potting Scenario (Lobster fishery closed)"</span>)</span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────────────────────────────────"</span>)</span>
+<span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Node"</span>, <span class="fl">24</span>), <span class="fu">rpad</span>(<span class="st">"Prior"</span>, <span class="fl">8</span>), <span class="fu">rpad</span>(<span class="st">"Posterior"</span>, <span class="fl">10</span>), <span class="st">"Δ Scale"</span>)</span>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">55</span>)</span>
+<span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">11</span></span>
+<span id="cb35-12"><a href="#cb35-12" aria-hidden="true" tabindex="-1"></a>    prior_p <span class="op">=</span> <span class="fu">scale_to_prob</span>(no_potting_priors[i])</span>
+<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="fu">prob_to_scale</span>(state[i])</span>
+<span id="cb35-14"><a href="#cb35-14" aria-hidden="true" tabindex="-1"></a>    marker <span class="op">=</span> <span class="fu">abs</span>(delta) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (delta <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">" ↓"</span>) <span class="op">:</span> <span class="st">""</span></span>
+<span id="cb35-15"><a href="#cb35-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(mpa_names[i], <span class="fl">24</span>),</span>
+<span id="cb35-16"><a href="#cb35-16" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
+<span id="cb35-17"><a href="#cb35-17" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
+<span id="cb35-18"><a href="#cb35-18" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
+<span id="cb35-19"><a href="#cb35-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>No Potting Scenario (Lobster fishery closed)
+─────────────────────────────────────────────
+Node                    Prior   Posterior Δ Scale
+───────────────────────────────────────────────────────
+Lobster fishery         0.1     0.1       -8.0 ↓
+Finfish fishery         0.5     0.5       0.0
+Fish density            0.5     0.5       0.0
+Seals                   0.5     0.5       0.0
+Lobster Recruitment     0.5     0.5       0.0
+Divers                  0.5     0.736     4.7 ↑
+Spiny lobster           0.5     0.74      4.8 ↑
+Lobster                 0.5     0.82      6.4 ↑
+Snails                  0.5     0.264     -4.7 ↓
+Algae                   0.5     0.595     1.9 ↑
+Revenue                 0.5     0.18      -6.4 ↓</code></pre>
+</div>
+</div>
+</section>
+<section id="b.-mpa-scenario-no-take-zone" class="level3">
+<h3 class="anchored" data-anchor-id="b.-mpa-scenario-no-take-zone">10b. MPA Scenario: No Take Zone</h3>
+<div id="38" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># No take: both fisheries -4</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>no_take_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>state, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(mpa_matrix, no_take_priors)</span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"No Take Zone Scenario (Both fisheries closed)"</span>)</span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────────────────────────────────"</span>)</span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Node"</span>, <span class="fl">24</span>), <span class="fu">rpad</span>(<span class="st">"Prior"</span>, <span class="fl">8</span>), <span class="fu">rpad</span>(<span class="st">"Posterior"</span>, <span class="fl">10</span>), <span class="st">"Δ Scale"</span>)</span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">55</span>)</span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">11</span></span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a>    prior_p <span class="op">=</span> <span class="fu">scale_to_prob</span>(no_take_priors[i])</span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="fu">prob_to_scale</span>(state[i])</span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>    marker <span class="op">=</span> <span class="fu">abs</span>(delta) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (delta <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">" ↓"</span>) <span class="op">:</span> <span class="st">""</span></span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(mpa_names[i], <span class="fl">24</span>),</span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
+<span id="cb37-15"><a href="#cb37-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
+<span id="cb37-16"><a href="#cb37-16" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
+<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>No Take Zone Scenario (Both fisheries closed)
+─────────────────────────────────────────────
+Node                    Prior   Posterior Δ Scale
+───────────────────────────────────────────────────────
+Lobster fishery         0.1     0.1       -8.0 ↓
+Finfish fishery         0.1     0.1       -8.0 ↓
+Fish density            0.5     0.74      4.8 ↑
+Seals                   0.5     0.644     2.9 ↑
+Lobster Recruitment     0.5     0.404     -1.9 ↓
+Divers                  0.5     0.736     4.7 ↑
+Spiny lobster           0.5     0.74      4.8 ↑
+Lobster                 0.5     0.82      6.4 ↑
+Snails                  0.5     0.264     -4.7 ↓
+Algae                   0.5     0.595     1.9 ↑
+Revenue                 0.5     0.137     -7.3 ↓</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-comparing-management-scenarios" class="level3">
+<h3 class="anchored" data-anchor-id="c.-comparing-management-scenarios">10c. Comparing Management Scenarios</h3>
+<div id="40" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Scenario Comparison: Key nodes"</span>)</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════════════════════════════════════════"</span>)</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Node"</span>, <span class="fl">24</span>), <span class="fu">rpad</span>(<span class="st">"No Potting"</span>, <span class="fl">14</span>), <span class="st">"No Take"</span>)</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">50</span>)</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>st_nopot, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(mpa_matrix, no_potting_priors)</span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a>st_notake, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(mpa_matrix, no_take_priors)</span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">11</span></span>
+<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a>    d1 <span class="op">=</span> <span class="fu">prob_to_scale</span>(st_nopot[i])</span>
+<span id="cb39-11"><a href="#cb39-11" aria-hidden="true" tabindex="-1"></a>    d2 <span class="op">=</span> <span class="fu">prob_to_scale</span>(st_notake[i])</span>
+<span id="cb39-12"><a href="#cb39-12" aria-hidden="true" tabindex="-1"></a>    m1 <span class="op">=</span> <span class="fu">abs</span>(d1) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (d1 <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">"↑"</span> <span class="op">:</span> <span class="st">"↓"</span>) <span class="op">:</span> <span class="st">"─"</span></span>
+<span id="cb39-13"><a href="#cb39-13" aria-hidden="true" tabindex="-1"></a>    m2 <span class="op">=</span> <span class="fu">abs</span>(d2) <span class="op">&gt;</span> <span class="fl">0.5</span> ? (d2 <span class="op">&gt;</span> <span class="fl">0</span> ? <span class="st">"↑"</span> <span class="op">:</span> <span class="st">"↓"</span>) <span class="op">:</span> <span class="st">"─"</span></span>
+<span id="cb39-14"><a href="#cb39-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(mpa_names[i], <span class="fl">24</span>),</span>
+<span id="cb39-15"><a href="#cb39-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="st">"</span><span class="sc">$</span>(<span class="fu">round</span>(d1, digits<span class="op">=</span><span class="fl">1</span>))<span class="st"> </span><span class="sc">$</span>m1<span class="st">"</span>, <span class="fl">14</span>),</span>
+<span id="cb39-16"><a href="#cb39-16" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">round</span>(d2, digits<span class="op">=</span><span class="fl">1</span>))<span class="st"> </span><span class="sc">$</span>m2<span class="st">"</span>)</span>
+<span id="cb39-17"><a href="#cb39-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Scenario Comparison: Key nodes
+═══════════════════════════════════════════════════════
+Node                    No Potting    No Take
+──────────────────────────────────────────────────
+Lobster fishery         -8.0 ↓        -8.0 ↓
+Finfish fishery         0.0 ─         -8.0 ↓
+Fish density            0.0 ─         4.8 ↑
+Seals                   0.0 ─         2.9 ↑
+Lobster Recruitment     0.0 ─         -1.9 ↓
+Divers                  4.7 ↑         4.7 ↑
+Spiny lobster           4.8 ↑         4.8 ↑
+Lobster                 6.4 ↑         6.4 ↑
+Snails                  -4.7 ↓        -4.7 ↓
+Algae                   1.9 ↑         1.9 ↑
+Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="visualisation" class="level2">
+<h2 class="anchored" data-anchor-id="visualisation">11. Visualisation</h2>
+<section id="a.-rocky-shore-network" class="level3">
+<h3 class="anchored" data-anchor-id="a.-rocky-shore-network">11a. Rocky Shore Network</h3>
+<div id="42" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">bbn_to_dot</span>(names, matrix; title<span class="op">=</span><span class="st">"BBN"</span>)</span>
+<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="fu">length</span>(names)</span>
+<span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a>    lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb41-6"><a href="#cb41-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"digraph BBN {"</span>)</span>
+<span id="cb41-7"><a href="#cb41-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  label=</span><span class="sc">\"$</span>title<span class="sc">\"</span><span class="st">;"</span>)</span>
+<span id="cb41-8"><a href="#cb41-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  labelloc=t;"</span>)</span>
+<span id="cb41-9"><a href="#cb41-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  fontsize=14;"</span>)</span>
+<span id="cb41-10"><a href="#cb41-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  node [shape=ellipse, style=filled, fillcolor=lightyellow];"</span>)</span>
+<span id="cb41-11"><a href="#cb41-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb41-12"><a href="#cb41-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n</span>
+<span id="cb41-13"><a href="#cb41-13" aria-hidden="true" tabindex="-1"></a>        id <span class="op">=</span> <span class="fu">replace</span>(names[i], <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb41-14"><a href="#cb41-14" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(lines, <span class="st">"  </span><span class="sc">$</span>id<span class="st"> [label=</span><span class="sc">\"$</span>(names[i])<span class="sc">\"</span><span class="st">];"</span>)</span>
+<span id="cb41-15"><a href="#cb41-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb41-16"><a href="#cb41-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb41-17"><a href="#cb41-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n</span>
+<span id="cb41-18"><a href="#cb41-18" aria-hidden="true" tabindex="-1"></a>        w <span class="op">=</span> matrix[i, j]</span>
+<span id="cb41-19"><a href="#cb41-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> w <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb41-20"><a href="#cb41-20" aria-hidden="true" tabindex="-1"></a>            src <span class="op">=</span> <span class="fu">replace</span>(names[i], <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb41-21"><a href="#cb41-21" aria-hidden="true" tabindex="-1"></a>            tgt <span class="op">=</span> <span class="fu">replace</span>(names[j], <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb41-22"><a href="#cb41-22" aria-hidden="true" tabindex="-1"></a>            color <span class="op">=</span> w <span class="op">&lt;</span> <span class="fl">0</span> ? <span class="st">"red"</span> <span class="op">:</span> <span class="st">"blue"</span></span>
+<span id="cb41-23"><a href="#cb41-23" aria-hidden="true" tabindex="-1"></a>            penwidth <span class="op">=</span> <span class="fu">max</span>(<span class="fl">1.0</span>, <span class="fu">abs</span>(w) <span class="op">*</span> <span class="fl">1.0</span>)</span>
+<span id="cb41-24"><a href="#cb41-24" aria-hidden="true" tabindex="-1"></a>            <span class="fu">push!</span>(lines, <span class="st">"  </span><span class="sc">$</span>src<span class="st"> -&gt; </span><span class="sc">$</span>tgt<span class="st"> [color=</span><span class="sc">$</span>color<span class="st">, penwidth=</span><span class="sc">$</span>penwidth<span class="st">, label=</span><span class="sc">\"$</span>w<span class="sc">\"</span><span class="st">];"</span>)</span>
+<span id="cb41-25"><a href="#cb41-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb41-26"><a href="#cb41-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb41-27"><a href="#cb41-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb41-28"><a href="#cb41-28" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"}"</span>)</span>
+<span id="cb41-29"><a href="#cb41-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fu">join</span>(lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb41-30"><a href="#cb41-30" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb41-31"><a href="#cb41-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb41-32"><a href="#cb41-32" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">bbn_to_dot</span>([n for (n, _, _) <span class="kw">in</span> species], interaction_matrix;</span>
+<span id="cb41-33"><a href="#cb41-33" aria-hidden="true" tabindex="-1"></a>                      title<span class="op">=</span><span class="st">"Rocky Shore BBN"</span>)</span>
+<span id="cb41-34"><a href="#cb41-34" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div>
+<figure class="figure">
+<p><img src="bayesian-belief-networks_files/figure-html/cell-22-output-1.svg" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="b.-mpa-network" class="level3">
+<h3 class="anchored" data-anchor-id="b.-mpa-network">11b. MPA Network</h3>
+<div id="44" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">bbn_to_dot</span>([n for (n, _) <span class="kw">in</span> mpa_species], mpa_matrix;</span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a>                      title<span class="op">=</span><span class="st">"Marine Protected Area BBN"</span>)</span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div>
+<figure class="figure">
+<p><img src="bayesian-belief-networks_files/figure-html/cell-23-output-1.svg" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="c.-scenario-impact-diagram" class="level3">
+<h3 class="anchored" data-anchor-id="c.-scenario-impact-diagram">11c. Scenario Impact Diagram</h3>
+<p>We visualise the combined dogwhelk/periwinkle scenario by colouring nodes according to their predicted change.</p>
+<div id="46" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">scenario_to_dot</span>(names, matrix, priors; title<span class="op">=</span><span class="st">"Scenario"</span>)</span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>    state, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(matrix, priors)</span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="fu">length</span>(names)</span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>    lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb43-5"><a href="#cb43-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"digraph Scenario {"</span>)</span>
+<span id="cb43-6"><a href="#cb43-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  label=</span><span class="sc">\"$</span>title<span class="sc">\"</span><span class="st">;"</span>)</span>
+<span id="cb43-7"><a href="#cb43-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  labelloc=t;"</span>)</span>
+<span id="cb43-8"><a href="#cb43-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  fontsize=14;"</span>)</span>
+<span id="cb43-9"><a href="#cb43-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"  node [shape=ellipse, style=filled];"</span>)</span>
+<span id="cb43-10"><a href="#cb43-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-11"><a href="#cb43-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n</span>
+<span id="cb43-12"><a href="#cb43-12" aria-hidden="true" tabindex="-1"></a>        id <span class="op">=</span> <span class="fu">replace</span>(names[i], <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb43-13"><a href="#cb43-13" aria-hidden="true" tabindex="-1"></a>        delta <span class="op">=</span> <span class="fu">prob_to_scale</span>(state[i])</span>
+<span id="cb43-14"><a href="#cb43-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Color: red = decrease, green = increase, yellow = neutral</span></span>
+<span id="cb43-15"><a href="#cb43-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> delta <span class="op">&lt;</span> <span class="op">-</span><span class="fl">1.0</span></span>
+<span id="cb43-16"><a href="#cb43-16" aria-hidden="true" tabindex="-1"></a>            color <span class="op">=</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ff9999</span><span class="sc">\"</span><span class="st">"</span></span>
+<span id="cb43-17"><a href="#cb43-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elseif</span> delta <span class="op">&gt;</span> <span class="fl">1.0</span></span>
+<span id="cb43-18"><a href="#cb43-18" aria-hidden="true" tabindex="-1"></a>            color <span class="op">=</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#99ff99</span><span class="sc">\"</span><span class="st">"</span></span>
+<span id="cb43-19"><a href="#cb43-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span></span>
+<span id="cb43-20"><a href="#cb43-20" aria-hidden="true" tabindex="-1"></a>            color <span class="op">=</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ffffcc</span><span class="sc">\"</span><span class="st">"</span></span>
+<span id="cb43-21"><a href="#cb43-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb43-22"><a href="#cb43-22" aria-hidden="true" tabindex="-1"></a>        label <span class="op">=</span> <span class="st">"</span><span class="sc">$</span>(names[i])<span class="sc">\\</span><span class="st">n(</span><span class="sc">$</span>(<span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>))<span class="st">)"</span></span>
+<span id="cb43-23"><a href="#cb43-23" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(lines, <span class="st">"  </span><span class="sc">$</span>id<span class="st"> [label=</span><span class="sc">\"$</span>label<span class="sc">\"</span><span class="st">, fillcolor=</span><span class="sc">$</span>color<span class="st">];"</span>)</span>
+<span id="cb43-24"><a href="#cb43-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb43-25"><a href="#cb43-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-26"><a href="#cb43-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n, j <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>n</span>
+<span id="cb43-27"><a href="#cb43-27" aria-hidden="true" tabindex="-1"></a>        w <span class="op">=</span> matrix[i, j]</span>
+<span id="cb43-28"><a href="#cb43-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> w <span class="op">!==</span> <span class="cn">nothing</span></span>
+<span id="cb43-29"><a href="#cb43-29" aria-hidden="true" tabindex="-1"></a>            src <span class="op">=</span> <span class="fu">replace</span>(names[i], <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb43-30"><a href="#cb43-30" aria-hidden="true" tabindex="-1"></a>            tgt <span class="op">=</span> <span class="fu">replace</span>(names[j], <span class="st">" "</span> <span class="op">=&gt;</span> <span class="st">"_"</span>)</span>
+<span id="cb43-31"><a href="#cb43-31" aria-hidden="true" tabindex="-1"></a>            color <span class="op">=</span> w <span class="op">&lt;</span> <span class="fl">0</span> ? <span class="st">"red"</span> <span class="op">:</span> <span class="st">"blue"</span></span>
+<span id="cb43-32"><a href="#cb43-32" aria-hidden="true" tabindex="-1"></a>            penwidth <span class="op">=</span> <span class="fu">max</span>(<span class="fl">1.0</span>, <span class="fu">abs</span>(w) <span class="op">*</span> <span class="fl">0.8</span>)</span>
+<span id="cb43-33"><a href="#cb43-33" aria-hidden="true" tabindex="-1"></a>            <span class="fu">push!</span>(lines, <span class="st">"  </span><span class="sc">$</span>src<span class="st"> -&gt; </span><span class="sc">$</span>tgt<span class="st"> [color=</span><span class="sc">$</span>color<span class="st">, penwidth=</span><span class="sc">$</span>penwidth<span class="st">];"</span>)</span>
+<span id="cb43-34"><a href="#cb43-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb43-35"><a href="#cb43-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb43-36"><a href="#cb43-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-37"><a href="#cb43-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(lines, <span class="st">"}"</span>)</span>
+<span id="cb43-38"><a href="#cb43-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fu">join</span>(lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb43-39"><a href="#cb43-39" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb43-40"><a href="#cb43-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-41"><a href="#cb43-41" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">scenario_to_dot</span>([n for (n, _, _) <span class="kw">in</span> species], interaction_matrix,</span>
+<span id="cb43-42"><a href="#cb43-42" aria-hidden="true" tabindex="-1"></a>                           combined_priors;</span>
+<span id="cb43-43"><a href="#cb43-43" aria-hidden="true" tabindex="-1"></a>                           title<span class="op">=</span><span class="st">"Combined Scenario: Dogwhelk Removal + Periwinkle Increase"</span>)</span>
+<span id="cb43-44"><a href="#cb43-44" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div>
+<figure class="figure">
+<p><img src="bayesian-belief-networks_files/figure-html/cell-24-output-1.svg" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">12. Summary</h2>
+<p>This vignette demonstrated how RDFLib.jl integrates with ecological BBN analysis:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 40%">
+<col style="width: 59%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th>Application</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>OWL ontology</strong></td>
+<td>BBN node types and interaction semantics</td>
+</tr>
+<tr class="even">
+<td><strong>RDF graph</strong></td>
+<td>Species interactions as typed, weighted edges</td>
+</tr>
+<tr class="odd">
+<td><strong>SHACL</strong></td>
+<td>Validation of interaction weights and node labels</td>
+</tr>
+<tr class="even">
+<td><strong>SPARQL</strong></td>
+<td>Query interactions, degrees, strongest effects</td>
+</tr>
+<tr class="odd">
+<td><strong>Property paths</strong></td>
+<td>Trace indirect interaction chains</td>
+</tr>
+<tr class="even">
+<td><strong>Datalog</strong></td>
+<td>Infer trophic cascades and indirect facilitation</td>
+</tr>
+<tr class="odd">
+<td><strong>ProbLog</strong></td>
+<td>Probabilistic cascade modelling</td>
+</tr>
+<tr class="even">
+<td><strong>BBN propagation</strong></td>
+<td>Stafford et al.&nbsp;(2015) algorithm for scenario analysis</td>
+</tr>
+<tr class="odd">
+<td><strong>GraphViz</strong></td>
+<td>Network and scenario impact visualisation</td>
+</tr>
+</tbody>
+</table>
+<p>Key ecological findings from the BBN analysis: - <strong>Dogwhelk removal</strong> leads to increased grazer populations, which suppress primary producers (trophic cascade). - <strong>No-take zones</strong> (both fisheries closed) benefit lobster populations and overall ecosystem health, with positive effects on divers and algae through reduced fishing pressure. - The <strong>combined rocky shore scenario</strong> shows complex interactions where dogwhelk removal and periwinkle increase have competing effects on shared prey species.</p>
+<section id="references" class="level3">
+<h3 class="anchored" data-anchor-id="references">References</h3>
+<ul>
+<li>Stafford, R., Williams, R.L. &amp; Herbert, R.J.H. (2015). Simple, intuitive and accessible Bayesian Belief Network software for non-specialists. <em>Methods in Ecology and Evolution</em>.</li>
+<li>Sherring, A. <em>et al.</em> (2024). A Bayesian Belief Network approach to assess conservation evidence within applied ecology. <em>bioRxiv</em>, 2024.06.12.598033.</li>
+</ul>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
