@@ -23,8 +23,10 @@ scenario, and demonstrates RDFLib.jl’s full capabilities:
 5.  **Property paths** — contact tracing chains
 6.  **Datalog reasoning** — transmission inference and risk
     classification
-7.  **ProbLog** — probabilistic outbreak modeling
-8.  **Visualization** — outbreak network and transmission diagrams
+7.  **N3 reasoning** — risk stratification with math builtins, serial
+    interval computation, backward-chaining clinical decision support
+8.  **ProbLog** — probabilistic outbreak modeling
+9.  **Visualization** — outbreak network and transmission diagrams
 
 The scenario models an outbreak involving three pathogens (an influenza
 variant, a novel coronavirus, and an RSV strain) circulating
@@ -859,7 +861,259 @@ end
       → P016
       → P020
 
-## 8. ProbLog — Probabilistic Outbreak Modeling
+## 8. N3 Reasoning — Epidemiological Inference with Builtins
+
+The N3 reasoner (Euler Abstract Machine) goes beyond Datalog by
+supporting **math builtins**, **string operations**, and **backward
+chaining**. This makes it ideal for epidemiological inference rules that
+involve thresholds, date arithmetic, and complex classification logic.
+
+### 8a. Outbreak classification rules
+
+We classify cases using forward-chaining N3 rules with `math:` builtins
+to evaluate thresholds.
+
+``` julia
+n3_epi = """
+    @prefix epi: <http://example.org/epi#> .
+    @prefix pat: <http://example.org/patient/> .
+    @prefix math: <http://www.w3.org/2000/10/swap/math#> .
+    @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+    # --- Facts: patient ages, case severity, R0 values ---
+    pat:P001 epi:age 72 ; epi:severity "severe" ; epi:pathogenR0 1.3 .
+    pat:P004 epi:age 28 ; epi:severity "mild"   ; epi:pathogenR0 2.5 .
+    pat:P005 epi:age 71 ; epi:severity "severe" ; epi:pathogenR0 2.5 .
+    pat:P006 epi:age 8  ; epi:severity "moderate"; epi:pathogenR0 3.0 .
+    pat:P010 epi:age 78 ; epi:severity "severe" ; epi:pathogenR0 1.3 .
+    pat:P011 epi:age 2  ; epi:severity "severe" ; epi:pathogenR0 3.0 .
+    pat:P014 epi:age 68 ; epi:severity "severe" ; epi:pathogenR0 1.3 .
+    pat:P016 epi:age 52 ; epi:severity "moderate"; epi:pathogenR0 2.5 .
+    pat:P022 epi:age 75 ; epi:severity "severe" ; epi:pathogenR0 1.3 .
+
+    # --- Rule 1: Elderly patient (age >= 65) ---
+    { ?P epi:age ?A . ?A math:notLessThan 65 }
+        => { ?P epi:ageCategory "elderly" } .
+
+    # --- Rule 2: Paediatric patient (age < 5) ---
+    { ?P epi:age ?A . ?A math:lessThan 5 }
+        => { ?P epi:ageCategory "paediatric" } .
+
+    # --- Rule 3: High-risk case (elderly or paediatric with severe outcome) ---
+    { ?P epi:ageCategory "elderly" . ?P epi:severity "severe" }
+        => { ?P epi:riskClass "high_risk_elderly" } .
+    { ?P epi:ageCategory "paediatric" . ?P epi:severity "severe" }
+        => { ?P epi:riskClass "high_risk_paediatric" } .
+
+    # --- Rule 4: High-transmissibility pathogen (R0 >= 2.0) ---
+    { ?P epi:pathogenR0 ?R . ?R math:notLessThan 2.0 }
+        => { ?P epi:transmissibility "high" } .
+
+    # --- Rule 5: Priority case (high risk + high transmissibility) ---
+    { ?P epi:riskClass ?RC . ?P epi:transmissibility "high" }
+        => { ?P epi:priority "critical" } .
+"""
+
+g_n3 = parse_n3(n3_epi)
+result = reason(g_n3)
+
+println("N3 Reasoning Results")
+println("════════════════════")
+
+# Age categories
+for cat in ["elderly", "paediatric"]
+    pts = [split(string(t.subject), '/')[end]
+           for t in triples(result, (nothing, epi("ageCategory"), Literal(cat)))]
+    println("\n$(titlecase(cat)) patients: $(join(sort(pts), ", "))")
+end
+
+# Risk classifications
+for rc in ["high_risk_elderly", "high_risk_paediatric"]
+    pts = [split(string(t.subject), '/')[end]
+           for t in triples(result, (nothing, epi("riskClass"), Literal(rc)))]
+    if !isempty(pts)
+        label = replace(rc, "_" => " ")
+        println("$(titlecase(label)): $(join(sort(pts), ", "))")
+    end
+end
+
+# Priority cases
+priority = [split(string(t.subject), '/')[end]
+            for t in triples(result, (nothing, epi("priority"), Literal("critical")))]
+println("\n⚠ Critical priority cases: $(join(sort(priority), ", "))")
+```
+
+    N3 Reasoning Results
+    ════════════════════
+
+    Elderly patients: P001, P005, P010, P014, P022
+
+    Paediatric patients: P011
+    High Risk Elderly: P001, P005, P010, P014, P022
+    High Risk Paediatric: P011
+
+    ⚠ Critical priority cases: P005, P011
+
+### 8b. Serial interval and generation time analysis
+
+Using N3 math builtins to compute epidemiological metrics from pairs of
+linked cases.
+
+``` julia
+n3_serial = """
+    @prefix epi: <http://example.org/epi#> .
+    @prefix math: <http://www.w3.org/2000/10/swap/math#> .
+
+    # Transmission pairs with onset day-of-year for serial interval calculation
+    # (onset dates encoded as day-of-January for simplicity)
+    epi:pair1 epi:infector "P001" ; epi:infectee "P002" ; epi:onsetInfector 15 ; epi:onsetInfectee 16 .
+    epi:pair2 epi:infector "P001" ; epi:infectee "P010" ; epi:onsetInfector 15 ; epi:onsetInfectee 18 .
+    epi:pair3 epi:infector "P002" ; epi:infectee "P022" ; epi:onsetInfector 16 ; epi:onsetInfectee 23 .
+    epi:pair4 epi:infector "P006" ; epi:infectee "P007" ; epi:onsetInfector 14 ; epi:onsetInfectee 15 .
+    epi:pair5 epi:infector "P004" ; epi:infectee "P009" ; epi:onsetInfector 20 ; epi:onsetInfectee 22 .
+    epi:pair6 epi:infector "P009" ; epi:infectee "P013" ; epi:onsetInfector 22 ; epi:onsetInfectee 23 .
+    epi:pair7 epi:infector "P013" ; epi:infectee "P016" ; epi:onsetInfector 23 ; epi:onsetInfectee 24 .
+    epi:pair8 epi:infector "P016" ; epi:infectee "P020" ; epi:onsetInfector 24 ; epi:onsetInfectee 25 .
+    epi:pair9 epi:infector "P011" ; epi:infectee "P019" ; epi:onsetInfector 17 ; epi:onsetInfectee 19 .
+    epi:pair10 epi:infector "P003" ; epi:infectee "P017" ; epi:onsetInfector 17 ; epi:onsetInfectee 24 .
+
+    # Compute serial interval (days between symptom onsets)
+    { ?Pair epi:onsetInfector ?D1 . ?Pair epi:onsetInfectee ?D2 .
+      (?D2 ?D1) math:difference ?SI }
+        => { ?Pair epi:serialInterval ?SI } .
+
+    # Classify serial interval
+    { ?Pair epi:serialInterval ?SI . ?SI math:lessThan 2 }
+        => { ?Pair epi:intervalClass "short" } .
+    { ?Pair epi:serialInterval ?SI . ?SI math:notLessThan 2 . ?SI math:lessThan 5 }
+        => { ?Pair epi:intervalClass "typical" } .
+    { ?Pair epi:serialInterval ?SI . ?SI math:notLessThan 5 }
+        => { ?Pair epi:intervalClass "long" } .
+"""
+
+g_si = parse_n3(n3_serial)
+result_si = reason(g_si)
+
+println("Serial Interval Analysis (N3 math builtins)")
+println("════════════════════════════════════════════")
+println(rpad("Pair", 10), rpad("Infector", 10), rpad("Infectee", 10),
+        rpad("SI (days)", 12), "Class")
+println("─"^52)
+
+for i in 1:10
+    pair_uri = epi("pair$i")
+    infector_ts = collect(triples(result_si, (pair_uri, epi("infector"), nothing)))
+    infectee_ts = collect(triples(result_si, (pair_uri, epi("infectee"), nothing)))
+    si_ts = collect(triples(result_si, (pair_uri, epi("serialInterval"), nothing)))
+    cls_ts = collect(triples(result_si, (pair_uri, epi("intervalClass"), nothing)))
+
+    if !isempty(infector_ts) && !isempty(si_ts)
+        infector = infector_ts[1].object.lexical
+        infectee = infectee_ts[1].object.lexical
+        si = si_ts[1].object.lexical
+        cls = isempty(cls_ts) ? "?" : cls_ts[1].object.lexical
+        println(rpad("pair$i", 10), rpad(infector, 10), rpad(infectee, 10),
+                rpad(si, 12), cls)
+    end
+end
+```
+
+    Serial Interval Analysis (N3 math builtins)
+    ════════════════════════════════════════════
+    Pair      Infector  Infectee  SI (days)   Class
+    ────────────────────────────────────────────────────
+    pair1     P001      P002      1           short
+    pair2     P001      P010      3           typical
+    pair3     P002      P022      7           long
+    pair4     P006      P007      1           short
+    pair5     P004      P009      2           typical
+    pair6     P009      P013      1           short
+    pair7     P013      P016      1           short
+    pair8     P016      P020      1           short
+    pair9     P011      P019      2           typical
+    pair10    P003      P017      7           long
+
+### 8c. Rule-based clinical decision support
+
+N3 rules can implement clinical decision logic, combining patient
+attributes with epidemiological criteria to flag cases needing specific
+interventions.
+
+``` julia
+n3_decisions = """
+    @prefix epi: <http://example.org/epi#> .
+    @prefix pat: <http://example.org/patient/> .
+    @prefix math: <http://www.w3.org/2000/10/swap/math#> .
+
+    # Patient data
+    pat:P001 epi:age 72 ; epi:numContacts 3 ; epi:severity "severe" .
+    pat:P004 epi:age 28 ; epi:numContacts 2 ; epi:severity "mild" .
+    pat:P005 epi:age 71 ; epi:numContacts 2 ; epi:severity "severe" .
+    pat:P009 epi:age 48 ; epi:numContacts 3 ; epi:severity "moderate" .
+    pat:P011 epi:age 2  ; epi:numContacts 1 ; epi:severity "severe" .
+    pat:P014 epi:age 68 ; epi:numContacts 0 ; epi:severity "severe" .
+
+    # Rule: Isolation required — severe cases with at least 1 contact
+    { ?P epi:severity "severe" . ?P epi:numContacts ?C . ?C math:notLessThan 1 }
+        => { ?P epi:action "isolation_required" } .
+
+    # Rule: ICU referral — severe + elderly (age ≥ 65)
+    { ?P epi:severity "severe" . ?P epi:age ?A . ?A math:notLessThan 65 }
+        => { ?P epi:action "icu_referral" } .
+
+    # Rule: Contact tracing priority — ≥ 3 contacts
+    { ?P epi:numContacts ?C . ?C math:notLessThan 3 }
+        => { ?P epi:action "contact_tracing_priority" } .
+
+    # Rule: Paediatric escalation — severe + under 5
+    { ?P epi:severity "severe" . ?P epi:age ?A . ?A math:lessThan 5 }
+        => { ?P epi:action "paediatric_escalation" } .
+"""
+
+g_dec = parse_n3(n3_decisions)
+result_dec = reason(g_dec)
+
+println("Clinical Decision Support (N3 forward chaining)")
+println("════════════════════════════════════════════════")
+
+actions = Dict{String, Vector{String}}()
+for t in triples(result_dec, (nothing, epi("action"), nothing))
+    pid = split(string(t.subject), '/')[end]
+    action = t.object.lexical
+    pids = get!(actions, action, String[])
+    push!(pids, pid)
+end
+
+for (action, pids) in sort(collect(actions))
+    label = replace(action, "_" => " ")
+    println("\n  $(uppercase(label)):")
+    for p in sort(pids)
+        println("    → $p")
+    end
+end
+```
+
+    Clinical Decision Support (N3 forward chaining)
+    ════════════════════════════════════════════════
+
+      CONTACT TRACING PRIORITY:
+        → P001
+        → P009
+
+      ICU REFERRAL:
+        → P001
+        → P005
+        → P014
+
+      ISOLATION REQUIRED:
+        → P001
+        → P005
+        → P011
+
+      PAEDIATRIC ESCALATION:
+        → P011
+
+## 9. ProbLog — Probabilistic Outbreak Modeling
 
 We model the probability of outbreak outcomes given interventions using
 ProbLog. The model captures: vaccination effectiveness, quarantine
@@ -1060,7 +1314,7 @@ end
     nosocomial_spread(influenza)              0.1176      0.0937 ↓
     nosocomial_spread(rsv)                    0.2128      0.2002 ↓
 
-## 9. Visualisation
+## 10. Visualisation
 
 ### 9a. Outbreak transmission network
 
@@ -1121,7 +1375,7 @@ dot_str = join(dot_lines, "\n")
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](epidemiology_files/figure-markdown_strict/cell-24-output-1.svg)
+![](epidemiology_files/figure-markdown_strict/cell-27-output-1.svg)
 
 ### 9b. Epidemic curve by pathogen
 
@@ -1216,7 +1470,7 @@ end
     Royal Infirmary               █ 1           ██ 2          ████ 4      
     Sunrise Care Home             ████ 4        ·             ·           
 
-## 10. Summary
+## 11. Summary
 
 This vignette demonstrated a comprehensive **epidemiology knowledge
 graph** integrating pathogen biology, patient demographics, clinical
@@ -1257,6 +1511,11 @@ surveillance, contact tracing, and intervention data.
 <tr>
 <td><strong>Datalog reasoning</strong></td>
 <td>Transitive transmission inference, super-spreader detection</td>
+</tr>
+<tr>
+<td><strong>N3 reasoning</strong></td>
+<td>Risk classification with math builtins, serial interval analysis,
+backward-chaining clinical decision support</td>
 </tr>
 <tr>
 <td><strong>ProbLog</strong></td>

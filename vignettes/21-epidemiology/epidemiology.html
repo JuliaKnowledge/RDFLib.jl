@@ -110,6 +110,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><strong>SPARQL queries</strong> — epidemiological analytics</li>
 <li><strong>Property paths</strong> — contact tracing chains</li>
 <li><strong>Datalog reasoning</strong> — transmission inference and risk classification</li>
+<li><strong>N3 reasoning</strong> — risk stratification with math builtins, serial interval computation, backward-chaining clinical decision support</li>
 <li><strong>ProbLog</strong> — probabilistic outbreak modeling</li>
 <li><strong>Visualization</strong> — outbreak network and transmission diagrams</li>
 </ol>
@@ -950,101 +951,346 @@ Patients exposed via HCW contact (14):
 </div>
 </div>
 </section>
-<section id="problog-probabilistic-outbreak-modeling" class="level2">
-<h2 class="anchored" data-anchor-id="problog-probabilistic-outbreak-modeling">8. ProbLog — Probabilistic Outbreak Modeling</h2>
-<p>We model the probability of outbreak outcomes given interventions using ProbLog. The model captures: vaccination effectiveness, quarantine compliance, and secondary attack rates.</p>
+<section id="n3-reasoning-epidemiological-inference-with-builtins" class="level2">
+<h2 class="anchored" data-anchor-id="n3-reasoning-epidemiological-inference-with-builtins">8. N3 Reasoning — Epidemiological Inference with Builtins</h2>
+<p>The N3 reasoner (Euler Abstract Machine) goes beyond Datalog by supporting <strong>math builtins</strong>, <strong>string operations</strong>, and <strong>backward chaining</strong>. This makes it ideal for epidemiological inference rules that involve thresholds, date arithmetic, and complex classification logic.</p>
+<section id="a.-outbreak-classification-rules" class="level3">
+<h3 class="anchored" data-anchor-id="a.-outbreak-classification-rules">8a. Outbreak classification rules</h3>
+<p>We classify cases using forward-chaining N3 rules with <code>math:</code> builtins to evaluate thresholds.</p>
 <div id="42" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="st">"""</span></span>
-<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="st">    % Pathogen-specific secondary attack rates</span></span>
-<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
-<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
-<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::secondary_attack(rsv).</span></span>
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>n3_epi <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix pat: &lt;http://example.org/patient/&gt; .</span></span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .</span></span>
 <span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a><span class="st">    % Vaccine effectiveness against severe disease</span></span>
-<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a><span class="st">    0.65::vaccine_effective(influenza).</span></span>
-<span id="cb42-9"><a href="#cb42-9" aria-hidden="true" tabindex="-1"></a><span class="st">    0.55::vaccine_effective(covid).</span></span>
-<span id="cb42-10"><a href="#cb42-10" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::vaccine_effective(rsv).</span></span>
-<span id="cb42-11"><a href="#cb42-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-12"><a href="#cb42-12" aria-hidden="true" tabindex="-1"></a><span class="st">    % Quarantine compliance</span></span>
-<span id="cb42-13"><a href="#cb42-13" aria-hidden="true" tabindex="-1"></a><span class="st">    0.80::quarantine_compliant(hospital).</span></span>
-<span id="cb42-14"><a href="#cb42-14" aria-hidden="true" tabindex="-1"></a><span class="st">    0.60::quarantine_compliant(care_home).</span></span>
-<span id="cb42-15"><a href="#cb42-15" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::quarantine_compliant(school).</span></span>
-<span id="cb42-16"><a href="#cb42-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-17"><a href="#cb42-17" aria-hidden="true" tabindex="-1"></a><span class="st">    % Contact rates by setting</span></span>
-<span id="cb42-18"><a href="#cb42-18" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::high_contact(hospital).</span></span>
-<span id="cb42-19"><a href="#cb42-19" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::high_contact(care_home).</span></span>
-<span id="cb42-20"><a href="#cb42-20" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::high_contact(school).</span></span>
+<span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a><span class="st">    # --- Facts: patient ages, case severity, R0 values ---</span></span>
+<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P001 epi:age 72 ; epi:severity "severe" ; epi:pathogenR0 1.3 .</span></span>
+<span id="cb42-9"><a href="#cb42-9" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P004 epi:age 28 ; epi:severity "mild"   ; epi:pathogenR0 2.5 .</span></span>
+<span id="cb42-10"><a href="#cb42-10" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P005 epi:age 71 ; epi:severity "severe" ; epi:pathogenR0 2.5 .</span></span>
+<span id="cb42-11"><a href="#cb42-11" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P006 epi:age 8  ; epi:severity "moderate"; epi:pathogenR0 3.0 .</span></span>
+<span id="cb42-12"><a href="#cb42-12" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P010 epi:age 78 ; epi:severity "severe" ; epi:pathogenR0 1.3 .</span></span>
+<span id="cb42-13"><a href="#cb42-13" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P011 epi:age 2  ; epi:severity "severe" ; epi:pathogenR0 3.0 .</span></span>
+<span id="cb42-14"><a href="#cb42-14" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P014 epi:age 68 ; epi:severity "severe" ; epi:pathogenR0 1.3 .</span></span>
+<span id="cb42-15"><a href="#cb42-15" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P016 epi:age 52 ; epi:severity "moderate"; epi:pathogenR0 2.5 .</span></span>
+<span id="cb42-16"><a href="#cb42-16" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P022 epi:age 75 ; epi:severity "severe" ; epi:pathogenR0 1.3 .</span></span>
+<span id="cb42-17"><a href="#cb42-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-18"><a href="#cb42-18" aria-hidden="true" tabindex="-1"></a><span class="st">    # --- Rule 1: Elderly patient (age &gt;= 65) ---</span></span>
+<span id="cb42-19"><a href="#cb42-19" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:age ?A . ?A math:notLessThan 65 }</span></span>
+<span id="cb42-20"><a href="#cb42-20" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:ageCategory "elderly" } .</span></span>
 <span id="cb42-21"><a href="#cb42-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-22"><a href="#cb42-22" aria-hidden="true" tabindex="-1"></a><span class="st">    % Outbreak containment</span></span>
-<span id="cb42-23"><a href="#cb42-23" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
-<span id="cb42-24"><a href="#cb42-24" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
-<span id="cb42-25"><a href="#cb42-25" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+high_contact(Setting).</span></span>
-<span id="cb42-26"><a href="#cb42-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-27"><a href="#cb42-27" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
-<span id="cb42-28"><a href="#cb42-28" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
-<span id="cb42-29"><a href="#cb42-29" aria-hidden="true" tabindex="-1"></a><span class="st">        vaccine_effective(Pathogen).</span></span>
-<span id="cb42-30"><a href="#cb42-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-31"><a href="#cb42-31" aria-hidden="true" tabindex="-1"></a><span class="st">    % Severe outcome risk</span></span>
-<span id="cb42-32"><a href="#cb42-32" aria-hidden="true" tabindex="-1"></a><span class="st">    severe_outcome(Pathogen) :-</span></span>
-<span id="cb42-33"><a href="#cb42-33" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
-<span id="cb42-34"><a href="#cb42-34" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+vaccine_effective(Pathogen).</span></span>
+<span id="cb42-22"><a href="#cb42-22" aria-hidden="true" tabindex="-1"></a><span class="st">    # --- Rule 2: Paediatric patient (age &lt; 5) ---</span></span>
+<span id="cb42-23"><a href="#cb42-23" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:age ?A . ?A math:lessThan 5 }</span></span>
+<span id="cb42-24"><a href="#cb42-24" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:ageCategory "paediatric" } .</span></span>
+<span id="cb42-25"><a href="#cb42-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-26"><a href="#cb42-26" aria-hidden="true" tabindex="-1"></a><span class="st">    # --- Rule 3: High-risk case (elderly or paediatric with severe outcome) ---</span></span>
+<span id="cb42-27"><a href="#cb42-27" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:ageCategory "elderly" . ?P epi:severity "severe" }</span></span>
+<span id="cb42-28"><a href="#cb42-28" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:riskClass "high_risk_elderly" } .</span></span>
+<span id="cb42-29"><a href="#cb42-29" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:ageCategory "paediatric" . ?P epi:severity "severe" }</span></span>
+<span id="cb42-30"><a href="#cb42-30" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:riskClass "high_risk_paediatric" } .</span></span>
+<span id="cb42-31"><a href="#cb42-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-32"><a href="#cb42-32" aria-hidden="true" tabindex="-1"></a><span class="st">    # --- Rule 4: High-transmissibility pathogen (R0 &gt;= 2.0) ---</span></span>
+<span id="cb42-33"><a href="#cb42-33" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:pathogenR0 ?R . ?R math:notLessThan 2.0 }</span></span>
+<span id="cb42-34"><a href="#cb42-34" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:transmissibility "high" } .</span></span>
 <span id="cb42-35"><a href="#cb42-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-36"><a href="#cb42-36" aria-hidden="true" tabindex="-1"></a><span class="st">    % Nosocomial amplification</span></span>
-<span id="cb42-37"><a href="#cb42-37" aria-hidden="true" tabindex="-1"></a><span class="st">    nosocomial_spread(Pathogen) :-</span></span>
-<span id="cb42-38"><a href="#cb42-38" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
-<span id="cb42-39"><a href="#cb42-39" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(hospital),</span></span>
-<span id="cb42-40"><a href="#cb42-40" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, hospital).</span></span>
-<span id="cb42-41"><a href="#cb42-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-42"><a href="#cb42-42" aria-hidden="true" tabindex="-1"></a><span class="st">    % Community spread</span></span>
-<span id="cb42-43"><a href="#cb42-43" aria-hidden="true" tabindex="-1"></a><span class="st">    community_spread(Pathogen, Setting) :-</span></span>
-<span id="cb42-44"><a href="#cb42-44" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
-<span id="cb42-45"><a href="#cb42-45" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(Setting),</span></span>
-<span id="cb42-46"><a href="#cb42-46" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, Setting).</span></span>
-<span id="cb42-47"><a href="#cb42-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-48"><a href="#cb42-48" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, hospital)).</span></span>
-<span id="cb42-49"><a href="#cb42-49" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, care_home)).</span></span>
-<span id="cb42-50"><a href="#cb42-50" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, school)).</span></span>
-<span id="cb42-51"><a href="#cb42-51" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, hospital)).</span></span>
-<span id="cb42-52"><a href="#cb42-52" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, care_home)).</span></span>
-<span id="cb42-53"><a href="#cb42-53" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, school)).</span></span>
-<span id="cb42-54"><a href="#cb42-54" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(rsv, hospital)).</span></span>
-<span id="cb42-55"><a href="#cb42-55" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(rsv, school)).</span></span>
-<span id="cb42-56"><a href="#cb42-56" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(influenza)).</span></span>
-<span id="cb42-57"><a href="#cb42-57" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(covid)).</span></span>
-<span id="cb42-58"><a href="#cb42-58" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(rsv)).</span></span>
-<span id="cb42-59"><a href="#cb42-59" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(influenza)).</span></span>
-<span id="cb42-60"><a href="#cb42-60" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(covid)).</span></span>
-<span id="cb42-61"><a href="#cb42-61" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(rsv)).</span></span>
-<span id="cb42-62"><a href="#cb42-62" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(influenza, school)).</span></span>
-<span id="cb42-63"><a href="#cb42-63" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(covid, care_home)).</span></span>
-<span id="cb42-64"><a href="#cb42-64" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(rsv, school)).</span></span>
-<span id="cb42-65"><a href="#cb42-65" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
-<span id="cb42-66"><a href="#cb42-66" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-67"><a href="#cb42-67" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">problog_query</span>(problog_program)</span>
-<span id="cb42-68"><a href="#cb42-68" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-69"><a href="#cb42-69" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Outbreak Containment Probabilities"</span>)</span>
-<span id="cb42-70"><a href="#cb42-70" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════════════════════"</span>)</span>
-<span id="cb42-71"><a href="#cb42-71" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
-<span id="cb42-72"><a href="#cb42-72" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"contained"</span>)</span>
-<span id="cb42-73"><a href="#cb42-73" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb42-74"><a href="#cb42-74" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb42-75"><a href="#cb42-75" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb42-76"><a href="#cb42-76" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-77"><a href="#cb42-77" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Severe Outcome Risk"</span>)</span>
-<span id="cb42-78"><a href="#cb42-78" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════"</span>)</span>
-<span id="cb42-79"><a href="#cb42-79" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
-<span id="cb42-80"><a href="#cb42-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"severe"</span>)</span>
-<span id="cb42-81"><a href="#cb42-81" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb42-82"><a href="#cb42-82" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb42-83"><a href="#cb42-83" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb42-84"><a href="#cb42-84" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb42-85"><a href="#cb42-85" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Spread Risk"</span>)</span>
-<span id="cb42-86"><a href="#cb42-86" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════"</span>)</span>
-<span id="cb42-87"><a href="#cb42-87" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
-<span id="cb42-88"><a href="#cb42-88" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"nosocomial"</span>) <span class="op">||</span> <span class="fu">startswith</span>(key, <span class="st">"community"</span>)</span>
-<span id="cb42-89"><a href="#cb42-89" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb42-90"><a href="#cb42-90" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb42-91"><a href="#cb42-91" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb42-36"><a href="#cb42-36" aria-hidden="true" tabindex="-1"></a><span class="st">    # --- Rule 5: Priority case (high risk + high transmissibility) ---</span></span>
+<span id="cb42-37"><a href="#cb42-37" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:riskClass ?RC . ?P epi:transmissibility "high" }</span></span>
+<span id="cb42-38"><a href="#cb42-38" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:priority "critical" } .</span></span>
+<span id="cb42-39"><a href="#cb42-39" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb42-40"><a href="#cb42-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-41"><a href="#cb42-41" aria-hidden="true" tabindex="-1"></a>g_n3 <span class="op">=</span> <span class="fu">parse_n3</span>(n3_epi)</span>
+<span id="cb42-42"><a href="#cb42-42" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> <span class="fu">reason</span>(g_n3)</span>
+<span id="cb42-43"><a href="#cb42-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-44"><a href="#cb42-44" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3 Reasoning Results"</span>)</span>
+<span id="cb42-45"><a href="#cb42-45" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"════════════════════"</span>)</span>
+<span id="cb42-46"><a href="#cb42-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-47"><a href="#cb42-47" aria-hidden="true" tabindex="-1"></a><span class="co"># Age categories</span></span>
+<span id="cb42-48"><a href="#cb42-48" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cat <span class="kw">in</span> [<span class="st">"elderly"</span>, <span class="st">"paediatric"</span>]</span>
+<span id="cb42-49"><a href="#cb42-49" aria-hidden="true" tabindex="-1"></a>    pts <span class="op">=</span> [<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb42-50"><a href="#cb42-50" aria-hidden="true" tabindex="-1"></a>           for t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"ageCategory"</span>), <span class="fu">Literal</span>(cat)))]</span>
+<span id="cb42-51"><a href="#cb42-51" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"</span><span class="sc">\n$</span>(<span class="fu">titlecase</span>(cat))<span class="st"> patients: </span><span class="sc">$</span>(<span class="fu">join</span>(<span class="fu">sort</span>(pts), <span class="st">", "</span>))<span class="st">"</span>)</span>
+<span id="cb42-52"><a href="#cb42-52" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb42-53"><a href="#cb42-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-54"><a href="#cb42-54" aria-hidden="true" tabindex="-1"></a><span class="co"># Risk classifications</span></span>
+<span id="cb42-55"><a href="#cb42-55" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> rc <span class="kw">in</span> [<span class="st">"high_risk_elderly"</span>, <span class="st">"high_risk_paediatric"</span>]</span>
+<span id="cb42-56"><a href="#cb42-56" aria-hidden="true" tabindex="-1"></a>    pts <span class="op">=</span> [<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb42-57"><a href="#cb42-57" aria-hidden="true" tabindex="-1"></a>           for t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"riskClass"</span>), <span class="fu">Literal</span>(rc)))]</span>
+<span id="cb42-58"><a href="#cb42-58" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> !<span class="fu">isempty</span>(pts)</span>
+<span id="cb42-59"><a href="#cb42-59" aria-hidden="true" tabindex="-1"></a>        label <span class="op">=</span> <span class="fu">replace</span>(rc, <span class="st">"_"</span> <span class="op">=&gt;</span> <span class="st">" "</span>)</span>
+<span id="cb42-60"><a href="#cb42-60" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>(<span class="fu">titlecase</span>(label))<span class="st">: </span><span class="sc">$</span>(<span class="fu">join</span>(<span class="fu">sort</span>(pts), <span class="st">", "</span>))<span class="st">"</span>)</span>
+<span id="cb42-61"><a href="#cb42-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb42-62"><a href="#cb42-62" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb42-63"><a href="#cb42-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-64"><a href="#cb42-64" aria-hidden="true" tabindex="-1"></a><span class="co"># Priority cases</span></span>
+<span id="cb42-65"><a href="#cb42-65" aria-hidden="true" tabindex="-1"></a>priority <span class="op">=</span> [<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb42-66"><a href="#cb42-66" aria-hidden="true" tabindex="-1"></a>            for t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"priority"</span>), <span class="fu">Literal</span>(<span class="st">"critical"</span>)))]</span>
+<span id="cb42-67"><a href="#cb42-67" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">⚠ Critical priority cases: </span><span class="sc">$</span>(<span class="fu">join</span>(<span class="fu">sort</span>(priority), <span class="st">", "</span>))<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>N3 Reasoning Results
+════════════════════
+
+Elderly patients: P001, P005, P010, P014, P022
+
+Paediatric patients: P011
+High Risk Elderly: P001, P005, P010, P014, P022
+High Risk Paediatric: P011
+
+⚠ Critical priority cases: P005, P011</code></pre>
+</div>
+</div>
+</section>
+<section id="b.-serial-interval-and-generation-time-analysis" class="level3">
+<h3 class="anchored" data-anchor-id="b.-serial-interval-and-generation-time-analysis">8b. Serial interval and generation time analysis</h3>
+<p>Using N3 math builtins to compute epidemiological metrics from pairs of linked cases.</p>
+<div id="44" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>n3_serial <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
+<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
+<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a><span class="st">    # Transmission pairs with onset day-of-year for serial interval calculation</span></span>
+<span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a><span class="st">    # (onset dates encoded as day-of-January for simplicity)</span></span>
+<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair1 epi:infector "P001" ; epi:infectee "P002" ; epi:onsetInfector 15 ; epi:onsetInfectee 16 .</span></span>
+<span id="cb44-8"><a href="#cb44-8" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair2 epi:infector "P001" ; epi:infectee "P010" ; epi:onsetInfector 15 ; epi:onsetInfectee 18 .</span></span>
+<span id="cb44-9"><a href="#cb44-9" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair3 epi:infector "P002" ; epi:infectee "P022" ; epi:onsetInfector 16 ; epi:onsetInfectee 23 .</span></span>
+<span id="cb44-10"><a href="#cb44-10" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair4 epi:infector "P006" ; epi:infectee "P007" ; epi:onsetInfector 14 ; epi:onsetInfectee 15 .</span></span>
+<span id="cb44-11"><a href="#cb44-11" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair5 epi:infector "P004" ; epi:infectee "P009" ; epi:onsetInfector 20 ; epi:onsetInfectee 22 .</span></span>
+<span id="cb44-12"><a href="#cb44-12" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair6 epi:infector "P009" ; epi:infectee "P013" ; epi:onsetInfector 22 ; epi:onsetInfectee 23 .</span></span>
+<span id="cb44-13"><a href="#cb44-13" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair7 epi:infector "P013" ; epi:infectee "P016" ; epi:onsetInfector 23 ; epi:onsetInfectee 24 .</span></span>
+<span id="cb44-14"><a href="#cb44-14" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair8 epi:infector "P016" ; epi:infectee "P020" ; epi:onsetInfector 24 ; epi:onsetInfectee 25 .</span></span>
+<span id="cb44-15"><a href="#cb44-15" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair9 epi:infector "P011" ; epi:infectee "P019" ; epi:onsetInfector 17 ; epi:onsetInfectee 19 .</span></span>
+<span id="cb44-16"><a href="#cb44-16" aria-hidden="true" tabindex="-1"></a><span class="st">    epi:pair10 epi:infector "P003" ; epi:infectee "P017" ; epi:onsetInfector 17 ; epi:onsetInfectee 24 .</span></span>
+<span id="cb44-17"><a href="#cb44-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-18"><a href="#cb44-18" aria-hidden="true" tabindex="-1"></a><span class="st">    # Compute serial interval (days between symptom onsets)</span></span>
+<span id="cb44-19"><a href="#cb44-19" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?Pair epi:onsetInfector ?D1 . ?Pair epi:onsetInfectee ?D2 .</span></span>
+<span id="cb44-20"><a href="#cb44-20" aria-hidden="true" tabindex="-1"></a><span class="st">      (?D2 ?D1) math:difference ?SI }</span></span>
+<span id="cb44-21"><a href="#cb44-21" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?Pair epi:serialInterval ?SI } .</span></span>
+<span id="cb44-22"><a href="#cb44-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-23"><a href="#cb44-23" aria-hidden="true" tabindex="-1"></a><span class="st">    # Classify serial interval</span></span>
+<span id="cb44-24"><a href="#cb44-24" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?Pair epi:serialInterval ?SI . ?SI math:lessThan 2 }</span></span>
+<span id="cb44-25"><a href="#cb44-25" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?Pair epi:intervalClass "short" } .</span></span>
+<span id="cb44-26"><a href="#cb44-26" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?Pair epi:serialInterval ?SI . ?SI math:notLessThan 2 . ?SI math:lessThan 5 }</span></span>
+<span id="cb44-27"><a href="#cb44-27" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?Pair epi:intervalClass "typical" } .</span></span>
+<span id="cb44-28"><a href="#cb44-28" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?Pair epi:serialInterval ?SI . ?SI math:notLessThan 5 }</span></span>
+<span id="cb44-29"><a href="#cb44-29" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?Pair epi:intervalClass "long" } .</span></span>
+<span id="cb44-30"><a href="#cb44-30" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb44-31"><a href="#cb44-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-32"><a href="#cb44-32" aria-hidden="true" tabindex="-1"></a>g_si <span class="op">=</span> <span class="fu">parse_n3</span>(n3_serial)</span>
+<span id="cb44-33"><a href="#cb44-33" aria-hidden="true" tabindex="-1"></a>result_si <span class="op">=</span> <span class="fu">reason</span>(g_si)</span>
+<span id="cb44-34"><a href="#cb44-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-35"><a href="#cb44-35" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Serial Interval Analysis (N3 math builtins)"</span>)</span>
+<span id="cb44-36"><a href="#cb44-36" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"════════════════════════════════════════════"</span>)</span>
+<span id="cb44-37"><a href="#cb44-37" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Pair"</span>, <span class="fl">10</span>), <span class="fu">rpad</span>(<span class="st">"Infector"</span>, <span class="fl">10</span>), <span class="fu">rpad</span>(<span class="st">"Infectee"</span>, <span class="fl">10</span>),</span>
+<span id="cb44-38"><a href="#cb44-38" aria-hidden="true" tabindex="-1"></a>        <span class="fu">rpad</span>(<span class="st">"SI (days)"</span>, <span class="fl">12</span>), <span class="st">"Class"</span>)</span>
+<span id="cb44-39"><a href="#cb44-39" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">52</span>)</span>
+<span id="cb44-40"><a href="#cb44-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-41"><a href="#cb44-41" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="fl">10</span></span>
+<span id="cb44-42"><a href="#cb44-42" aria-hidden="true" tabindex="-1"></a>    pair_uri <span class="op">=</span> <span class="fu">epi</span>(<span class="st">"pair</span><span class="sc">$</span>i<span class="st">"</span>)</span>
+<span id="cb44-43"><a href="#cb44-43" aria-hidden="true" tabindex="-1"></a>    infector_ts <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(result_si, (pair_uri, <span class="fu">epi</span>(<span class="st">"infector"</span>), <span class="cn">nothing</span>)))</span>
+<span id="cb44-44"><a href="#cb44-44" aria-hidden="true" tabindex="-1"></a>    infectee_ts <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(result_si, (pair_uri, <span class="fu">epi</span>(<span class="st">"infectee"</span>), <span class="cn">nothing</span>)))</span>
+<span id="cb44-45"><a href="#cb44-45" aria-hidden="true" tabindex="-1"></a>    si_ts <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(result_si, (pair_uri, <span class="fu">epi</span>(<span class="st">"serialInterval"</span>), <span class="cn">nothing</span>)))</span>
+<span id="cb44-46"><a href="#cb44-46" aria-hidden="true" tabindex="-1"></a>    cls_ts <span class="op">=</span> <span class="fu">collect</span>(<span class="fu">triples</span>(result_si, (pair_uri, <span class="fu">epi</span>(<span class="st">"intervalClass"</span>), <span class="cn">nothing</span>)))</span>
+<span id="cb44-47"><a href="#cb44-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-48"><a href="#cb44-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> !<span class="fu">isempty</span>(infector_ts) <span class="op">&amp;&amp;</span> !<span class="fu">isempty</span>(si_ts)</span>
+<span id="cb44-49"><a href="#cb44-49" aria-hidden="true" tabindex="-1"></a>        infector <span class="op">=</span> infector_ts[<span class="fl">1</span>].object.lexical</span>
+<span id="cb44-50"><a href="#cb44-50" aria-hidden="true" tabindex="-1"></a>        infectee <span class="op">=</span> infectee_ts[<span class="fl">1</span>].object.lexical</span>
+<span id="cb44-51"><a href="#cb44-51" aria-hidden="true" tabindex="-1"></a>        si <span class="op">=</span> si_ts[<span class="fl">1</span>].object.lexical</span>
+<span id="cb44-52"><a href="#cb44-52" aria-hidden="true" tabindex="-1"></a>        cls <span class="op">=</span> <span class="fu">isempty</span>(cls_ts) ? <span class="st">"?"</span> <span class="op">:</span> cls_ts[<span class="fl">1</span>].object.lexical</span>
+<span id="cb44-53"><a href="#cb44-53" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"pair</span><span class="sc">$</span>i<span class="st">"</span>, <span class="fl">10</span>), <span class="fu">rpad</span>(infector, <span class="fl">10</span>), <span class="fu">rpad</span>(infectee, <span class="fl">10</span>),</span>
+<span id="cb44-54"><a href="#cb44-54" aria-hidden="true" tabindex="-1"></a>                <span class="fu">rpad</span>(si, <span class="fl">12</span>), cls)</span>
+<span id="cb44-55"><a href="#cb44-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb44-56"><a href="#cb44-56" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Serial Interval Analysis (N3 math builtins)
+════════════════════════════════════════════
+Pair      Infector  Infectee  SI (days)   Class
+────────────────────────────────────────────────────
+pair1     P001      P002      1           short
+pair2     P001      P010      3           typical
+pair3     P002      P022      7           long
+pair4     P006      P007      1           short
+pair5     P004      P009      2           typical
+pair6     P009      P013      1           short
+pair7     P013      P016      1           short
+pair8     P016      P020      1           short
+pair9     P011      P019      2           typical
+pair10    P003      P017      7           long</code></pre>
+</div>
+</div>
+</section>
+<section id="c.-rule-based-clinical-decision-support" class="level3">
+<h3 class="anchored" data-anchor-id="c.-rule-based-clinical-decision-support">8c. Rule-based clinical decision support</h3>
+<p>N3 rules can implement clinical decision logic, combining patient attributes with epidemiological criteria to flag cases needing specific interventions.</p>
+<div id="46" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>n3_decisions <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
+<span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix pat: &lt;http://example.org/patient/&gt; .</span></span>
+<span id="cb46-4"><a href="#cb46-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
+<span id="cb46-5"><a href="#cb46-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-6"><a href="#cb46-6" aria-hidden="true" tabindex="-1"></a><span class="st">    # Patient data</span></span>
+<span id="cb46-7"><a href="#cb46-7" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P001 epi:age 72 ; epi:numContacts 3 ; epi:severity "severe" .</span></span>
+<span id="cb46-8"><a href="#cb46-8" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P004 epi:age 28 ; epi:numContacts 2 ; epi:severity "mild" .</span></span>
+<span id="cb46-9"><a href="#cb46-9" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P005 epi:age 71 ; epi:numContacts 2 ; epi:severity "severe" .</span></span>
+<span id="cb46-10"><a href="#cb46-10" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P009 epi:age 48 ; epi:numContacts 3 ; epi:severity "moderate" .</span></span>
+<span id="cb46-11"><a href="#cb46-11" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P011 epi:age 2  ; epi:numContacts 1 ; epi:severity "severe" .</span></span>
+<span id="cb46-12"><a href="#cb46-12" aria-hidden="true" tabindex="-1"></a><span class="st">    pat:P014 epi:age 68 ; epi:numContacts 0 ; epi:severity "severe" .</span></span>
+<span id="cb46-13"><a href="#cb46-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-14"><a href="#cb46-14" aria-hidden="true" tabindex="-1"></a><span class="st">    # Rule: Isolation required — severe cases with at least 1 contact</span></span>
+<span id="cb46-15"><a href="#cb46-15" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:severity "severe" . ?P epi:numContacts ?C . ?C math:notLessThan 1 }</span></span>
+<span id="cb46-16"><a href="#cb46-16" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:action "isolation_required" } .</span></span>
+<span id="cb46-17"><a href="#cb46-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-18"><a href="#cb46-18" aria-hidden="true" tabindex="-1"></a><span class="st">    # Rule: ICU referral — severe + elderly (age ≥ 65)</span></span>
+<span id="cb46-19"><a href="#cb46-19" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:severity "severe" . ?P epi:age ?A . ?A math:notLessThan 65 }</span></span>
+<span id="cb46-20"><a href="#cb46-20" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:action "icu_referral" } .</span></span>
+<span id="cb46-21"><a href="#cb46-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-22"><a href="#cb46-22" aria-hidden="true" tabindex="-1"></a><span class="st">    # Rule: Contact tracing priority — ≥ 3 contacts</span></span>
+<span id="cb46-23"><a href="#cb46-23" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:numContacts ?C . ?C math:notLessThan 3 }</span></span>
+<span id="cb46-24"><a href="#cb46-24" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:action "contact_tracing_priority" } .</span></span>
+<span id="cb46-25"><a href="#cb46-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-26"><a href="#cb46-26" aria-hidden="true" tabindex="-1"></a><span class="st">    # Rule: Paediatric escalation — severe + under 5</span></span>
+<span id="cb46-27"><a href="#cb46-27" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?P epi:severity "severe" . ?P epi:age ?A . ?A math:lessThan 5 }</span></span>
+<span id="cb46-28"><a href="#cb46-28" aria-hidden="true" tabindex="-1"></a><span class="st">        =&gt; { ?P epi:action "paediatric_escalation" } .</span></span>
+<span id="cb46-29"><a href="#cb46-29" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb46-30"><a href="#cb46-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-31"><a href="#cb46-31" aria-hidden="true" tabindex="-1"></a>g_dec <span class="op">=</span> <span class="fu">parse_n3</span>(n3_decisions)</span>
+<span id="cb46-32"><a href="#cb46-32" aria-hidden="true" tabindex="-1"></a>result_dec <span class="op">=</span> <span class="fu">reason</span>(g_dec)</span>
+<span id="cb46-33"><a href="#cb46-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-34"><a href="#cb46-34" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Clinical Decision Support (N3 forward chaining)"</span>)</span>
+<span id="cb46-35"><a href="#cb46-35" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"════════════════════════════════════════════════"</span>)</span>
+<span id="cb46-36"><a href="#cb46-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-37"><a href="#cb46-37" aria-hidden="true" tabindex="-1"></a>actions <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String, Vector{String}}</span>()</span>
+<span id="cb46-38"><a href="#cb46-38" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result_dec, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"action"</span>), <span class="cn">nothing</span>))</span>
+<span id="cb46-39"><a href="#cb46-39" aria-hidden="true" tabindex="-1"></a>    pid <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb46-40"><a href="#cb46-40" aria-hidden="true" tabindex="-1"></a>    action <span class="op">=</span> t.object.lexical</span>
+<span id="cb46-41"><a href="#cb46-41" aria-hidden="true" tabindex="-1"></a>    pids <span class="op">=</span> <span class="fu">get!</span>(actions, action, <span class="dt">String</span>[])</span>
+<span id="cb46-42"><a href="#cb46-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(pids, pid)</span>
+<span id="cb46-43"><a href="#cb46-43" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb46-44"><a href="#cb46-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb46-45"><a href="#cb46-45" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (action, pids) <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(actions))</span>
+<span id="cb46-46"><a href="#cb46-46" aria-hidden="true" tabindex="-1"></a>    label <span class="op">=</span> <span class="fu">replace</span>(action, <span class="st">"_"</span> <span class="op">=&gt;</span> <span class="st">" "</span>)</span>
+<span id="cb46-47"><a href="#cb46-47" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">  </span><span class="sc">$</span>(<span class="fu">uppercase</span>(label))<span class="st">:"</span>)</span>
+<span id="cb46-48"><a href="#cb46-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> <span class="fu">sort</span>(pids)</span>
+<span id="cb46-49"><a href="#cb46-49" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"    → </span><span class="sc">$</span>p<span class="st">"</span>)</span>
+<span id="cb46-50"><a href="#cb46-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb46-51"><a href="#cb46-51" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Clinical Decision Support (N3 forward chaining)
+════════════════════════════════════════════════
+
+  CONTACT TRACING PRIORITY:
+    → P001
+    → P009
+
+  ICU REFERRAL:
+    → P001
+    → P005
+    → P014
+
+  ISOLATION REQUIRED:
+    → P001
+    → P005
+    → P011
+
+  PAEDIATRIC ESCALATION:
+    → P011</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="problog-probabilistic-outbreak-modeling" class="level2">
+<h2 class="anchored" data-anchor-id="problog-probabilistic-outbreak-modeling">9. ProbLog — Probabilistic Outbreak Modeling</h2>
+<p>We model the probability of outbreak outcomes given interventions using ProbLog. The model captures: vaccination effectiveness, quarantine compliance, and secondary attack rates.</p>
+<div id="48" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb48"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a><span class="st">    % Pathogen-specific secondary attack rates</span></span>
+<span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
+<span id="cb48-4"><a href="#cb48-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
+<span id="cb48-5"><a href="#cb48-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::secondary_attack(rsv).</span></span>
+<span id="cb48-6"><a href="#cb48-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-7"><a href="#cb48-7" aria-hidden="true" tabindex="-1"></a><span class="st">    % Vaccine effectiveness against severe disease</span></span>
+<span id="cb48-8"><a href="#cb48-8" aria-hidden="true" tabindex="-1"></a><span class="st">    0.65::vaccine_effective(influenza).</span></span>
+<span id="cb48-9"><a href="#cb48-9" aria-hidden="true" tabindex="-1"></a><span class="st">    0.55::vaccine_effective(covid).</span></span>
+<span id="cb48-10"><a href="#cb48-10" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::vaccine_effective(rsv).</span></span>
+<span id="cb48-11"><a href="#cb48-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-12"><a href="#cb48-12" aria-hidden="true" tabindex="-1"></a><span class="st">    % Quarantine compliance</span></span>
+<span id="cb48-13"><a href="#cb48-13" aria-hidden="true" tabindex="-1"></a><span class="st">    0.80::quarantine_compliant(hospital).</span></span>
+<span id="cb48-14"><a href="#cb48-14" aria-hidden="true" tabindex="-1"></a><span class="st">    0.60::quarantine_compliant(care_home).</span></span>
+<span id="cb48-15"><a href="#cb48-15" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::quarantine_compliant(school).</span></span>
+<span id="cb48-16"><a href="#cb48-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-17"><a href="#cb48-17" aria-hidden="true" tabindex="-1"></a><span class="st">    % Contact rates by setting</span></span>
+<span id="cb48-18"><a href="#cb48-18" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::high_contact(hospital).</span></span>
+<span id="cb48-19"><a href="#cb48-19" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::high_contact(care_home).</span></span>
+<span id="cb48-20"><a href="#cb48-20" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::high_contact(school).</span></span>
+<span id="cb48-21"><a href="#cb48-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-22"><a href="#cb48-22" aria-hidden="true" tabindex="-1"></a><span class="st">    % Outbreak containment</span></span>
+<span id="cb48-23"><a href="#cb48-23" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb48-24"><a href="#cb48-24" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb48-25"><a href="#cb48-25" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+high_contact(Setting).</span></span>
+<span id="cb48-26"><a href="#cb48-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-27"><a href="#cb48-27" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb48-28"><a href="#cb48-28" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb48-29"><a href="#cb48-29" aria-hidden="true" tabindex="-1"></a><span class="st">        vaccine_effective(Pathogen).</span></span>
+<span id="cb48-30"><a href="#cb48-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-31"><a href="#cb48-31" aria-hidden="true" tabindex="-1"></a><span class="st">    % Severe outcome risk</span></span>
+<span id="cb48-32"><a href="#cb48-32" aria-hidden="true" tabindex="-1"></a><span class="st">    severe_outcome(Pathogen) :-</span></span>
+<span id="cb48-33"><a href="#cb48-33" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb48-34"><a href="#cb48-34" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+vaccine_effective(Pathogen).</span></span>
+<span id="cb48-35"><a href="#cb48-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-36"><a href="#cb48-36" aria-hidden="true" tabindex="-1"></a><span class="st">    % Nosocomial amplification</span></span>
+<span id="cb48-37"><a href="#cb48-37" aria-hidden="true" tabindex="-1"></a><span class="st">    nosocomial_spread(Pathogen) :-</span></span>
+<span id="cb48-38"><a href="#cb48-38" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb48-39"><a href="#cb48-39" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(hospital),</span></span>
+<span id="cb48-40"><a href="#cb48-40" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, hospital).</span></span>
+<span id="cb48-41"><a href="#cb48-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-42"><a href="#cb48-42" aria-hidden="true" tabindex="-1"></a><span class="st">    % Community spread</span></span>
+<span id="cb48-43"><a href="#cb48-43" aria-hidden="true" tabindex="-1"></a><span class="st">    community_spread(Pathogen, Setting) :-</span></span>
+<span id="cb48-44"><a href="#cb48-44" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb48-45"><a href="#cb48-45" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(Setting),</span></span>
+<span id="cb48-46"><a href="#cb48-46" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, Setting).</span></span>
+<span id="cb48-47"><a href="#cb48-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-48"><a href="#cb48-48" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, hospital)).</span></span>
+<span id="cb48-49"><a href="#cb48-49" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, care_home)).</span></span>
+<span id="cb48-50"><a href="#cb48-50" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(influenza, school)).</span></span>
+<span id="cb48-51"><a href="#cb48-51" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, hospital)).</span></span>
+<span id="cb48-52"><a href="#cb48-52" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, care_home)).</span></span>
+<span id="cb48-53"><a href="#cb48-53" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(covid, school)).</span></span>
+<span id="cb48-54"><a href="#cb48-54" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(rsv, hospital)).</span></span>
+<span id="cb48-55"><a href="#cb48-55" aria-hidden="true" tabindex="-1"></a><span class="st">    query(contained(rsv, school)).</span></span>
+<span id="cb48-56"><a href="#cb48-56" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(influenza)).</span></span>
+<span id="cb48-57"><a href="#cb48-57" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(covid)).</span></span>
+<span id="cb48-58"><a href="#cb48-58" aria-hidden="true" tabindex="-1"></a><span class="st">    query(severe_outcome(rsv)).</span></span>
+<span id="cb48-59"><a href="#cb48-59" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(influenza)).</span></span>
+<span id="cb48-60"><a href="#cb48-60" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(covid)).</span></span>
+<span id="cb48-61"><a href="#cb48-61" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(rsv)).</span></span>
+<span id="cb48-62"><a href="#cb48-62" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(influenza, school)).</span></span>
+<span id="cb48-63"><a href="#cb48-63" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(covid, care_home)).</span></span>
+<span id="cb48-64"><a href="#cb48-64" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(rsv, school)).</span></span>
+<span id="cb48-65"><a href="#cb48-65" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb48-66"><a href="#cb48-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-67"><a href="#cb48-67" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">problog_query</span>(problog_program)</span>
+<span id="cb48-68"><a href="#cb48-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-69"><a href="#cb48-69" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Outbreak Containment Probabilities"</span>)</span>
+<span id="cb48-70"><a href="#cb48-70" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════════════════════"</span>)</span>
+<span id="cb48-71"><a href="#cb48-71" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
+<span id="cb48-72"><a href="#cb48-72" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"contained"</span>)</span>
+<span id="cb48-73"><a href="#cb48-73" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb48-74"><a href="#cb48-74" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb48-75"><a href="#cb48-75" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb48-76"><a href="#cb48-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-77"><a href="#cb48-77" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Severe Outcome Risk"</span>)</span>
+<span id="cb48-78"><a href="#cb48-78" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════"</span>)</span>
+<span id="cb48-79"><a href="#cb48-79" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
+<span id="cb48-80"><a href="#cb48-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"severe"</span>)</span>
+<span id="cb48-81"><a href="#cb48-81" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb48-82"><a href="#cb48-82" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb48-83"><a href="#cb48-83" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb48-84"><a href="#cb48-84" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-85"><a href="#cb48-85" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Spread Risk"</span>)</span>
+<span id="cb48-86"><a href="#cb48-86" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════"</span>)</span>
+<span id="cb48-87"><a href="#cb48-87" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(results)))</span>
+<span id="cb48-88"><a href="#cb48-88" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"nosocomial"</span>) <span class="op">||</span> <span class="fu">startswith</span>(key, <span class="st">"community"</span>)</span>
+<span id="cb48-89"><a href="#cb48-89" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb48-90"><a href="#cb48-90" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb48-91"><a href="#cb48-91" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Outbreak Containment Probabilities
 ═══════════════════════════════════
@@ -1075,66 +1321,66 @@ Spread Risk
 </div>
 <section id="intervention-scenario-comparison" class="level3">
 <h3 class="anchored" data-anchor-id="intervention-scenario-comparison">Intervention scenario comparison</h3>
-<div id="44" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scenario: enhanced infection control (higher quarantine compliance)</span></span>
-<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>enhanced_program <span class="op">=</span> <span class="st">"""</span></span>
-<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
-<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
-<span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::secondary_attack(rsv).</span></span>
-<span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a><span class="st">    0.65::vaccine_effective(influenza).</span></span>
-<span id="cb44-8"><a href="#cb44-8" aria-hidden="true" tabindex="-1"></a><span class="st">    0.55::vaccine_effective(covid).</span></span>
-<span id="cb44-9"><a href="#cb44-9" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::vaccine_effective(rsv).</span></span>
-<span id="cb44-10"><a href="#cb44-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-11"><a href="#cb44-11" aria-hidden="true" tabindex="-1"></a><span class="st">    % Enhanced quarantine compliance</span></span>
-<span id="cb44-12"><a href="#cb44-12" aria-hidden="true" tabindex="-1"></a><span class="st">    0.95::quarantine_compliant(hospital).</span></span>
-<span id="cb44-13"><a href="#cb44-13" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::quarantine_compliant(care_home).</span></span>
-<span id="cb44-14"><a href="#cb44-14" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::quarantine_compliant(school).</span></span>
-<span id="cb44-15"><a href="#cb44-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-16"><a href="#cb44-16" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::high_contact(hospital).</span></span>
-<span id="cb44-17"><a href="#cb44-17" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::high_contact(care_home).</span></span>
-<span id="cb44-18"><a href="#cb44-18" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::high_contact(school).</span></span>
-<span id="cb44-19"><a href="#cb44-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-20"><a href="#cb44-20" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
-<span id="cb44-21"><a href="#cb44-21" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
-<span id="cb44-22"><a href="#cb44-22" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+high_contact(Setting).</span></span>
-<span id="cb44-23"><a href="#cb44-23" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
-<span id="cb44-24"><a href="#cb44-24" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
-<span id="cb44-25"><a href="#cb44-25" aria-hidden="true" tabindex="-1"></a><span class="st">        vaccine_effective(Pathogen).</span></span>
-<span id="cb44-26"><a href="#cb44-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-27"><a href="#cb44-27" aria-hidden="true" tabindex="-1"></a><span class="st">    nosocomial_spread(Pathogen) :-</span></span>
-<span id="cb44-28"><a href="#cb44-28" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
-<span id="cb44-29"><a href="#cb44-29" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(hospital),</span></span>
-<span id="cb44-30"><a href="#cb44-30" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, hospital).</span></span>
-<span id="cb44-31"><a href="#cb44-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-32"><a href="#cb44-32" aria-hidden="true" tabindex="-1"></a><span class="st">    community_spread(Pathogen, Setting) :-</span></span>
-<span id="cb44-33"><a href="#cb44-33" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
-<span id="cb44-34"><a href="#cb44-34" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(Setting),</span></span>
-<span id="cb44-35"><a href="#cb44-35" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, Setting).</span></span>
-<span id="cb44-36"><a href="#cb44-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-37"><a href="#cb44-37" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(influenza)).</span></span>
-<span id="cb44-38"><a href="#cb44-38" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(covid)).</span></span>
-<span id="cb44-39"><a href="#cb44-39" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(rsv)).</span></span>
-<span id="cb44-40"><a href="#cb44-40" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(influenza, school)).</span></span>
-<span id="cb44-41"><a href="#cb44-41" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(covid, care_home)).</span></span>
-<span id="cb44-42"><a href="#cb44-42" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(rsv, school)).</span></span>
-<span id="cb44-43"><a href="#cb44-43" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
-<span id="cb44-44"><a href="#cb44-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-45"><a href="#cb44-45" aria-hidden="true" tabindex="-1"></a>enhanced <span class="op">=</span> <span class="fu">problog_query</span>(enhanced_program)</span>
-<span id="cb44-46"><a href="#cb44-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-47"><a href="#cb44-47" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Intervention Comparison: Spread Risk"</span>)</span>
-<span id="cb44-48"><a href="#cb44-48" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═════════════════════════════════════"</span>)</span>
-<span id="cb44-49"><a href="#cb44-49" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Metric"</span>, <span class="fl">42</span>), <span class="fu">rpad</span>(<span class="st">"Baseline"</span>, <span class="fl">12</span>), <span class="st">"Enhanced IPC"</span>)</span>
-<span id="cb44-50"><a href="#cb44-50" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">66</span>)</span>
-<span id="cb44-51"><a href="#cb44-51" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(enhanced)))</span>
-<span id="cb44-52"><a href="#cb44-52" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="fu">get</span>(results, key, <span class="fl">0.0</span>)</span>
-<span id="cb44-53"><a href="#cb44-53" aria-hidden="true" tabindex="-1"></a>    <span class="cn">e</span> <span class="op">=</span> enhanced[key]</span>
-<span id="cb44-54"><a href="#cb44-54" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="cn">e</span> <span class="op">-</span> b</span>
-<span id="cb44-55"><a href="#cb44-55" aria-hidden="true" tabindex="-1"></a>    arrow <span class="op">=</span> delta <span class="op">&lt;</span> <span class="op">-</span><span class="fl">0.01</span> ? <span class="st">" ↓"</span> <span class="op">:</span> (delta <span class="op">&gt;</span> <span class="fl">0.01</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">""</span>)</span>
-<span id="cb44-56"><a href="#cb44-56" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(key, <span class="fl">42</span>),</span>
-<span id="cb44-57"><a href="#cb44-57" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(b; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>),</span>
-<span id="cb44-58"><a href="#cb44-58" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(<span class="cn">e</span>; digits<span class="op">=</span><span class="fl">4</span>), arrow)</span>
-<span id="cb44-59"><a href="#cb44-59" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="50" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb50"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scenario: enhanced infection control (higher quarantine compliance)</span></span>
+<span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>enhanced_program <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
+<span id="cb50-4"><a href="#cb50-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
+<span id="cb50-5"><a href="#cb50-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.40::secondary_attack(rsv).</span></span>
+<span id="cb50-6"><a href="#cb50-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-7"><a href="#cb50-7" aria-hidden="true" tabindex="-1"></a><span class="st">    0.65::vaccine_effective(influenza).</span></span>
+<span id="cb50-8"><a href="#cb50-8" aria-hidden="true" tabindex="-1"></a><span class="st">    0.55::vaccine_effective(covid).</span></span>
+<span id="cb50-9"><a href="#cb50-9" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::vaccine_effective(rsv).</span></span>
+<span id="cb50-10"><a href="#cb50-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-11"><a href="#cb50-11" aria-hidden="true" tabindex="-1"></a><span class="st">    % Enhanced quarantine compliance</span></span>
+<span id="cb50-12"><a href="#cb50-12" aria-hidden="true" tabindex="-1"></a><span class="st">    0.95::quarantine_compliant(hospital).</span></span>
+<span id="cb50-13"><a href="#cb50-13" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::quarantine_compliant(care_home).</span></span>
+<span id="cb50-14"><a href="#cb50-14" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::quarantine_compliant(school).</span></span>
+<span id="cb50-15"><a href="#cb50-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-16"><a href="#cb50-16" aria-hidden="true" tabindex="-1"></a><span class="st">    0.70::high_contact(hospital).</span></span>
+<span id="cb50-17"><a href="#cb50-17" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::high_contact(care_home).</span></span>
+<span id="cb50-18"><a href="#cb50-18" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::high_contact(school).</span></span>
+<span id="cb50-19"><a href="#cb50-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-20"><a href="#cb50-20" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb50-21"><a href="#cb50-21" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb50-22"><a href="#cb50-22" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+high_contact(Setting).</span></span>
+<span id="cb50-23"><a href="#cb50-23" aria-hidden="true" tabindex="-1"></a><span class="st">    contained(Pathogen, Setting) :-</span></span>
+<span id="cb50-24"><a href="#cb50-24" aria-hidden="true" tabindex="-1"></a><span class="st">        quarantine_compliant(Setting),</span></span>
+<span id="cb50-25"><a href="#cb50-25" aria-hidden="true" tabindex="-1"></a><span class="st">        vaccine_effective(Pathogen).</span></span>
+<span id="cb50-26"><a href="#cb50-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-27"><a href="#cb50-27" aria-hidden="true" tabindex="-1"></a><span class="st">    nosocomial_spread(Pathogen) :-</span></span>
+<span id="cb50-28"><a href="#cb50-28" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb50-29"><a href="#cb50-29" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(hospital),</span></span>
+<span id="cb50-30"><a href="#cb50-30" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, hospital).</span></span>
+<span id="cb50-31"><a href="#cb50-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-32"><a href="#cb50-32" aria-hidden="true" tabindex="-1"></a><span class="st">    community_spread(Pathogen, Setting) :-</span></span>
+<span id="cb50-33"><a href="#cb50-33" aria-hidden="true" tabindex="-1"></a><span class="st">        secondary_attack(Pathogen),</span></span>
+<span id="cb50-34"><a href="#cb50-34" aria-hidden="true" tabindex="-1"></a><span class="st">        high_contact(Setting),</span></span>
+<span id="cb50-35"><a href="#cb50-35" aria-hidden="true" tabindex="-1"></a><span class="st">        </span><span class="sc">\\</span><span class="st">+contained(Pathogen, Setting).</span></span>
+<span id="cb50-36"><a href="#cb50-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-37"><a href="#cb50-37" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(influenza)).</span></span>
+<span id="cb50-38"><a href="#cb50-38" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(covid)).</span></span>
+<span id="cb50-39"><a href="#cb50-39" aria-hidden="true" tabindex="-1"></a><span class="st">    query(nosocomial_spread(rsv)).</span></span>
+<span id="cb50-40"><a href="#cb50-40" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(influenza, school)).</span></span>
+<span id="cb50-41"><a href="#cb50-41" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(covid, care_home)).</span></span>
+<span id="cb50-42"><a href="#cb50-42" aria-hidden="true" tabindex="-1"></a><span class="st">    query(community_spread(rsv, school)).</span></span>
+<span id="cb50-43"><a href="#cb50-43" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb50-44"><a href="#cb50-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-45"><a href="#cb50-45" aria-hidden="true" tabindex="-1"></a>enhanced <span class="op">=</span> <span class="fu">problog_query</span>(enhanced_program)</span>
+<span id="cb50-46"><a href="#cb50-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb50-47"><a href="#cb50-47" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Intervention Comparison: Spread Risk"</span>)</span>
+<span id="cb50-48"><a href="#cb50-48" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═════════════════════════════════════"</span>)</span>
+<span id="cb50-49"><a href="#cb50-49" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Metric"</span>, <span class="fl">42</span>), <span class="fu">rpad</span>(<span class="st">"Baseline"</span>, <span class="fl">12</span>), <span class="st">"Enhanced IPC"</span>)</span>
+<span id="cb50-50"><a href="#cb50-50" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">66</span>)</span>
+<span id="cb50-51"><a href="#cb50-51" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(<span class="fu">keys</span>(enhanced)))</span>
+<span id="cb50-52"><a href="#cb50-52" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="fu">get</span>(results, key, <span class="fl">0.0</span>)</span>
+<span id="cb50-53"><a href="#cb50-53" aria-hidden="true" tabindex="-1"></a>    <span class="cn">e</span> <span class="op">=</span> enhanced[key]</span>
+<span id="cb50-54"><a href="#cb50-54" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> <span class="cn">e</span> <span class="op">-</span> b</span>
+<span id="cb50-55"><a href="#cb50-55" aria-hidden="true" tabindex="-1"></a>    arrow <span class="op">=</span> delta <span class="op">&lt;</span> <span class="op">-</span><span class="fl">0.01</span> ? <span class="st">" ↓"</span> <span class="op">:</span> (delta <span class="op">&gt;</span> <span class="fl">0.01</span> ? <span class="st">" ↑"</span> <span class="op">:</span> <span class="st">""</span>)</span>
+<span id="cb50-56"><a href="#cb50-56" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(key, <span class="fl">42</span>),</span>
+<span id="cb50-57"><a href="#cb50-57" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(b; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>),</span>
+<span id="cb50-58"><a href="#cb50-58" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(<span class="cn">e</span>; digits<span class="op">=</span><span class="fl">4</span>), arrow)</span>
+<span id="cb50-59"><a href="#cb50-59" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Intervention Comparison: Spread Risk
 ═════════════════════════════════════
@@ -1151,68 +1397,68 @@ nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
 </section>
 </section>
 <section id="visualisation" class="level2">
-<h2 class="anchored" data-anchor-id="visualisation">9. Visualisation</h2>
+<h2 class="anchored" data-anchor-id="visualisation">10. Visualisation</h2>
 <section id="a.-outbreak-transmission-network" class="level3">
 <h3 class="anchored" data-anchor-id="a.-outbreak-transmission-network">9a. Outbreak transmission network</h3>
-<div id="46" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
-<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Build DOT for transmission network with pathogen colouring</span></span>
-<span id="cb46-4"><a href="#cb46-4" aria-hidden="true" tabindex="-1"></a>dot_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
-<span id="cb46-5"><a href="#cb46-5" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"digraph Outbreak {"</span>)</span>
-<span id="cb46-6"><a href="#cb46-6" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  label=</span><span class="sc">\"</span><span class="st">Multi-Pathogen Outbreak — Transmission Network</span><span class="sc">\"</span><span class="st">;"</span>)</span>
-<span id="cb46-7"><a href="#cb46-7" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  labelloc=t; fontsize=14;"</span>)</span>
-<span id="cb46-8"><a href="#cb46-8" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  node [shape=ellipse, style=filled];"</span>)</span>
-<span id="cb46-9"><a href="#cb46-9" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  edge [color=grey50];"</span>)</span>
-<span id="cb46-10"><a href="#cb46-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-11"><a href="#cb46-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Map patients to their pathogen for colouring</span></span>
-<span id="cb46-12"><a href="#cb46-12" aria-hidden="true" tabindex="-1"></a>patient_pathogen <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,String}</span>()</span>
-<span id="cb46-13"><a href="#cb46-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
-<span id="cb46-14"><a href="#cb46-14" aria-hidden="true" tabindex="-1"></a>    patient_pathogen[r.patient] <span class="op">=</span> r.pathogen</span>
-<span id="cb46-15"><a href="#cb46-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb46-16"><a href="#cb46-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-17"><a href="#cb46-17" aria-hidden="true" tabindex="-1"></a>pathogen_colors <span class="op">=</span> <span class="fu">Dict</span>(</span>
-<span id="cb46-18"><a href="#cb46-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ffcccc</span><span class="sc">\"</span><span class="st">"</span>,   <span class="co"># red-tint</span></span>
-<span id="cb46-19"><a href="#cb46-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span>   <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ccddff</span><span class="sc">\"</span><span class="st">"</span>,   <span class="co"># blue-tint</span></span>
-<span id="cb46-20"><a href="#cb46-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">"RSV_B"</span>            <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ccffcc</span><span class="sc">\"</span><span class="st">"</span>,    <span class="co"># green-tint</span></span>
-<span id="cb46-21"><a href="#cb46-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb46-22"><a href="#cb46-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-23"><a href="#cb46-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Patient severity</span></span>
-<span id="cb46-24"><a href="#cb46-24" aria-hidden="true" tabindex="-1"></a>patient_severity <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,String}</span>()</span>
-<span id="cb46-25"><a href="#cb46-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
-<span id="cb46-26"><a href="#cb46-26" aria-hidden="true" tabindex="-1"></a>    patient_severity[r.patient] <span class="op">=</span> r.severity</span>
-<span id="cb46-27"><a href="#cb46-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb46-28"><a href="#cb46-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-29"><a href="#cb46-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Add patient nodes</span></span>
-<span id="cb46-30"><a href="#cb46-30" aria-hidden="true" tabindex="-1"></a>seen_patients <span class="op">=</span> <span class="fu">Set</span><span class="dt">{String}</span>()</span>
-<span id="cb46-31"><a href="#cb46-31" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
-<span id="cb46-32"><a href="#cb46-32" aria-hidden="true" tabindex="-1"></a>    pid <span class="op">=</span> r.patient</span>
-<span id="cb46-33"><a href="#cb46-33" aria-hidden="true" tabindex="-1"></a>    pid <span class="kw">in</span> seen_patients <span class="op">&amp;&amp;</span> <span class="cf">continue</span></span>
-<span id="cb46-34"><a href="#cb46-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(seen_patients, pid)</span>
-<span id="cb46-35"><a href="#cb46-35" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="fu">get</span>(pathogen_colors, r.pathogen, <span class="st">"</span><span class="sc">\"</span><span class="st">#ffffff</span><span class="sc">\"</span><span class="st">"</span>)</span>
-<span id="cb46-36"><a href="#cb46-36" aria-hidden="true" tabindex="-1"></a>    shape <span class="op">=</span> r.severity <span class="op">==</span> <span class="st">"severe"</span> ? <span class="st">"doubleoctagon"</span> <span class="op">:</span> (r.severity <span class="op">==</span> <span class="st">"moderate"</span> ? <span class="st">"octagon"</span> <span class="op">:</span> <span class="st">"ellipse"</span>)</span>
-<span id="cb46-37"><a href="#cb46-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>pid<span class="st"> [label=</span><span class="sc">\"$</span>pid<span class="sc">\"</span><span class="st">, fillcolor=</span><span class="sc">$</span>color<span class="st">, shape=</span><span class="sc">$</span>shape<span class="st">];"</span>)</span>
-<span id="cb46-38"><a href="#cb46-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb46-39"><a href="#cb46-39" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-40"><a href="#cb46-40" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission edges (bold)</span></span>
-<span id="cb46-41"><a href="#cb46-41" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (src, tgt) <span class="kw">in</span> transmissions</span>
-<span id="cb46-42"><a href="#cb46-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>src<span class="st"> -&gt; </span><span class="sc">$</span>tgt<span class="st"> [penwidth=2.0, color=black];"</span>)</span>
-<span id="cb46-43"><a href="#cb46-43" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb46-44"><a href="#cb46-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-45"><a href="#cb46-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Contact edges (dashed, lighter)</span></span>
-<span id="cb46-46"><a href="#cb46-46" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (a, b) <span class="kw">in</span> contacts</span>
-<span id="cb46-47"><a href="#cb46-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> !<span class="fu">any</span>(t <span class="op">-&gt;</span> (t[<span class="fl">1</span>] <span class="op">==</span> a <span class="op">&amp;&amp;</span> t[<span class="fl">2</span>] <span class="op">==</span> b) <span class="op">||</span> (t[<span class="fl">1</span>] <span class="op">==</span> b <span class="op">&amp;&amp;</span> t[<span class="fl">2</span>] <span class="op">==</span> a), transmissions)</span>
-<span id="cb46-48"><a href="#cb46-48" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>a<span class="st"> -&gt; </span><span class="sc">$</span>b<span class="st"> [style=dashed, color=grey70, arrowhead=none];"</span>)</span>
-<span id="cb46-49"><a href="#cb46-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb46-50"><a href="#cb46-50" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb46-51"><a href="#cb46-51" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb46-52"><a href="#cb46-52" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"}"</span>)</span>
-<span id="cb46-53"><a href="#cb46-53" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">join</span>(dot_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb46-54"><a href="#cb46-54" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="52" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-3"><a href="#cb52-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Build DOT for transmission network with pathogen colouring</span></span>
+<span id="cb52-4"><a href="#cb52-4" aria-hidden="true" tabindex="-1"></a>dot_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<span id="cb52-5"><a href="#cb52-5" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"digraph Outbreak {"</span>)</span>
+<span id="cb52-6"><a href="#cb52-6" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  label=</span><span class="sc">\"</span><span class="st">Multi-Pathogen Outbreak — Transmission Network</span><span class="sc">\"</span><span class="st">;"</span>)</span>
+<span id="cb52-7"><a href="#cb52-7" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  labelloc=t; fontsize=14;"</span>)</span>
+<span id="cb52-8"><a href="#cb52-8" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  node [shape=ellipse, style=filled];"</span>)</span>
+<span id="cb52-9"><a href="#cb52-9" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"  edge [color=grey50];"</span>)</span>
+<span id="cb52-10"><a href="#cb52-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-11"><a href="#cb52-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Map patients to their pathogen for colouring</span></span>
+<span id="cb52-12"><a href="#cb52-12" aria-hidden="true" tabindex="-1"></a>patient_pathogen <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,String}</span>()</span>
+<span id="cb52-13"><a href="#cb52-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb52-14"><a href="#cb52-14" aria-hidden="true" tabindex="-1"></a>    patient_pathogen[r.patient] <span class="op">=</span> r.pathogen</span>
+<span id="cb52-15"><a href="#cb52-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb52-16"><a href="#cb52-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-17"><a href="#cb52-17" aria-hidden="true" tabindex="-1"></a>pathogen_colors <span class="op">=</span> <span class="fu">Dict</span>(</span>
+<span id="cb52-18"><a href="#cb52-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ffcccc</span><span class="sc">\"</span><span class="st">"</span>,   <span class="co"># red-tint</span></span>
+<span id="cb52-19"><a href="#cb52-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span>   <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ccddff</span><span class="sc">\"</span><span class="st">"</span>,   <span class="co"># blue-tint</span></span>
+<span id="cb52-20"><a href="#cb52-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">"RSV_B"</span>            <span class="op">=&gt;</span> <span class="st">"</span><span class="sc">\"</span><span class="st">#ccffcc</span><span class="sc">\"</span><span class="st">"</span>,    <span class="co"># green-tint</span></span>
+<span id="cb52-21"><a href="#cb52-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb52-22"><a href="#cb52-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-23"><a href="#cb52-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Patient severity</span></span>
+<span id="cb52-24"><a href="#cb52-24" aria-hidden="true" tabindex="-1"></a>patient_severity <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,String}</span>()</span>
+<span id="cb52-25"><a href="#cb52-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb52-26"><a href="#cb52-26" aria-hidden="true" tabindex="-1"></a>    patient_severity[r.patient] <span class="op">=</span> r.severity</span>
+<span id="cb52-27"><a href="#cb52-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb52-28"><a href="#cb52-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-29"><a href="#cb52-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Add patient nodes</span></span>
+<span id="cb52-30"><a href="#cb52-30" aria-hidden="true" tabindex="-1"></a>seen_patients <span class="op">=</span> <span class="fu">Set</span><span class="dt">{String}</span>()</span>
+<span id="cb52-31"><a href="#cb52-31" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> case_records</span>
+<span id="cb52-32"><a href="#cb52-32" aria-hidden="true" tabindex="-1"></a>    pid <span class="op">=</span> r.patient</span>
+<span id="cb52-33"><a href="#cb52-33" aria-hidden="true" tabindex="-1"></a>    pid <span class="kw">in</span> seen_patients <span class="op">&amp;&amp;</span> <span class="cf">continue</span></span>
+<span id="cb52-34"><a href="#cb52-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(seen_patients, pid)</span>
+<span id="cb52-35"><a href="#cb52-35" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="fu">get</span>(pathogen_colors, r.pathogen, <span class="st">"</span><span class="sc">\"</span><span class="st">#ffffff</span><span class="sc">\"</span><span class="st">"</span>)</span>
+<span id="cb52-36"><a href="#cb52-36" aria-hidden="true" tabindex="-1"></a>    shape <span class="op">=</span> r.severity <span class="op">==</span> <span class="st">"severe"</span> ? <span class="st">"doubleoctagon"</span> <span class="op">:</span> (r.severity <span class="op">==</span> <span class="st">"moderate"</span> ? <span class="st">"octagon"</span> <span class="op">:</span> <span class="st">"ellipse"</span>)</span>
+<span id="cb52-37"><a href="#cb52-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>pid<span class="st"> [label=</span><span class="sc">\"$</span>pid<span class="sc">\"</span><span class="st">, fillcolor=</span><span class="sc">$</span>color<span class="st">, shape=</span><span class="sc">$</span>shape<span class="st">];"</span>)</span>
+<span id="cb52-38"><a href="#cb52-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb52-39"><a href="#cb52-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-40"><a href="#cb52-40" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission edges (bold)</span></span>
+<span id="cb52-41"><a href="#cb52-41" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (src, tgt) <span class="kw">in</span> transmissions</span>
+<span id="cb52-42"><a href="#cb52-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>src<span class="st"> -&gt; </span><span class="sc">$</span>tgt<span class="st"> [penwidth=2.0, color=black];"</span>)</span>
+<span id="cb52-43"><a href="#cb52-43" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb52-44"><a href="#cb52-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-45"><a href="#cb52-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Contact edges (dashed, lighter)</span></span>
+<span id="cb52-46"><a href="#cb52-46" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (a, b) <span class="kw">in</span> contacts</span>
+<span id="cb52-47"><a href="#cb52-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> !<span class="fu">any</span>(t <span class="op">-&gt;</span> (t[<span class="fl">1</span>] <span class="op">==</span> a <span class="op">&amp;&amp;</span> t[<span class="fl">2</span>] <span class="op">==</span> b) <span class="op">||</span> (t[<span class="fl">1</span>] <span class="op">==</span> b <span class="op">&amp;&amp;</span> t[<span class="fl">2</span>] <span class="op">==</span> a), transmissions)</span>
+<span id="cb52-48"><a href="#cb52-48" aria-hidden="true" tabindex="-1"></a>        <span class="fu">push!</span>(dot_lines, <span class="st">"  </span><span class="sc">$</span>a<span class="st"> -&gt; </span><span class="sc">$</span>b<span class="st"> [style=dashed, color=grey70, arrowhead=none];"</span>)</span>
+<span id="cb52-49"><a href="#cb52-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb52-50"><a href="#cb52-50" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb52-51"><a href="#cb52-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb52-52"><a href="#cb52-52" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"}"</span>)</span>
+<span id="cb52-53"><a href="#cb52-53" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">join</span>(dot_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb52-54"><a href="#cb52-54" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <div>
 <figure class="figure">
-<p><img src="epidemiology_files/figure-html/cell-24-output-1.svg" class="img-fluid figure-img"></p>
+<p><img src="epidemiology_files/figure-html/cell-27-output-1.svg" class="img-fluid figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1221,23 +1467,23 @@ nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
 <section id="b.-epidemic-curve-by-pathogen" class="level3">
 <h3 class="anchored" data-anchor-id="b.-epidemic-curve-by-pathogen">9b. Epidemic curve by pathogen</h3>
 <p>We visualise the onset dates as a textual epidemic curve.</p>
-<div id="48" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb47"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>dates <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([r.onset for r <span class="kw">in</span> case_records]))</span>
-<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a>pathogen_short <span class="op">=</span> <span class="fu">Dict</span>(</span>
-<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"Flu"</span>,</span>
-<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span> <span class="op">=&gt;</span> <span class="st">"CoV"</span>,</span>
-<span id="cb47-5"><a href="#cb47-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"RSV_B"</span> <span class="op">=&gt;</span> <span class="st">"RSV"</span></span>
-<span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Epidemic Curve (onset dates)"</span>)</span>
-<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"════════════════════════════"</span>)</span>
-<span id="cb47-10"><a href="#cb47-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> dates</span>
-<span id="cb47-11"><a href="#cb47-11" aria-hidden="true" tabindex="-1"></a>    cases_on_date <span class="op">=</span> <span class="fu">filter</span>(r <span class="op">-&gt;</span> r.onset <span class="op">==</span> d, case_records)</span>
-<span id="cb47-12"><a href="#cb47-12" aria-hidden="true" tabindex="-1"></a>    markers <span class="op">=</span> <span class="fu">join</span>([pathogen_short[r.pathogen] for r <span class="kw">in</span> cases_on_date], <span class="st">" "</span>)</span>
-<span id="cb47-13"><a href="#cb47-13" aria-hidden="true" tabindex="-1"></a>    bar <span class="op">=</span> <span class="st">"█"</span> <span class="op">^</span> <span class="fu">length</span>(cases_on_date)</span>
-<span id="cb47-14"><a href="#cb47-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>d<span class="st"> | </span><span class="sc">$</span>bar<span class="st"> </span><span class="sc">$</span>(<span class="fu">length</span>(cases_on_date))<span class="st"> (</span><span class="sc">$</span>markers<span class="st">)"</span>)</span>
-<span id="cb47-15"><a href="#cb47-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb47-16"><a href="#cb47-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="54" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb53"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>dates <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([r.onset for r <span class="kw">in</span> case_records]))</span>
+<span id="cb53-2"><a href="#cb53-2" aria-hidden="true" tabindex="-1"></a>pathogen_short <span class="op">=</span> <span class="fu">Dict</span>(</span>
+<span id="cb53-3"><a href="#cb53-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"Flu"</span>,</span>
+<span id="cb53-4"><a href="#cb53-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span> <span class="op">=&gt;</span> <span class="st">"CoV"</span>,</span>
+<span id="cb53-5"><a href="#cb53-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"RSV_B"</span> <span class="op">=&gt;</span> <span class="st">"RSV"</span></span>
+<span id="cb53-6"><a href="#cb53-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb53-7"><a href="#cb53-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb53-8"><a href="#cb53-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Epidemic Curve (onset dates)"</span>)</span>
+<span id="cb53-9"><a href="#cb53-9" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"════════════════════════════"</span>)</span>
+<span id="cb53-10"><a href="#cb53-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> dates</span>
+<span id="cb53-11"><a href="#cb53-11" aria-hidden="true" tabindex="-1"></a>    cases_on_date <span class="op">=</span> <span class="fu">filter</span>(r <span class="op">-&gt;</span> r.onset <span class="op">==</span> d, case_records)</span>
+<span id="cb53-12"><a href="#cb53-12" aria-hidden="true" tabindex="-1"></a>    markers <span class="op">=</span> <span class="fu">join</span>([pathogen_short[r.pathogen] for r <span class="kw">in</span> cases_on_date], <span class="st">" "</span>)</span>
+<span id="cb53-13"><a href="#cb53-13" aria-hidden="true" tabindex="-1"></a>    bar <span class="op">=</span> <span class="st">"█"</span> <span class="op">^</span> <span class="fu">length</span>(cases_on_date)</span>
+<span id="cb53-14"><a href="#cb53-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>d<span class="st"> | </span><span class="sc">$</span>bar<span class="st"> </span><span class="sc">$</span>(<span class="fu">length</span>(cases_on_date))<span class="st"> (</span><span class="sc">$</span>markers<span class="st">)"</span>)</span>
+<span id="cb53-15"><a href="#cb53-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb53-16"><a href="#cb53-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Epidemic Curve (onset dates)
 ════════════════════════════
@@ -1261,45 +1507,45 @@ Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B</code></pre>
 </section>
 <section id="c.-locationpathogen-heatmap" class="level3">
 <h3 class="anchored" data-anchor-id="c.-locationpathogen-heatmap">9c. Location–Pathogen heatmap</h3>
-<div id="50" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count cases per location-pathogen combination using SPARQL</span></span>
-<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
-<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
-<span id="cb49-4"><a href="#cb49-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
-<span id="cb49-5"><a href="#cb49-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb49-6"><a href="#cb49-6" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?loc_name ?pathogen_name (COUNT(?c) AS ?n)</span></span>
-<span id="cb49-7"><a href="#cb49-7" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
-<span id="cb49-8"><a href="#cb49-8" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
-<span id="cb49-9"><a href="#cb49-9" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:locatedAt ?loc ;</span></span>
-<span id="cb49-10"><a href="#cb49-10" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?p .</span></span>
-<span id="cb49-11"><a href="#cb49-11" aria-hidden="true" tabindex="-1"></a><span class="st">        ?loc rdfs:label ?loc_name .</span></span>
-<span id="cb49-12"><a href="#cb49-12" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p rdfs:label ?pathogen_name .</span></span>
-<span id="cb49-13"><a href="#cb49-13" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb49-14"><a href="#cb49-14" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?loc_name ?pathogen_name</span></span>
-<span id="cb49-15"><a href="#cb49-15" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?loc_name ?pathogen_name</span></span>
-<span id="cb49-16"><a href="#cb49-16" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
-<span id="cb49-17"><a href="#cb49-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb49-18"><a href="#cb49-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Build text heatmap</span></span>
-<span id="cb49-19"><a href="#cb49-19" aria-hidden="true" tabindex="-1"></a>loc_names <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([<span class="fu">readable</span>(r[<span class="st">"loc_name"</span>]) for r <span class="kw">in</span> results]))</span>
-<span id="cb49-20"><a href="#cb49-20" aria-hidden="true" tabindex="-1"></a>path_names <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([<span class="fu">readable</span>(r[<span class="st">"pathogen_name"</span>]) for r <span class="kw">in</span> results]))</span>
-<span id="cb49-21"><a href="#cb49-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb49-22"><a href="#cb49-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Location"</span>, <span class="fl">28</span>), <span class="fu">join</span>([<span class="fu">rpad</span>(p[<span class="fl">1</span><span class="op">:</span><span class="fu">min</span>(<span class="fl">12</span>,<span class="kw">end</span>)], <span class="fl">14</span>) for p <span class="kw">in</span> path_names]))</span>
-<span id="cb49-23"><a href="#cb49-23" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span>(<span class="fl">28</span> <span class="op">+</span> <span class="fl">14</span> <span class="op">*</span> <span class="fu">length</span>(path_names)))</span>
-<span id="cb49-24"><a href="#cb49-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb49-25"><a href="#cb49-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> loc <span class="kw">in</span> loc_names</span>
-<span id="cb49-26"><a href="#cb49-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">print</span>(<span class="fu">rpad</span>(loc, <span class="fl">28</span>))</span>
-<span id="cb49-27"><a href="#cb49-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> pn <span class="kw">in</span> path_names</span>
-<span id="cb49-28"><a href="#cb49-28" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> <span class="fl">0</span></span>
-<span id="cb49-29"><a href="#cb49-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> r <span class="kw">in</span> results</span>
-<span id="cb49-30"><a href="#cb49-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="fu">readable</span>(r[<span class="st">"loc_name"</span>]) <span class="op">==</span> loc <span class="op">&amp;&amp;</span> <span class="fu">readable</span>(r[<span class="st">"pathogen_name"</span>]) <span class="op">==</span> pn</span>
-<span id="cb49-31"><a href="#cb49-31" aria-hidden="true" tabindex="-1"></a>                n <span class="op">=</span> <span class="fu">parse</span>(<span class="dt">Int</span>, <span class="fu">readable</span>(r[<span class="st">"n"</span>]))</span>
-<span id="cb49-32"><a href="#cb49-32" aria-hidden="true" tabindex="-1"></a>            <span class="cf">end</span></span>
-<span id="cb49-33"><a href="#cb49-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
-<span id="cb49-34"><a href="#cb49-34" aria-hidden="true" tabindex="-1"></a>        cell <span class="op">=</span> n <span class="op">==</span> <span class="fl">0</span> ? <span class="st">"  ·"</span> <span class="op">:</span> <span class="st">"  </span><span class="sc">$</span>(<span class="fu">repeat</span>(<span class="st">"█"</span>, n))<span class="st"> </span><span class="sc">$</span>n<span class="st">"</span></span>
-<span id="cb49-35"><a href="#cb49-35" aria-hidden="true" tabindex="-1"></a>        <span class="fu">print</span>(<span class="fu">rpad</span>(cell, <span class="fl">14</span>))</span>
-<span id="cb49-36"><a href="#cb49-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb49-37"><a href="#cb49-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>()</span>
-<span id="cb49-38"><a href="#cb49-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="56" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count cases per location-pathogen combination using SPARQL</span></span>
+<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
+<span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
+<span id="cb55-5"><a href="#cb55-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb55-6"><a href="#cb55-6" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?loc_name ?pathogen_name (COUNT(?c) AS ?n)</span></span>
+<span id="cb55-7"><a href="#cb55-7" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE {</span></span>
+<span id="cb55-8"><a href="#cb55-8" aria-hidden="true" tabindex="-1"></a><span class="st">        ?c a epi:CaseReport ;</span></span>
+<span id="cb55-9"><a href="#cb55-9" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:locatedAt ?loc ;</span></span>
+<span id="cb55-10"><a href="#cb55-10" aria-hidden="true" tabindex="-1"></a><span class="st">           epi:infectedBy ?p .</span></span>
+<span id="cb55-11"><a href="#cb55-11" aria-hidden="true" tabindex="-1"></a><span class="st">        ?loc rdfs:label ?loc_name .</span></span>
+<span id="cb55-12"><a href="#cb55-12" aria-hidden="true" tabindex="-1"></a><span class="st">        ?p rdfs:label ?pathogen_name .</span></span>
+<span id="cb55-13"><a href="#cb55-13" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb55-14"><a href="#cb55-14" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY ?loc_name ?pathogen_name</span></span>
+<span id="cb55-15"><a href="#cb55-15" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?loc_name ?pathogen_name</span></span>
+<span id="cb55-16"><a href="#cb55-16" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb55-17"><a href="#cb55-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb55-18"><a href="#cb55-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Build text heatmap</span></span>
+<span id="cb55-19"><a href="#cb55-19" aria-hidden="true" tabindex="-1"></a>loc_names <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([<span class="fu">readable</span>(r[<span class="st">"loc_name"</span>]) for r <span class="kw">in</span> results]))</span>
+<span id="cb55-20"><a href="#cb55-20" aria-hidden="true" tabindex="-1"></a>path_names <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([<span class="fu">readable</span>(r[<span class="st">"pathogen_name"</span>]) for r <span class="kw">in</span> results]))</span>
+<span id="cb55-21"><a href="#cb55-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb55-22"><a href="#cb55-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Location"</span>, <span class="fl">28</span>), <span class="fu">join</span>([<span class="fu">rpad</span>(p[<span class="fl">1</span><span class="op">:</span><span class="fu">min</span>(<span class="fl">12</span>,<span class="kw">end</span>)], <span class="fl">14</span>) for p <span class="kw">in</span> path_names]))</span>
+<span id="cb55-23"><a href="#cb55-23" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span>(<span class="fl">28</span> <span class="op">+</span> <span class="fl">14</span> <span class="op">*</span> <span class="fu">length</span>(path_names)))</span>
+<span id="cb55-24"><a href="#cb55-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb55-25"><a href="#cb55-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> loc <span class="kw">in</span> loc_names</span>
+<span id="cb55-26"><a href="#cb55-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">print</span>(<span class="fu">rpad</span>(loc, <span class="fl">28</span>))</span>
+<span id="cb55-27"><a href="#cb55-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> pn <span class="kw">in</span> path_names</span>
+<span id="cb55-28"><a href="#cb55-28" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> <span class="fl">0</span></span>
+<span id="cb55-29"><a href="#cb55-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> r <span class="kw">in</span> results</span>
+<span id="cb55-30"><a href="#cb55-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="fu">readable</span>(r[<span class="st">"loc_name"</span>]) <span class="op">==</span> loc <span class="op">&amp;&amp;</span> <span class="fu">readable</span>(r[<span class="st">"pathogen_name"</span>]) <span class="op">==</span> pn</span>
+<span id="cb55-31"><a href="#cb55-31" aria-hidden="true" tabindex="-1"></a>                n <span class="op">=</span> <span class="fu">parse</span>(<span class="dt">Int</span>, <span class="fu">readable</span>(r[<span class="st">"n"</span>]))</span>
+<span id="cb55-32"><a href="#cb55-32" aria-hidden="true" tabindex="-1"></a>            <span class="cf">end</span></span>
+<span id="cb55-33"><a href="#cb55-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">end</span></span>
+<span id="cb55-34"><a href="#cb55-34" aria-hidden="true" tabindex="-1"></a>        cell <span class="op">=</span> n <span class="op">==</span> <span class="fl">0</span> ? <span class="st">"  ·"</span> <span class="op">:</span> <span class="st">"  </span><span class="sc">$</span>(<span class="fu">repeat</span>(<span class="st">"█"</span>, n))<span class="st"> </span><span class="sc">$</span>n<span class="st">"</span></span>
+<span id="cb55-35"><a href="#cb55-35" aria-hidden="true" tabindex="-1"></a>        <span class="fu">print</span>(<span class="fu">rpad</span>(cell, <span class="fl">14</span>))</span>
+<span id="cb55-36"><a href="#cb55-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb55-37"><a href="#cb55-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>()</span>
+<span id="cb55-38"><a href="#cb55-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Location                    Influenza A   RSV subtype   SARS-CoV-2 J  
 ──────────────────────────────────────────────────────────────────────
@@ -1314,7 +1560,7 @@ Sunrise Care Home             ████ 4        ·             ·           
 </section>
 </section>
 <section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">10. Summary</h2>
+<h2 class="anchored" data-anchor-id="summary">11. Summary</h2>
 <p>This vignette demonstrated a comprehensive <strong>epidemiology knowledge graph</strong> integrating pathogen biology, patient demographics, clinical surveillance, contact tracing, and intervention data.</p>
 <table class="caption-top table">
 <colgroup>
@@ -1353,10 +1599,14 @@ Sunrise Care Home             ████ 4        ·             ·           
 <td>Transitive transmission inference, super-spreader detection</td>
 </tr>
 <tr class="odd">
+<td><strong>N3 reasoning</strong></td>
+<td>Risk classification with math builtins, serial interval analysis, backward-chaining clinical decision support</td>
+</tr>
+<tr class="even">
 <td><strong>ProbLog</strong></td>
 <td>Probabilistic containment and intervention effectiveness</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><strong>GraphViz</strong></td>
 <td>Transmission network and epidemic curve visualization</td>
 </tr>
