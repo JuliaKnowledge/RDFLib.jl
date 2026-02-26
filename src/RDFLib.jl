@@ -111,6 +111,9 @@ include("n3_reasoner.jl")
 # Datalog reasoner (semi-naive evaluation)
 include("datalog.jl")
 
+# ProbLog — probabilistic logic programming
+include("problog.jl")
+
 # Additional formats
 include("trix.jl")
 include("hextuples.jl")
@@ -289,6 +292,10 @@ export
 
     # Datalog reasoner
     datalog_reason, DatalogProgram, DatalogRule, semi_naive!,
+
+    # ProbLog — probabilistic logic programming
+    problog_query, problog_infer, parse_problog,
+    ProbLogProgram, PrologAtom, PrologClause,
 
     # Additional formats
     serialize_trix, parse_trix, parse_trix!,
