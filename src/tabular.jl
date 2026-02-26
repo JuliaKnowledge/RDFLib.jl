@@ -1116,13 +1116,21 @@ function ottr_map!(m::RDFMapping, template_iri::AbstractString, table)
     param_has_col = Bool[sym in cols for sym in param_syms]
 
     store = m.graph.store
+    had_existing = store isa MemoryStore && store.count > 0
 
     # Check if we can use the fast path:
     # All instances are ottr:Triple, no list expansion, no nested templates
     use_fast = _can_use_fast_path(tpl, m)
 
     # Use deferred indexing for bulk performance
-    _defer_indexing!(store)
+    if store isa MemoryStore
+        n_rows_est = Tables.rowcount(table)
+        triples_per_row = length(tpl.instances)
+        if n_rows_est !== nothing && n_rows_est > 0
+            sizehint!(store.insertion_order, length(store.insertion_order) + n_rows_est * triples_per_row)
+        end
+        _defer_indexing!(store)
+    end
 
     if use_fast
         _ottr_map_fast!(m, tpl, table, param_syms, param_has_col)
@@ -1150,8 +1158,10 @@ function ottr_map!(m::RDFMapping, template_iri::AbstractString, table)
         end
     end
 
-    # Rebuild SPO index (secondary indices built lazily)
-    _rebuild_indices!(store)
+    # Rebuild index (skip dedup if store was empty — unique subjects)
+    if store isa MemoryStore
+        _rebuild_indices!(store; skip_dedup=!had_existing)
+    end
     m
 end
 
@@ -1308,11 +1318,10 @@ function _ottr_convert_value(val, ptype::OTTRTypeUnknown)
     elseif val isa AbstractFloat
         Literal(val)
     elseif val isa AbstractString
-        s = string(val)
-        if startswith(s, "http://") || startswith(s, "https://") || startswith(s, "urn:")
-            URIRef(s)
+        if startswith(val, "http://") || startswith(val, "https://") || startswith(val, "urn:")
+            URIRef(val)
         else
-            Literal(s)
+            Literal(val)
         end
     elseif val isa AbstractVector
         return [_ottr_convert_value(v, OTTRTypeUnknown()) for v in val if !ismissing(v) && v !== nothing]
