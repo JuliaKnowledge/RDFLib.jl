@@ -16,7 +16,9 @@ your first graph, and performing simple operations.
 
 ``` julia
 using Pkg
-Pkg.add(url="https://github.com/your-org/RDFLib.jl")
+Pkg.develop(path="/path/to/RDFLib.jl")
+# Or from a remote repository:
+# Pkg.add(url="https://github.com/your-org/RDFLib.jl")
 ```
 
 ## Loading the Package
@@ -207,14 +209,24 @@ end
 
 This was a quick taste of RDFLib.jl. Subsequent vignettes cover:
 
-- **RDF Terms** — URIs, literals, blank nodes, and data types in depth
-- **Building Graphs** — advanced graph construction patterns
-- **Namespaces** — managing and creating vocabularies
-- **Serialization** — all supported formats (Turtle, JSON-LD, RDF/XML,
-  N3, etc.)
-- **SPARQL** — full query and update support
-- **N3 Reasoning** — forward/backward chaining with the built-in
-  reasoner
-- **SHACL Validation** — validating graphs against shape constraints
-- **Store Backends** — SQLite, DuckDB, and remote SPARQL endpoints
-- **Real-World Examples** — biomedical data, knowledge graphs, and more
+-   **RDF Terms** — URIs, literals, blank nodes, and data types in depth
+-   **Building Graphs** — advanced graph construction patterns
+-   **Namespaces** — managing and creating vocabularies
+-   **Serialization** — all supported formats (Turtle, JSON-LD, RDF/XML,
+    N3, etc.)
+-   **SPARQL** — full query and update support
+-   **Collections & Containers** — RDF lists and containers
+-   **Datasets** — named graphs and quads
+-   **Inference** — RDFS and OWL entailment
+-   **N3 Reasoning** — forward/backward chaining with the built-in
+    reasoner
+-   **SHACL Validation** — validating graphs against shape constraints
+-   **Store Backends** — SQLite, DuckDB, LMDB, and remote SPARQL
+    endpoints
+-   **Tabular Mapping** — convert DataFrames/CSV to RDF with OTTR
+    templates
+-   **Datalog** — semi-naive bottom-up reasoning
+-   **ProbLog** — probabilistic logic programming with exact BDD
+    inference
+-   **Property Paths** — navigate graphs with SPARQL path expressions
+-   **Graph Utilities** — isomorphism, CBD, VoID, visualization

@@ -199,16 +199,74 @@ println(serialize(g, TurtleFormat()))
 
 Here is a quick reference of commonly used namespace prefixes:
 
-| Prefix | URI | Purpose |
-|----|----|----|
-| `rdf:` | `http://www.w3.org/1999/02/22-rdf-syntax-ns#` | RDF syntax |
-| `rdfs:` | `http://www.w3.org/2000/01/rdf-schema#` | RDF Schema |
-| `owl:` | `http://www.w3.org/2002/07/owl#` | OWL ontology |
-| `xsd:` | `http://www.w3.org/2001/XMLSchema#` | XML Schema datatypes |
-| `foaf:` | `http://xmlns.com/foaf/0.1/` | Friend of a Friend |
-| `dc:` | `http://purl.org/dc/elements/1.1/` | Dublin Core |
-| `dcterms:` | `http://purl.org/dc/terms/` | Dublin Core Terms |
-| `skos:` | `http://www.w3.org/2004/02/skos/core#` | Knowledge organization |
-| `schema:` | `http://schema.org/` | Schema.org |
-| `prov:` | `http://www.w3.org/ns/prov#` | Provenance |
-| `shacl:` | `http://www.w3.org/ns/shacl#` | Shapes Constraint Language |
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 22%" />
+<col style="width: 40%" />
+</colgroup>
+<thead>
+<tr>
+<th>Prefix</th>
+<th>URI</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rdf:</code></td>
+<td><code>http://www.w3.org/1999/02/22-rdf-syntax-ns#</code></td>
+<td>RDF syntax</td>
+</tr>
+<tr>
+<td><code>rdfs:</code></td>
+<td><code>http://www.w3.org/2000/01/rdf-schema#</code></td>
+<td>RDF Schema</td>
+</tr>
+<tr>
+<td><code>owl:</code></td>
+<td><code>http://www.w3.org/2002/07/owl#</code></td>
+<td>OWL ontology</td>
+</tr>
+<tr>
+<td><code>xsd:</code></td>
+<td><code>http://www.w3.org/2001/XMLSchema#</code></td>
+<td>XML Schema datatypes</td>
+</tr>
+<tr>
+<td><code>foaf:</code></td>
+<td><code>http://xmlns.com/foaf/0.1/</code></td>
+<td>Friend of a Friend</td>
+</tr>
+<tr>
+<td><code>dc:</code></td>
+<td><code>http://purl.org/dc/elements/1.1/</code></td>
+<td>Dublin Core</td>
+</tr>
+<tr>
+<td><code>dcterms:</code></td>
+<td><code>http://purl.org/dc/terms/</code></td>
+<td>Dublin Core Terms</td>
+</tr>
+<tr>
+<td><code>skos:</code></td>
+<td><code>http://www.w3.org/2004/02/skos/core#</code></td>
+<td>Knowledge organization</td>
+</tr>
+<tr>
+<td><code>schema:</code></td>
+<td><code>http://schema.org/</code></td>
+<td>Schema.org</td>
+</tr>
+<tr>
+<td><code>prov:</code></td>
+<td><code>http://www.w3.org/ns/prov#</code></td>
+<td>Provenance</td>
+</tr>
+<tr>
+<td><code>shacl:</code></td>
+<td><code>http://www.w3.org/ns/shacl#</code></td>
+<td>Shapes Constraint Language</td>
+</tr>
+</tbody>
+</table>

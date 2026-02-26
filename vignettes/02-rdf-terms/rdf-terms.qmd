@@ -106,11 +106,12 @@ println("DateTime: ", n3(now_lit))
 ### Extracting Values
 
 ```{julia}
-# The toPython() function extracts the Julia value (named after rdflib's method)
-println("toPython(Literal(42))     = ", toPython(Literal(42)), " :: ", typeof(toPython(Literal(42))))
-println("toPython(Literal(3.14))   = ", toPython(Literal(3.14)), " :: ", typeof(toPython(Literal(3.14))))
-println("toPython(Literal(true))   = ", toPython(Literal(true)), " :: ", typeof(toPython(Literal(true))))
-println("toPython(Literal(\"hi\")) = ", toPython(Literal("hi")), " :: ", typeof(toPython(Literal("hi"))))
+# julia_value() extracts the native Julia value from a Literal
+# (also available as toPython(), matching Python rdflib's method name)
+println("julia_value(Literal(42))     = ", julia_value(Literal(42)), " :: ", typeof(julia_value(Literal(42))))
+println("julia_value(Literal(3.14))   = ", julia_value(Literal(3.14)), " :: ", typeof(julia_value(Literal(3.14))))
+println("julia_value(Literal(true))   = ", julia_value(Literal(true)), " :: ", typeof(julia_value(Literal(true))))
+println("julia_value(Literal(\"hi\")) = ", julia_value(Literal("hi")), " :: ", typeof(julia_value(Literal("hi"))))
 ```
 
 ## Blank Nodes (BNode)

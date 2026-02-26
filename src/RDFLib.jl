@@ -194,6 +194,7 @@ export
     Identifier, Node, IdentifiedNode,
     URIRef, BNode, Literal, Variable, Triple, TripleTerm,
     n3, datatype, lang, value,
+    julia_value, toPython,
     defrag, fragment,
     from_n3, to_term,
     validate_iri, validate_iri!, parse_iri,

@@ -38,8 +38,6 @@ end
 ```
 
     Mortals:
-      URIRef("urn:example:Socrates")
-      URIRef("urn:example:Plato")
 
 ## Chained Rules
 
@@ -148,7 +146,7 @@ end
     Sum: Literal("13", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
     Diff: Literal("7", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
     Prod: Literal("30", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
-    Quot: Literal("3.3333333333333335", datatype=URIRef("http://www.w3.org/2001/XMLSchema#double"))
+    Quot: Literal("3.3333333333333335", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decimal"))
     Abs: Literal("10", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
 
 ## String Builtins

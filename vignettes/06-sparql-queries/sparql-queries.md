@@ -158,8 +158,8 @@ end
     Scientists per field:
       URIRef("http://example.org/computer_science"): Literal("2", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
       URIRef("http://example.org/physics"): Literal("2", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
-      URIRef("http://example.org/biology"): Literal("1", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
       URIRef("http://example.org/chemistry"): Literal("1", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
+      URIRef("http://example.org/biology"): Literal("1", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
 
 ## ASK Queries
 
@@ -369,10 +369,10 @@ end
 ```
 
     Physicists and Computer Scientists:
-      Literal("Albert Einstein")
       Literal("Isaac Newton")
-      Literal("Alan Turing")
+      Literal("Albert Einstein")
       Literal("Ada Lovelace")
+      Literal("Alan Turing")
 
 ## SPARQL Results Serialization
 

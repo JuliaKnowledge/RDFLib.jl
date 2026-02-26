@@ -126,23 +126,24 @@ now_lit = xsd_literal(now())
 println("DateTime: ", n3(now_lit))
 ```
 
-    Date: "2026-02-22"^^<http://www.w3.org/2001/XMLSchema#date>
-    DateTime: "2026-02-22T07:46:58"^^<http://www.w3.org/2001/XMLSchema#dateTime>
+    Date: "2026-02-26"^^<http://www.w3.org/2001/XMLSchema#date>
+    DateTime: "2026-02-26T09:11:31"^^<http://www.w3.org/2001/XMLSchema#dateTime>
 
 ### Extracting Values
 
 ``` julia
-# The toPython() function extracts the Julia value (named after rdflib's method)
-println("toPython(Literal(42))     = ", toPython(Literal(42)), " :: ", typeof(toPython(Literal(42))))
-println("toPython(Literal(3.14))   = ", toPython(Literal(3.14)), " :: ", typeof(toPython(Literal(3.14))))
-println("toPython(Literal(true))   = ", toPython(Literal(true)), " :: ", typeof(toPython(Literal(true))))
-println("toPython(Literal(\"hi\")) = ", toPython(Literal("hi")), " :: ", typeof(toPython(Literal("hi"))))
+# julia_value() extracts the native Julia value from a Literal
+# (also available as toPython(), matching Python rdflib's method name)
+println("julia_value(Literal(42))     = ", julia_value(Literal(42)), " :: ", typeof(julia_value(Literal(42))))
+println("julia_value(Literal(3.14))   = ", julia_value(Literal(3.14)), " :: ", typeof(julia_value(Literal(3.14))))
+println("julia_value(Literal(true))   = ", julia_value(Literal(true)), " :: ", typeof(julia_value(Literal(true))))
+println("julia_value(Literal(\"hi\")) = ", julia_value(Literal("hi")), " :: ", typeof(julia_value(Literal("hi"))))
 ```
 
-    toPython(Literal(42))     = 42 :: Int64
-    toPython(Literal(3.14))   = 3.14 :: Float64
-    toPython(Literal(true))   = true :: Bool
-    toPython(Literal("hi")) = hi :: String
+    julia_value(Literal(42))     = 42 :: Int64
+    julia_value(Literal(3.14))   = 3.14 :: Float64
+    julia_value(Literal(true))   = true :: Bool
+    julia_value(Literal("hi")) = hi :: String
 
 ## Blank Nodes (BNode)
 
@@ -160,7 +161,7 @@ println("Named BNode: ", b2, " (id=", b2.id, ")")
 println("N3 syntax: ", n3(b2))
 ```
 
-    Auto BNode: BNode("Nbcc314385e37407fb44731ef6c931769") (id=Nbcc314385e37407fb44731ef6c931769)
+    Auto BNode: BNode("N28fdb8b43d794e5c956e86a15ab27bc4") (id=N28fdb8b43d794e5c956e86a15ab27bc4)
     Named BNode: BNode("address1") (id=address1)
     N3 syntax: _:address1
 

@@ -224,10 +224,10 @@ end
 ```
 
     Favorites:
-      Literal("gamma")
       Literal("alpha")
-      Literal("delta")
       Literal("beta")
+      Literal("gamma")
+      Literal("delta")
 
 ## Nested Collections
 
