@@ -402,6 +402,12 @@ export
     ColumnType, IRIColumn, LiteralColumn, LangColumn, AutoColumn,
     rdf_map!, map_default!, rdf_insert!,
     rdf_query, rdf_update!,
-    table_to_rdf
+    table_to_rdf,
+    # OTTR templates
+    OTTRTemplate, OTTRParam, OTTRInstance, OTTRArg,
+    OTTRParamType, OTTRTypeUnknown, OTTRTypeIRI, OTTRTypeLiteral, OTTRTypeList,
+    parse_ottr, add_template!, ottr_map!,
+    # SHACL/Datalog integration
+    rdf_validate, rdf_reason!
 
 end # module
