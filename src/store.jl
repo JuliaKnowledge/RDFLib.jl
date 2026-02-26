@@ -92,6 +92,49 @@ function _add_unchecked!(store::MemoryStore, t::Triple)
     nothing
 end
 
+"""Add a triple in deferred-index mode (fast bulk insert, indices rebuilt later)."""
+function _add_deferred!(store::MemoryStore, t::Triple)
+    push!(store.insertion_order, t)
+    store.count += 1
+    nothing
+end
+
+"""Switch store to deferred indexing mode for bulk inserts."""
+function _defer_indexing!(store::MemoryStore)
+    store.indexed = false
+    empty!(store.spo)
+    empty!(store.pos)
+    empty!(store.osp)
+    nothing
+end
+
+"""Rebuild indices from insertion_order, deduplicating in the process."""
+function _rebuild_indices!(store::MemoryStore)
+    n = length(store.insertion_order)
+    store.spo = Dict{Identifier, Dict{Identifier, Set{Identifier}}}()
+    store.pos = Dict{Identifier, Dict{Identifier, Set{Identifier}}}()
+    store.osp = Dict{Identifier, Dict{Identifier, Set{Identifier}}}()
+    # Deduplicate using SPO index as existence check
+    deduped = Triple[]
+    sizehint!(deduped, n)
+    for t in store.insertion_order
+        s, p, o = t.subject, t.predicate, t.object
+        sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
+        objs = get!(Set{Identifier}, sp, p)
+        o in objs && continue
+        push!(objs, o)
+        po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
+        push!(get!(Set{Identifier}, po, o), s)
+        os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
+        push!(get!(Set{Identifier}, os, s), p)
+        push!(deduped, t)
+    end
+    store.insertion_order = deduped
+    store.count = length(deduped)
+    store.indexed = true
+    nothing
+end
+
 function remove!(store::MemoryStore, pattern::TriplePattern)
     _ensure_indexed!(store)
     to_remove = collect(triples(store, pattern))

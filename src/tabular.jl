@@ -1055,14 +1055,28 @@ function ottr_map!(m::RDFMapping, template_iri::AbstractString, table)
     rows = Tables.rows(table)
     cols = Tables.columnnames(Tables.columns(table))
 
-    row_counter = Ref(0)
+    # Pre-compute column→parameter mapping
+    param_syms = Symbol[Symbol(p.name) for p in tpl.parameters]
+    param_col_idx = Int[]  # index in tpl.parameters for params that have columns
+    param_has_col = Bool[sym in cols for sym in param_syms]
+
+    # Pre-resolve constant arguments in instances
+    store = m.graph.store
+
+    # Use deferred indexing for bulk performance
+    _defer_indexing!(store)
+
+    # Reusable bindings dict to avoid per-row allocation
+    bindings = Dict{String, Any}()
+    sizehint!(bindings, length(tpl.parameters))
+
+    row_counter = 0
     for row in rows
-        row_counter[] += 1
-        bindings = Dict{String, Any}()
-        for param in tpl.parameters
-            sym = Symbol(param.name)
-            if sym in cols
-                val = Tables.getcolumn(row, sym)
+        row_counter += 1
+        empty!(bindings)
+        for (i, param) in enumerate(tpl.parameters)
+            if param_has_col[i]
+                val = Tables.getcolumn(row, param_syms[i])
                 if !ismissing(val) && val !== nothing
                     bindings[param.name] = _ottr_convert_value(val, param.ptype)
                 elseif param.default_value !== nothing
@@ -1072,8 +1086,11 @@ function ottr_map!(m::RDFMapping, template_iri::AbstractString, table)
                 bindings[param.name] = param.default_value
             end
         end
-        _ottr_expand_instances!(m, tpl.instances, bindings, row_counter[])
+        _ottr_expand_instances!(m, tpl.instances, bindings, row_counter)
     end
+
+    # Rebuild indices in bulk (also deduplicates)
+    _rebuild_indices!(store)
     m
 end
 
@@ -1169,6 +1186,10 @@ function _ottr_expand_triple!(m::RDFMapping, inst::OTTRInstance,
     subj === nothing && return
     pred === nothing && return
 
+    s_node = _ensure_node(subj)
+    p_uri = _ensure_uriref(pred)
+    store = m.graph.store
+
     # Handle list expansion on any argument position
     if o_arg.list_expand
         obj_val = _ottr_resolve_arg(OTTRArg(o_arg.variable, o_arg.constant, false), bindings, row_id)
@@ -1176,10 +1197,10 @@ function _ottr_expand_triple!(m::RDFMapping, inst::OTTRInstance,
         if obj_val isa AbstractVector
             for item in obj_val
                 item === nothing && continue
-                add!(m.graph, Triple(_ensure_node(subj), _ensure_uriref(pred), _ensure_identifier(item)))
+                _add_deferred!(store, Triple(s_node, p_uri, _ensure_identifier(item)))
             end
         else
-            add!(m.graph, Triple(_ensure_node(subj), _ensure_uriref(pred), _ensure_identifier(obj_val)))
+            _add_deferred!(store, Triple(s_node, p_uri, _ensure_identifier(obj_val)))
         end
     else
         obj = _ottr_resolve_arg(o_arg, bindings, row_id)
@@ -1187,10 +1208,10 @@ function _ottr_expand_triple!(m::RDFMapping, inst::OTTRInstance,
         if obj isa AbstractVector
             for item in obj
                 item === nothing && continue
-                add!(m.graph, Triple(_ensure_node(subj), _ensure_uriref(pred), _ensure_identifier(item)))
+                _add_deferred!(store, Triple(s_node, p_uri, _ensure_identifier(item)))
             end
         else
-            add!(m.graph, Triple(_ensure_node(subj), _ensure_uriref(pred), _ensure_identifier(obj)))
+            _add_deferred!(store, Triple(s_node, p_uri, _ensure_identifier(obj)))
         end
     end
 end
