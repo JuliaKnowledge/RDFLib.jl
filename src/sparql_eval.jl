@@ -143,6 +143,10 @@ end
 function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
                              bindings::Vector{Dict{String,Identifier}} = Dict{String,Identifier}[Dict{String,Identifier}()];
                              limit::Int = 0)
+    # Ensure store indices are built before querying
+    if g.store isa MemoryStore
+        _ensure_all_indexed!(g.store)
+    end
     # Star-join optimization for MemoryStore
     if g.store isa MemoryStore && length(patterns) >= 2
         return _ast_eval_patterns_star(g, patterns, bindings, limit)

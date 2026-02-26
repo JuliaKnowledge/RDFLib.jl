@@ -26,7 +26,8 @@ mutable struct MemoryStore <: AbstractStore
     osp::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     count::Int
     insertion_order::Vector{Triple}  # Preserve insertion order for deterministic iteration
-    indexed::Bool  # Whether SPO/POS/OSP indices are built
+    indexed::Bool  # Whether SPO index is built
+    secondary_indexed::Bool  # Whether POS/OSP indices are built
 end
 
 MemoryStore() = MemoryStore(
@@ -35,22 +36,44 @@ MemoryStore() = MemoryStore(
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     0,
     Triple[],
+    true,
     true
 )
 
-# Build indices from insertion_order (for lazy-indexed stores)
+# Build SPO index from insertion_order (lazy build after bulk insert)
 function _ensure_indexed!(store::MemoryStore)
     store.indexed && return
+    empty!(store.spo)
+    sizehint!(store.spo, min(store.count, store.count ÷ 3 + 100))
     for t in store.insertion_order
         s, p, o = t.subject, t.predicate, t.object
         sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
         push!(get!(Set{Identifier}, sp, p), o)
+    end
+    store.indexed = true
+end
+
+# Build all three indices (called when SPARQL queries need POS/OSP)
+function _ensure_all_indexed!(store::MemoryStore)
+    _ensure_indexed!(store)
+    if !store.secondary_indexed
+        _build_secondary_indices!(store)
+    end
+end
+
+"""Build POS and OSP indices from insertion_order."""
+function _build_secondary_indices!(store::MemoryStore)
+    store.secondary_indexed && return
+    empty!(store.pos)
+    empty!(store.osp)
+    for t in store.insertion_order
+        s, p, o = t.subject, t.predicate, t.object
         po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
         push!(get!(Set{Identifier}, po, o), s)
         os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
         push!(get!(Set{Identifier}, os, s), p)
     end
-    store.indexed = true
+    store.secondary_indexed = true
 end
 
 function add!(store::MemoryStore, t::Triple)
@@ -75,17 +98,17 @@ end
 function _add_unchecked!(store::MemoryStore, t::Triple)
     s, p, o = t.subject, t.predicate, t.object
 
-    # SPO index
+    # SPO index (always maintained)
     sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
     push!(get!(Set{Identifier}, sp, p), o)
 
-    # POS index
-    po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
-    push!(get!(Set{Identifier}, po, o), s)
-
-    # OSP index
-    os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
-    push!(get!(Set{Identifier}, os, s), p)
+    # POS/OSP indices (only if already built)
+    if store.secondary_indexed
+        po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
+        push!(get!(Set{Identifier}, po, o), s)
+        os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
+        push!(get!(Set{Identifier}, os, s), p)
+    end
 
     push!(store.insertion_order, t)
     store.count += 1
@@ -102,42 +125,41 @@ end
 """Switch store to deferred indexing mode for bulk inserts."""
 function _defer_indexing!(store::MemoryStore)
     store.indexed = false
+    store.secondary_indexed = false
     empty!(store.spo)
     empty!(store.pos)
     empty!(store.osp)
     nothing
 end
 
-"""Rebuild indices from insertion_order, deduplicating in the process."""
-function _rebuild_indices!(store::MemoryStore)
-    n = length(store.insertion_order)
-    store.spo = Dict{Identifier, Dict{Identifier, Set{Identifier}}}()
-    store.pos = Dict{Identifier, Dict{Identifier, Set{Identifier}}}()
-    store.osp = Dict{Identifier, Dict{Identifier, Set{Identifier}}}()
-    # Deduplicate using SPO index as existence check
-    deduped = Triple[]
-    sizehint!(deduped, n)
-    for t in store.insertion_order
-        s, p, o = t.subject, t.predicate, t.object
-        sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
-        objs = get!(Set{Identifier}, sp, p)
-        o in objs && continue
-        push!(objs, o)
-        po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
-        push!(get!(Set{Identifier}, po, o), s)
-        os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
-        push!(get!(Set{Identifier}, os, s), p)
-        push!(deduped, t)
+"""Rebuild from insertion_order; optionally skip dedup for guaranteed-unique inserts."""
+function _rebuild_indices!(store::MemoryStore; skip_dedup::Bool=false)
+    if !skip_dedup
+        n = length(store.insertion_order)
+        # Fast dedup using Set{Triple} (concrete type — much faster than Dict→Dict→Set)
+        seen = Set{Triple}()
+        sizehint!(seen, n)
+        deduped = Triple[]
+        sizehint!(deduped, n)
+        for t in store.insertion_order
+            t in seen && continue
+            push!(seen, t)
+            push!(deduped, t)
+        end
+        store.insertion_order = deduped
+        store.count = length(deduped)
     end
-    store.insertion_order = deduped
-    store.count = length(deduped)
-    store.indexed = true
+    # Mark indices as needing rebuild (built on demand)
+    store.indexed = false
+    store.secondary_indexed = false
+    empty!(store.spo)
+    empty!(store.pos)
+    empty!(store.osp)
     nothing
 end
 
 function remove!(store::MemoryStore, pattern::TriplePattern)
-    _ensure_indexed!(store)
-    to_remove = collect(triples(store, pattern))
+    to_remove = collect(triples(store, pattern))  # triples() ensures all indices
     for t in to_remove
         _remove_from_indices!(store, t)
     end
@@ -165,18 +187,20 @@ function _remove_from_indices!(store::MemoryStore, t::Triple)
         isempty(store.spo[s]) && delete!(store.spo, s)
     end
 
-    # POS
-    if haskey(store.pos, p) && haskey(store.pos[p], o)
-        delete!(store.pos[p][o], s)
-        isempty(store.pos[p][o]) && delete!(store.pos[p], o)
-        isempty(store.pos[p]) && delete!(store.pos, p)
-    end
+    # POS (only if secondary indices are built)
+    if store.secondary_indexed
+        if haskey(store.pos, p) && haskey(store.pos[p], o)
+            delete!(store.pos[p][o], s)
+            isempty(store.pos[p][o]) && delete!(store.pos[p], o)
+            isempty(store.pos[p]) && delete!(store.pos, p)
+        end
 
-    # OSP
-    if haskey(store.osp, o) && haskey(store.osp[o], s)
-        delete!(store.osp[o][s], p)
-        isempty(store.osp[o][s]) && delete!(store.osp[o], s)
-        isempty(store.osp[o]) && delete!(store.osp, o)
+        # OSP
+        if haskey(store.osp, o) && haskey(store.osp[o], s)
+            delete!(store.osp[o][s], p)
+            isempty(store.osp[o][s]) && delete!(store.osp[o], s)
+            isempty(store.osp[o]) && delete!(store.osp, o)
+        end
     end
 
     store.count -= 1
@@ -188,7 +212,7 @@ end
 Iterate all triples matching the given pattern. `nothing` in any position is a wildcard.
 """
 function triples(store::MemoryStore, pattern::TriplePattern)
-    _ensure_indexed!(store)
+    _ensure_all_indexed!(store)
     s, p, o = pattern
     Channel{Triple}() do ch
         _triples_inner(store, s, p, o, ch)

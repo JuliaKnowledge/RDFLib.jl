@@ -151,12 +151,20 @@ end
 # Convenience constructors for common Julia types
 const _XSD = "http://www.w3.org/2001/XMLSchema#"
 
-Literal(v::Bool) = Literal(v ? "true" : "false", datatype=URIRef(_XSD * "boolean"))
-Literal(v::Integer) = Literal(string(v), datatype=URIRef(_XSD * "integer"))
-Literal(v::AbstractFloat) = Literal(string(v), datatype=URIRef(_XSD * "double"))
-Literal(v::DateTime) = Literal(Dates.format(v, dateformat"yyyy-mm-ddTHH:MM:SS"), datatype=URIRef(_XSD * "dateTime"))
-Literal(v::Date) = Literal(Dates.format(v, dateformat"yyyy-mm-dd"), datatype=URIRef(_XSD * "date"))
-Literal(v::Time) = Literal(Dates.format(v, dateformat"HH:MM:SS"), datatype=URIRef(_XSD * "time"))
+# Cached XSD datatype URIRefs to avoid repeated allocation
+const _XSD_BOOLEAN  = URIRef(_XSD * "boolean")
+const _XSD_INTEGER  = URIRef(_XSD * "integer")
+const _XSD_DOUBLE   = URIRef(_XSD * "double")
+const _XSD_DATETIME = URIRef(_XSD * "dateTime")
+const _XSD_DATE     = URIRef(_XSD * "date")
+const _XSD_TIME     = URIRef(_XSD * "time")
+
+Literal(v::Bool) = Literal(v ? "true" : "false", datatype=_XSD_BOOLEAN)
+Literal(v::Integer) = Literal(string(v), datatype=_XSD_INTEGER)
+Literal(v::AbstractFloat) = Literal(string(v), datatype=_XSD_DOUBLE)
+Literal(v::DateTime) = Literal(Dates.format(v, dateformat"yyyy-mm-ddTHH:MM:SS"), datatype=_XSD_DATETIME)
+Literal(v::Date) = Literal(Dates.format(v, dateformat"yyyy-mm-dd"), datatype=_XSD_DATE)
+Literal(v::Time) = Literal(Dates.format(v, dateformat"HH:MM:SS"), datatype=_XSD_TIME)
 
 function Base.show(io::IO, lit::Literal)
     print(io, "Literal(\"", lit.lexical, "\"")

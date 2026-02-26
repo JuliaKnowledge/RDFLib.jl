@@ -167,7 +167,7 @@ end
 function _triples_by_predicate(g::RDFGraph{MemoryStore}, pred::URIRef)
     result = Triple[]
     store = g.store
-    _ensure_indexed!(store)
+    _ensure_all_indexed!(store)
     haskey(store.pos, pred) || return result
     for (obj, subjs) in store.pos[pred]
         for s in subjs

@@ -108,19 +108,21 @@ Base.length(m::RDFMapping) = length(m.graph)
 """Convert a Julia value to an RDF term based on column type hint."""
 function _to_rdf_term(val, ct::IRIColumn)::Union{URIRef, Nothing}
     ismissing(val) && return nothing
-    s = string(val)
+    s = val isa AbstractString ? val : string(val)
     isempty(s) && return nothing
     URIRef(s)
 end
 
 function _to_rdf_term(val, ct::LiteralColumn)::Union{Literal, Nothing}
     ismissing(val) && return nothing
-    Literal(string(val); datatype=ct.datatype)
+    s = val isa AbstractString ? val : string(val)
+    Literal(s; datatype=ct.datatype)
 end
 
 function _to_rdf_term(val, ct::LangColumn)::Union{Literal, Nothing}
     ismissing(val) && return nothing
-    Literal(string(val); lang=ct.lang)
+    s = val isa AbstractString ? val : string(val)
+    Literal(s; lang=ct.lang)
 end
 
 function _to_rdf_term(val, ct::AutoColumn)::Union{Literal, Nothing}
@@ -132,11 +134,13 @@ function _to_rdf_term(val, ct::AutoColumn)::Union{Literal, Nothing}
     elseif val isa AbstractFloat
         Literal(val)
     elseif val isa Dates.DateTime
-        Literal(string(val); datatype=XSD.dateTime)
+        Literal(string(val); datatype=_XSD_DATETIME)
     elseif val isa Dates.Date
-        Literal(string(val); datatype=XSD.date)
+        Literal(string(val); datatype=_XSD_DATE)
     elseif val isa Dates.Time
-        Literal(string(val); datatype=XSD.time)
+        Literal(string(val); datatype=_XSD_TIME)
+    elseif val isa AbstractString
+        Literal(val)
     else
         Literal(string(val))
     end
@@ -153,6 +157,16 @@ function _to_subject(val, prefix::AbstractString)::Union{URIRef, Nothing}
         URIRef(prefix * _uri_encode(s))
     else
         URIRef(_uri_encode(s))
+    end
+end
+
+# Fast path for integer subjects with prefix (common in tabular data)
+function _to_subject(val::Integer, prefix::AbstractString)::Union{URIRef, Nothing}
+    # Integers don't need URI encoding — digits are safe
+    if !isempty(prefix)
+        URIRef(string(prefix, val))
+    else
+        URIRef(string(val))
     end
 end
 
@@ -184,22 +198,57 @@ rdf_map!(m, df, tpl)
 function rdf_map!(m::RDFMapping, table, template::RDFTemplate)
     rows = Tables.rows(table)
     rdf_type = RDF.type
-    for row in rows
-        subj = _to_subject(Tables.getcolumn(row, template.subject_column),
-                           template.subject_prefix)
-        subj === nothing && continue
+    store = m.graph.store
 
-        # Add rdf:type triples
-        for cls in template.types
-            add!(m.graph, Triple(subj, rdf_type, cls))
+    # Use bulk-insert mode for MemoryStore — skip per-triple dedup and index updates
+    if store isa MemoryStore
+        had_existing = store.count > 0
+        # Estimate triple count for pre-allocation
+        n_rows_est = Tables.rowcount(table)
+        triples_per_row = length(template.types) + length(template.properties)
+        if n_rows_est !== nothing && n_rows_est > 0
+            sizehint!(store.insertion_order, length(store.insertion_order) + n_rows_est * triples_per_row)
         end
 
-        # Add property triples
-        for (pred, col, ct) in template.properties
-            val = Tables.getcolumn(row, col)
-            obj = _to_rdf_term(val, ct)
-            obj === nothing && continue
-            add!(m.graph, Triple(subj, pred, obj))
+        # Defer indexing for bulk insert
+        _defer_indexing!(store)
+
+        for row in rows
+            subj = _to_subject(Tables.getcolumn(row, template.subject_column),
+                               template.subject_prefix)
+            subj === nothing && continue
+
+            for cls in template.types
+                _add_deferred!(store, Triple(subj, rdf_type, cls))
+            end
+
+            for (pred, col, ct) in template.properties
+                val = Tables.getcolumn(row, col)
+                obj = _to_rdf_term(val, ct)
+                obj === nothing && continue
+                _add_deferred!(store, Triple(subj, pred, obj))
+            end
+        end
+
+        # Skip dedup when store was empty (unique subjects → no duplicates possible)
+        _rebuild_indices!(store; skip_dedup=!had_existing)
+    else
+        # Generic path for other store backends
+        for row in rows
+            subj = _to_subject(Tables.getcolumn(row, template.subject_column),
+                               template.subject_prefix)
+            subj === nothing && continue
+
+            for cls in template.types
+                add!(m.graph, Triple(subj, rdf_type, cls))
+            end
+
+            for (pred, col, ct) in template.properties
+                val = Tables.getcolumn(row, col)
+                obj = _to_rdf_term(val, ct)
+                obj === nothing && continue
+                add!(m.graph, Triple(subj, pred, obj))
+            end
         end
     end
     m
@@ -427,6 +476,13 @@ struct OTTRParam
     ptype::OTTRParamType
     optional::Bool
     default_value::Any     # nothing, string, number, or IRI string
+end
+
+"""Pre-computed argument resolution info for fast-path expansion."""
+struct _OTTRArgInfo
+    param_idx::Int    # 0 for constants
+    constant::Any     # non-nothing for constants
+    is_bnode::Bool    # BNode constant (needs per-row suffix)
 end
 
 """An argument in an OTTR instance."""
@@ -1057,41 +1113,154 @@ function ottr_map!(m::RDFMapping, template_iri::AbstractString, table)
 
     # Pre-compute column→parameter mapping
     param_syms = Symbol[Symbol(p.name) for p in tpl.parameters]
-    param_col_idx = Int[]  # index in tpl.parameters for params that have columns
     param_has_col = Bool[sym in cols for sym in param_syms]
 
-    # Pre-resolve constant arguments in instances
     store = m.graph.store
+
+    # Check if we can use the fast path:
+    # All instances are ottr:Triple, no list expansion, no nested templates
+    use_fast = _can_use_fast_path(tpl, m)
 
     # Use deferred indexing for bulk performance
     _defer_indexing!(store)
 
-    # Reusable bindings dict to avoid per-row allocation
-    bindings = Dict{String, Any}()
-    sizehint!(bindings, length(tpl.parameters))
+    if use_fast
+        _ottr_map_fast!(m, tpl, table, param_syms, param_has_col)
+    else
+        # General path with Dict bindings
+        bindings = Dict{String, Any}()
+        sizehint!(bindings, length(tpl.parameters))
+        row_counter = 0
+        for row in rows
+            row_counter += 1
+            empty!(bindings)
+            for (i, param) in enumerate(tpl.parameters)
+                if param_has_col[i]
+                    val = Tables.getcolumn(row, param_syms[i])
+                    if !ismissing(val) && val !== nothing
+                        bindings[param.name] = _ottr_convert_value(val, param.ptype)
+                    elseif param.default_value !== nothing
+                        bindings[param.name] = param.default_value
+                    end
+                elseif param.default_value !== nothing
+                    bindings[param.name] = param.default_value
+                end
+            end
+            _ottr_expand_instances!(m, tpl.instances, bindings, row_counter)
+        end
+    end
+
+    # Rebuild SPO index (secondary indices built lazily)
+    _rebuild_indices!(store)
+    m
+end
+
+"""Check if a template can use the fast (no-Dict) expansion path."""
+function _can_use_fast_path(tpl::OTTRTemplate, m::RDFMapping)::Bool
+    for inst in tpl.instances
+        inst.template_iri == "http://ns.ottr.xyz/0.4/Triple" || return false
+        inst.list_expander != :none && return false
+        for arg in inst.args
+            arg.list_expand && return false
+        end
+    end
+    # No nested template calls
+    return true
+end
+
+"""Fast path: expand simple ottr:Triple instances without Dict bindings."""
+function _ottr_map_fast!(m::RDFMapping, tpl::OTTRTemplate, table,
+                          param_syms::Vector{Symbol}, param_has_col::Vector{Bool})
+    store = m.graph.store
+    rows = Tables.rows(table)
+
+    # Pre-resolve: for each instance, build a mapping from arg → (param_index, constant)
+    # so we can look up values by index instead of Dict key
+    n_params = length(tpl.parameters)
+    param_name_to_idx = Dict{String, Int}()
+    for (i, p) in enumerate(tpl.parameters)
+        param_name_to_idx[p.name] = i
+    end
+
+    # Pre-compute per-instance argument resolution info
+    inst_args = Vector{Vector{_OTTRArgInfo}}(undef, length(tpl.instances))
+    for (ii, inst) in enumerate(tpl.instances)
+        ainfos = _OTTRArgInfo[]
+        for arg in inst.args
+            if !isempty(arg.variable)
+                pidx = get(param_name_to_idx, arg.variable, 0)
+                push!(ainfos, _OTTRArgInfo(pidx, nothing, false))
+            elseif arg.constant isa BNode
+                push!(ainfos, _OTTRArgInfo(0, arg.constant, true))
+            else
+                push!(ainfos, _OTTRArgInfo(0, arg.constant, false))
+            end
+        end
+        inst_args[ii] = ainfos
+    end
+
+    # Pre-allocate per-row value array
+    vals = Vector{Any}(undef, n_params)
+    ptypes = [p.ptype for p in tpl.parameters]
+    defaults = [p.default_value for p in tpl.parameters]
 
     row_counter = 0
     for row in rows
         row_counter += 1
-        empty!(bindings)
-        for (i, param) in enumerate(tpl.parameters)
+
+        # Fill vals array from row (avoids Dict)
+        for i in 1:n_params
             if param_has_col[i]
-                val = Tables.getcolumn(row, param_syms[i])
-                if !ismissing(val) && val !== nothing
-                    bindings[param.name] = _ottr_convert_value(val, param.ptype)
-                elseif param.default_value !== nothing
-                    bindings[param.name] = param.default_value
+                v = Tables.getcolumn(row, param_syms[i])
+                if !ismissing(v) && v !== nothing
+                    vals[i] = _ottr_convert_value(v, ptypes[i])
+                else
+                    vals[i] = defaults[i]
                 end
-            elseif param.default_value !== nothing
-                bindings[param.name] = param.default_value
+            else
+                vals[i] = defaults[i]
             end
         end
-        _ottr_expand_instances!(m, tpl.instances, bindings, row_counter)
-    end
 
-    # Rebuild indices in bulk (also deduplicates)
-    _rebuild_indices!(store)
-    m
+        # Expand each instance
+        for (ii, inst) in enumerate(tpl.instances)
+            ainfos = inst_args[ii]
+            length(ainfos) >= 3 || continue
+
+            # Resolve subject
+            ai_s = ainfos[1]
+            subj = if ai_s.param_idx > 0
+                vals[ai_s.param_idx]
+            elseif ai_s.is_bnode
+                BNode(ai_s.constant.id * "_r$row_counter")
+            else
+                ai_s.constant
+            end
+            subj === nothing && continue
+
+            # Resolve predicate
+            ai_p = ainfos[2]
+            pred = if ai_p.param_idx > 0
+                vals[ai_p.param_idx]
+            else
+                ai_p.constant
+            end
+            pred === nothing && continue
+
+            # Resolve object
+            ai_o = ainfos[3]
+            obj = if ai_o.param_idx > 0
+                vals[ai_o.param_idx]
+            elseif ai_o.is_bnode
+                BNode(ai_o.constant.id * "_r$row_counter")
+            else
+                ai_o.constant
+            end
+            obj === nothing && continue
+
+            _add_deferred!(store, Triple(_ensure_node(subj), _ensure_uriref(pred), _ensure_identifier(obj)))
+        end
+    end
 end
 
 """Resolve a template IRI, trying prefixed name, full IRI, and partial match."""
