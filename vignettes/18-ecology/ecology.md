@@ -752,21 +752,18 @@ for t in triples(g, (nothing, eco("feeds_on"), nothing))
     add!(food_g, t)
 end
 
-dot = to_dot(food_g; label="Coastal Food Web")
-println("Generated DOT visualization ($(length(dot)) chars)")
-println("First 5 lines:")
-for line in Iterators.take(eachline(IOBuffer(dot)), 5)
-    println("  $line")
-end
+dot_str = to_dot(food_g; label="Coastal Food Web")
+println("Generated DOT visualization ($(length(dot_str)) chars)")
 ```
 
     Generated DOT visualization (1128 chars)
-    First 5 lines:
-      digraph {
-        rankdir=LR;
-        label="Coastal Food Web";
-      
-        n1 [label="sp:kelp"];
+
+``` julia
+using GraphViz
+GraphViz.load(IOBuffer(dot_str))
+```
+
+![](ecology_files/figure-markdown_strict/cell-24-output-1.svg)
 
 ### Serialization
 
