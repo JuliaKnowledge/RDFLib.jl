@@ -101,10 +101,17 @@ Full SPARQL 1.2 query engine supporting:
 - Property paths (`/`, `|`, `*`, `+`, `?`, `^`, `!`)
 - Subqueries and federated queries (SERVICE)
 
-### Inference & Validation
+### Reasoning & Inference
 
-- **RDFS/OWL inference** via the SHACL and InfixOWL modules
-- **SHACL validation** — validate graphs against SHACL shapes, producing `ValidationReport` with `ValidationResult` entries
+- **RDFS/OWL inference** — forward-chaining RDFS and OWL entailment rules
+- **N3 reasoning** — forward and backward chaining with Notation3 rules, including built-in predicates for math, string, list, and crypto operations
+- **Datalog** — semi-naive bottom-up evaluation with stratified negation
+- **ProbLog** — probabilistic logic programming with exact BDD-based inference
+- **InfixOWL** — DSL for building OWL ontologies
+
+### Validation
+
+- **SHACL** — validate graphs against SHACL shapes, producing `ValidationReport` with `ValidationResult` entries
 
 ### Graph Utilities
 
