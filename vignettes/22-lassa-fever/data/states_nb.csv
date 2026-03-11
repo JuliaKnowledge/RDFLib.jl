@@ -1,0 +1,173 @@
+name,adjoining
+Abia,Akwa Ibom
+Abia,Anambra
+Abia,Cross River
+Abia,Ebonyi
+Abia,Enugu
+Abia,Imo
+Abia,Rivers
+Adamawa,Borno
+Adamawa,Gombe
+Adamawa,Taraba
+Akwa Ibom,Abia
+Akwa Ibom,Cross River
+Akwa Ibom,Rivers
+Anambra,Abia
+Anambra,Delta
+Anambra,Edo
+Anambra,Enugu
+Anambra,Imo
+Anambra,Kogi
+Anambra,Rivers
+Bauchi,Gombe
+Bauchi,Jigawa
+Bauchi,Kaduna
+Bauchi,Kano
+Bauchi,Plateau
+Bauchi,Taraba
+Bauchi,Yobe
+Bayelsa,Delta
+Bayelsa,Rivers
+Benue,Cross River
+Benue,Ebonyi
+Benue,Enugu
+Benue,Kogi
+Benue,Nasarawa
+Benue,Taraba
+Borno,Adamawa
+Borno,Gombe
+Borno,Yobe
+Cross River,Abia
+Cross River,Akwa Ibom
+Cross River,Benue
+Cross River,Ebonyi
+Delta,Anambra
+Delta,Bayelsa
+Delta,Edo
+Delta,Ondo
+Delta,Rivers
+Ebonyi,Abia
+Ebonyi,Benue
+Ebonyi,Cross River
+Ebonyi,Enugu
+Edo,Anambra
+Edo,Delta
+Edo,Kogi
+Edo,Ondo
+Ekiti,Kogi
+Ekiti,Kwara
+Ekiti,Ondo
+Ekiti,Osun
+Enugu,Abia
+Enugu,Anambra
+Enugu,Benue
+Enugu,Ebonyi
+Enugu,Kogi
+Federal Capital Territory,Kaduna
+Federal Capital Territory,Kogi
+Federal Capital Territory,Nasarawa
+Federal Capital Territory,Niger
+Gombe,Adamawa
+Gombe,Bauchi
+Gombe,Borno
+Gombe,Taraba
+Gombe,Yobe
+Imo,Abia
+Imo,Anambra
+Imo,Rivers
+Jigawa,Bauchi
+Jigawa,Kano
+Jigawa,Katsina
+Jigawa,Yobe
+Kaduna,Bauchi
+Kaduna,Federal Capital Territory
+Kaduna,Kano
+Kaduna,Katsina
+Kaduna,Nasarawa
+Kaduna,Niger
+Kaduna,Plateau
+Kaduna,Zamfara
+Kano,Bauchi
+Kano,Jigawa
+Kano,Kaduna
+Kano,Katsina
+Katsina,Jigawa
+Katsina,Kaduna
+Katsina,Kano
+Katsina,Zamfara
+Kebbi,Niger
+Kebbi,Sokoto
+Kebbi,Zamfara
+Kogi,Anambra
+Kogi,Benue
+Kogi,Edo
+Kogi,Ekiti
+Kogi,Enugu
+Kogi,Federal Capital Territory
+Kogi,Kwara
+Kogi,Nasarawa
+Kogi,Niger
+Kogi,Ondo
+Kwara,Ekiti
+Kwara,Kogi
+Kwara,Niger
+Kwara,Osun
+Kwara,Oyo
+Lagos,Ogun
+Nasarawa,Benue
+Nasarawa,Federal Capital Territory
+Nasarawa,Kaduna
+Nasarawa,Kogi
+Nasarawa,Plateau
+Nasarawa,Taraba
+Niger,Federal Capital Territory
+Niger,Kaduna
+Niger,Kebbi
+Niger,Kogi
+Niger,Kwara
+Niger,Zamfara
+Ogun,Lagos
+Ogun,Ondo
+Ogun,Osun
+Ogun,Oyo
+Ondo,Delta
+Ondo,Edo
+Ondo,Ekiti
+Ondo,Kogi
+Ondo,Ogun
+Ondo,Osun
+Osun,Ekiti
+Osun,Kwara
+Osun,Ogun
+Osun,Ondo
+Osun,Oyo
+Oyo,Kwara
+Oyo,Ogun
+Oyo,Osun
+Plateau,Bauchi
+Plateau,Kaduna
+Plateau,Nasarawa
+Plateau,Taraba
+Rivers,Abia
+Rivers,Akwa Ibom
+Rivers,Anambra
+Rivers,Bayelsa
+Rivers,Delta
+Rivers,Imo
+Sokoto,Kebbi
+Sokoto,Zamfara
+Taraba,Adamawa
+Taraba,Bauchi
+Taraba,Benue
+Taraba,Gombe
+Taraba,Nasarawa
+Taraba,Plateau
+Yobe,Bauchi
+Yobe,Borno
+Yobe,Gombe
+Yobe,Jigawa
+Zamfara,Kaduna
+Zamfara,Katsina
+Zamfara,Kebbi
+Zamfara,Niger
+Zamfara,Sokoto

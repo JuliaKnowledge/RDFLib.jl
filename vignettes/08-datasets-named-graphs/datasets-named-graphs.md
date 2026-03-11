@@ -1,5 +1,5 @@
 # Datasets and Named Graphs
-
+Simon Frost
 
 ## Overview
 
@@ -150,10 +150,10 @@ end
 ```
 
     All triples across contexts:
-      (URIRef("http://example.org/london"), URIRef("http://example.org/temp"), Literal("15", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer")))
-      (URIRef("http://example.org/paris"), URIRef("http://example.org/temp"), Literal("18", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer")))
       (URIRef("http://example.org/london"), URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), URIRef("http://example.org/City"))
       (URIRef("http://example.org/paris"), URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), URIRef("http://example.org/City"))
+      (URIRef("http://example.org/london"), URIRef("http://example.org/temp"), Literal("15", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer")))
+      (URIRef("http://example.org/paris"), URIRef("http://example.org/temp"), Literal("18", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer")))
 
 ``` julia
 # Get a specific context

@@ -1,5 +1,5 @@
 # N3 Reasoning
-
+Simon Frost
 
 ## Overview
 
@@ -38,6 +38,8 @@ end
 ```
 
     Mortals:
+      URIRef("urn:example:Socrates")
+      URIRef("urn:example:Plato")
 
 ## Chained Rules
 
@@ -67,10 +69,10 @@ end
 ```
 
     Whiskers is a:
-      URIRef("urn:example:Cat")
+      URIRef("urn:example:Animal")
       URIRef("urn:example:Feline")
       URIRef("urn:example:Mammal")
-      URIRef("urn:example:Animal")
+      URIRef("urn:example:Cat")
 
 ## Backward Chaining
 
@@ -410,8 +412,8 @@ end
       URIRef("urn:family:frank")
 
     Siblings:
-      URIRef("urn:family:bob") ↔ URIRef("urn:family:carol")
       URIRef("urn:family:dave") ↔ URIRef("urn:family:eve")
+      URIRef("urn:family:carol") ↔ URIRef("urn:family:bob")
 
     Uncle/Aunt relationships:
       URIRef("urn:family:bob") is uncle of URIRef("urn:family:frank")

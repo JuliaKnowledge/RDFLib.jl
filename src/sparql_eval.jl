@@ -1544,20 +1544,142 @@ function _ast_eval_geosparql(name, args, binding, g)
         (isnothing(g1) || isnothing(g2)) && return nothing
         return Literal(geo_distance(g1, g2))
     end
+    # Simple Features binary relations
     _geo_rel = Dict("sfcontains"=>geo_contains, "sfwithin"=>geo_within,
         "sfintersects"=>geo_intersects, "sfoverlaps"=>geo_overlaps,
-        "sftouches"=>geo_touches, "sfdisjoint"=>geo_disjoint, "sfequals"=>geo_equals)
+        "sftouches"=>geo_touches, "sfdisjoint"=>geo_disjoint, "sfequals"=>geo_equals,
+        "sfcrosses"=>geo_crosses)
     if haskey(_geo_rel, func_name) && length(eval_args) >= 2
         g1 = _extract_wkt_geometry(eval_args[1])
         g2 = _extract_wkt_geometry(eval_args[2])
         (isnothing(g1) || isnothing(g2)) && return nothing
         return Literal(_geo_rel[func_name](g1, g2))
     end
+    # Egenhofer relations
+    _eh_rel = Dict("ehcontains"=>geo_eh_contains, "ehcoveredby"=>geo_eh_covered_by,
+        "ehcovers"=>geo_eh_covers, "ehdisjoint"=>geo_eh_disjoint,
+        "ehequals"=>geo_eh_equals, "ehinside"=>geo_eh_inside,
+        "ehmeet"=>geo_eh_meet, "ehoverlap"=>geo_eh_overlap)
+    if haskey(_eh_rel, func_name) && length(eval_args) >= 2
+        g1 = _extract_wkt_geometry(eval_args[1])
+        g2 = _extract_wkt_geometry(eval_args[2])
+        (isnothing(g1) || isnothing(g2)) && return nothing
+        return Literal(_eh_rel[func_name](g1, g2))
+    end
+    # RCC8 relations
+    _rcc8_rel = Dict("rcc8dc"=>geo_rcc8_dc, "rcc8ec"=>geo_rcc8_ec,
+        "rcc8po"=>geo_rcc8_po, "rcc8tpp"=>geo_rcc8_tpp, "rcc8ntpp"=>geo_rcc8_ntpp,
+        "rcc8tppi"=>geo_rcc8_tppi, "rcc8ntppi"=>geo_rcc8_ntppi, "rcc8eq"=>geo_rcc8_eq)
+    if haskey(_rcc8_rel, func_name) && length(eval_args) >= 2
+        g1 = _extract_wkt_geometry(eval_args[1])
+        g2 = _extract_wkt_geometry(eval_args[2])
+        (isnothing(g1) || isnothing(g2)) && return nothing
+        return Literal(_rcc8_rel[func_name](g1, g2))
+    end
     if func_name == "buffer" && length(eval_args) >= 2
         g1 = _extract_wkt_geometry(eval_args[1])
         d = _ast_to_numeric(eval_args[2])
         (isnothing(g1) || isnothing(d)) && return nothing
         return Literal(geo_to_wkt(geo_buffer(g1, Float64(d))))
+    end
+    # Unary geometry → numeric functions
+    _unary_num = Dict("area"=>geo_area, "length"=>geo_length, "perimeter"=>geo_perimeter,
+        "dimension"=>g1->geo_dimension(g1), "coordinatedimension"=>g1->geo_coordinate_dimension(g1),
+        "getsrid"=>g1->geo_get_srid(g1), "numgeometries"=>g1->geo_num_geometries(g1),
+        "minx"=>geo_min_x, "maxx"=>geo_max_x, "miny"=>geo_min_y, "maxy"=>geo_max_y)
+    if haskey(_unary_num, func_name) && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(_unary_num[func_name](g1))
+    end
+    # Unary geometry → bool functions
+    _unary_bool = Dict("isempty"=>geo_is_empty, "issimple"=>geo_is_simple)
+    if haskey(_unary_bool, func_name) && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(_unary_bool[func_name](g1))
+    end
+    # Unary geometry → string functions
+    if func_name == "geometrytype" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_geometry_type(g1))
+    end
+    # Unary geometry → geometry functions (return WKT)
+    _unary_geom = Dict("boundary"=>geo_boundary, "convexhull"=>geo_convex_hull,
+        "envelope"=>geo_envelope, "centroid"=>geo_centroid)
+    if haskey(_unary_geom, func_name) && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_to_wkt(_unary_geom[func_name](g1)))
+    end
+    # Binary geometry → geometry functions (return WKT)
+    _binary_geom = Dict("intersection"=>geo_intersection, "union"=>geo_union,
+        "difference"=>geo_difference, "symdifference"=>geo_sym_difference)
+    if haskey(_binary_geom, func_name) && length(eval_args) >= 2
+        g1 = _extract_wkt_geometry(eval_args[1])
+        g2 = _extract_wkt_geometry(eval_args[2])
+        (isnothing(g1) || isnothing(g2)) && return nothing
+        return Literal(geo_to_wkt(_binary_geom[func_name](g1, g2)))
+    end
+    # relate (2 or 3 args)
+    if func_name == "relate" && length(eval_args) >= 2
+        g1 = _extract_wkt_geometry(eval_args[1])
+        g2 = _extract_wkt_geometry(eval_args[2])
+        (isnothing(g1) || isnothing(g2)) && return nothing
+        if length(eval_args) >= 3
+            pat = eval_args[3] isa Literal ? eval_args[3].lexical : string(eval_args[3])
+            return Literal(geo_relate(g1, g2, pat))
+        end
+        return Literal(geo_relate(g1, g2))
+    end
+    # geometryN (geometry + index)
+    if func_name == "geometryn" && length(eval_args) >= 2
+        g1 = _extract_wkt_geometry(eval_args[1])
+        n = _ast_to_numeric(eval_args[2])
+        (isnothing(g1) || isnothing(n)) && return nothing
+        return Literal(geo_to_wkt(geo_geometry_n(g1, Int(n))))
+    end
+    # asWKT / asGeoJSON
+    if func_name == "aswkt" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_to_wkt(g1))
+    end
+    if func_name == "asgeojson" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_to_geojson(g1))
+    end
+    # minZ/maxZ — use actual Z coordinate for 3D geometries
+    if func_name in ("minz", "maxz") && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        pts = _all_points(g1)
+        zvals = [p.z for p in pts if !isnan(p.z)]
+        isempty(zvals) && return Literal(0.0)
+        return Literal(func_name == "minz" ? minimum(zvals) : maximum(zvals))
+    end
+    # GeoSPARQL 1.3: is3D, isMeasured, volume, surfaceArea
+    if func_name == "is3d" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_is_3d(g1))
+    end
+    if func_name == "ismeasured" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_is_measured(g1))
+    end
+    if func_name == "volume" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_volume(g1))
+    end
+    if func_name == "surfacearea" && length(eval_args) >= 1
+        g1 = _extract_wkt_geometry(eval_args[1])
+        isnothing(g1) && return nothing
+        return Literal(geo_surface_area(g1))
     end
     nothing
 end

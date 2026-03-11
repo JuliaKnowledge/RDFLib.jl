@@ -1,5 +1,5 @@
 # SPARQL Property Paths
-
+Simon Frost
 
 ## Overview
 
@@ -303,49 +303,12 @@ end
 
 ## Summary of Path Operators
 
-<table>
-<thead>
-<tr>
-<th>Operator</th>
-<th>Syntax</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Sequence</td>
-<td><code>p/q</code></td>
-<td>Follow p then q</td>
-</tr>
-<tr>
-<td>Alternative</td>
-<td><code>p\|q</code></td>
-<td>Follow p or q</td>
-</tr>
-<tr>
-<td>One or more</td>
-<td><code>p+</code></td>
-<td>Transitive closure (1+ hops)</td>
-</tr>
-<tr>
-<td>Zero or more</td>
-<td><code>p*</code></td>
-<td>Reflexive transitive closure</td>
-</tr>
-<tr>
-<td>Zero or one</td>
-<td><code>p?</code></td>
-<td>Optional step</td>
-</tr>
-<tr>
-<td>Inverse</td>
-<td><code>^p</code></td>
-<td>Reverse direction</td>
-</tr>
-<tr>
-<td>Negated set</td>
-<td><code>!(p\|q)</code></td>
-<td>Any predicate except p and q</td>
-</tr>
-</tbody>
-</table>
+| Operator     | Syntax    | Description                  |
+|--------------|-----------|------------------------------|
+| Sequence     | `p/q`     | Follow p then q              |
+| Alternative  | `p\|q`    | Follow p or q                |
+| One or more  | `p+`      | Transitive closure (1+ hops) |
+| Zero or more | `p*`      | Reflexive transitive closure |
+| Zero or one  | `p?`      | Optional step                |
+| Inverse      | `^p`      | Reverse direction            |
+| Negated set  | `!(p\|q)` | Any predicate except p and q |

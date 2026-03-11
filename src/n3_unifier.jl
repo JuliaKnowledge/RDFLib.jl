@@ -210,6 +210,7 @@ end
 function _match_triples(graph::RDFGraph, s, p, o)
     store = graph.store
     store isa MemoryStore || return triples(graph, (s, p, o))
+    _ensure_all_indexed!(store)
     result = Triple[]
     s_bound = s isa Identifier
     p_bound = p isa Identifier

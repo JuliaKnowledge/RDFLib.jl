@@ -1,5 +1,5 @@
 # Bayesian Belief Networks for Ecology
-
+Simon Frost
 
 ## Introduction
 
@@ -313,9 +313,9 @@ end
     Species          | Out-degree
     ─────────────────|───────────
     Periwinkle       | 4
+    Limpet           | 4
     Dogwhelk         | 4
     Topshell         | 4
-    Limpet           | 4
     Green Algae      | 3
 
 ### 5c. Strongest suppressors
@@ -347,12 +347,12 @@ end
     Strong suppressions (weight ≤ −3):
       Limpet ──-4──▶ Biofilm
       Limpet ──-4──▶ Green Algae
+      Periwinkle ──-3──▶ Biofilm
+      Dogwhelk ──-3──▶ Barnacle
       Periwinkle ──-3──▶ Green Algae
+      Topshell ──-3──▶ Biofilm
       Topshell ──-3──▶ Green Algae
       Green Algae ──-3──▶ Coralline Algae
-      Periwinkle ──-3──▶ Biofilm
-      Topshell ──-3──▶ Biofilm
-      Dogwhelk ──-3──▶ Barnacle
 
 ## 6. Property Paths — Indirect Interaction Chains
 
@@ -1012,7 +1012,7 @@ dot_str = bbn_to_dot([n for (n, _, _) in species], interaction_matrix;
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](bayesian-belief-networks_files/figure-markdown_strict/cell-22-output-1.svg)
+![](bayesian-belief-networks_files/figure-commonmark/cell-22-output-1.svg)
 
 ### 11b. MPA Network
 
@@ -1022,7 +1022,7 @@ dot_str = bbn_to_dot([n for (n, _) in mpa_species], mpa_matrix;
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](bayesian-belief-networks_files/figure-markdown_strict/cell-23-output-1.svg)
+![](bayesian-belief-networks_files/figure-commonmark/cell-23-output-1.svg)
 
 ### 11c. Scenario Impact Diagram
 
@@ -1076,63 +1076,24 @@ dot_str = scenario_to_dot([n for (n, _, _) in species], interaction_matrix,
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](bayesian-belief-networks_files/figure-markdown_strict/cell-24-output-1.svg)
+![](bayesian-belief-networks_files/figure-commonmark/cell-24-output-1.svg)
 
 ## 12. Summary
 
 This vignette demonstrated how RDFLib.jl integrates with ecological BBN
 analysis:
 
-<table>
-<colgroup>
-<col style="width: 40%" />
-<col style="width: 59%" />
-</colgroup>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Application</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>OWL ontology</strong></td>
-<td>BBN node types and interaction semantics</td>
-</tr>
-<tr>
-<td><strong>RDF graph</strong></td>
-<td>Species interactions as typed, weighted edges</td>
-</tr>
-<tr>
-<td><strong>SHACL</strong></td>
-<td>Validation of interaction weights and node labels</td>
-</tr>
-<tr>
-<td><strong>SPARQL</strong></td>
-<td>Query interactions, degrees, strongest effects</td>
-</tr>
-<tr>
-<td><strong>Property paths</strong></td>
-<td>Trace indirect interaction chains</td>
-</tr>
-<tr>
-<td><strong>Datalog</strong></td>
-<td>Infer trophic cascades and indirect facilitation</td>
-</tr>
-<tr>
-<td><strong>ProbLog</strong></td>
-<td>Probabilistic cascade modelling</td>
-</tr>
-<tr>
-<td><strong>BBN propagation</strong></td>
-<td>Stafford et al. (2015) algorithm for scenario analysis</td>
-</tr>
-<tr>
-<td><strong>GraphViz</strong></td>
-<td>Network and scenario impact visualisation</td>
-</tr>
-</tbody>
-</table>
+| Feature | Application |
+|----|----|
+| **OWL ontology** | BBN node types and interaction semantics |
+| **RDF graph** | Species interactions as typed, weighted edges |
+| **SHACL** | Validation of interaction weights and node labels |
+| **SPARQL** | Query interactions, degrees, strongest effects |
+| **Property paths** | Trace indirect interaction chains |
+| **Datalog** | Infer trophic cascades and indirect facilitation |
+| **ProbLog** | Probabilistic cascade modelling |
+| **BBN propagation** | Stafford et al. (2015) algorithm for scenario analysis |
+| **GraphViz** | Network and scenario impact visualisation |
 
 Key ecological findings from the BBN analysis: - **Dogwhelk removal**
 leads to increased grazer populations, which suppress primary producers
@@ -1144,9 +1105,9 @@ and periwinkle increase have competing effects on shared prey species.
 
 ### References
 
--   Stafford, R., Williams, R.L. & Herbert, R.J.H. (2015). Simple,
-    intuitive and accessible Bayesian Belief Network software for
-    non-specialists. *Methods in Ecology and Evolution*.
--   Sherring, A. *et al.* (2024). A Bayesian Belief Network approach to
-    assess conservation evidence within applied ecology. *bioRxiv*,
-    2024.06.12.598033.
+- Stafford, R., Williams, R.L. & Herbert, R.J.H. (2015). Simple,
+  intuitive and accessible Bayesian Belief Network software for
+  non-specialists. *Methods in Ecology and Evolution*.
+- Sherring, A. *et al.* (2024). A Bayesian Belief Network approach to
+  assess conservation evidence within applied ecology. *bioRxiv*,
+  2024.06.12.598033.

@@ -1,5 +1,5 @@
 # SPARQL Queries and Updates
-
+Simon Frost
 
 ## Overview
 
@@ -269,8 +269,8 @@ for row in results
 end
 ```
 
-    Literal("Albert Einstein"): Literal("German")
     Literal("Marie Curie"): Literal("Polish")
+    Literal("Albert Einstein"): Literal("German")
 
 ``` julia
 # DELETE/INSERT (modify existing data)
@@ -344,8 +344,8 @@ for row in results
 end
 ```
 
-    Literal("Isaac Newton") Literal("influenced someone")
     Literal("Ada Lovelace") Literal("influenced someone")
+    Literal("Isaac Newton") Literal("influenced someone")
     Literal("Marie Curie") Literal("knows someone")
 
 ## VALUES (Inline Data)

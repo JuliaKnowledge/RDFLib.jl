@@ -1,5 +1,5 @@
 # Store Backends
-
+Simon Frost
 
 ## Overview
 
@@ -115,7 +115,7 @@ undo!(store)
 println("After undo: $(length(g)) triples")
 
 # Check what's left
-for t in g
+for t in collect(triples(g))
     println("  ", t)
 end
 ```
@@ -164,68 +164,14 @@ println("Batch inserted: $(length(g)) triples")
 
 ## Store Comparison
 
-<table>
-<colgroup>
-<col style="width: 22%" />
-<col style="width: 16%" />
-<col style="width: 16%" />
-<col style="width: 16%" />
-<col style="width: 29%" />
-</colgroup>
-<thead>
-<tr>
-<th>Store</th>
-<th style="text-align: center;">Persistent</th>
-<th style="text-align: center;">Speed</th>
-<th style="text-align: center;">Thread-Safe</th>
-<th>Best For</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>MemoryStore</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">⚡ Fast</td>
-<td style="text-align: center;">❌</td>
-<td>Small-medium graphs, prototyping</td>
-</tr>
-<tr>
-<td>SQLiteStore</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">🔶 Medium</td>
-<td style="text-align: center;">❌</td>
-<td>Persistent storage, medium graphs</td>
-</tr>
-<tr>
-<td>DuckDBStore</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">🔶 Medium</td>
-<td style="text-align: center;">❌</td>
-<td>Analytics, large graphs</td>
-</tr>
-<tr>
-<td>ConcurrentStore</td>
-<td style="text-align: center;">depends</td>
-<td style="text-align: center;">⚠️ Overhead</td>
-<td style="text-align: center;">✅</td>
-<td>Multi-threaded apps</td>
-</tr>
-<tr>
-<td>AuditableStore</td>
-<td style="text-align: center;">depends</td>
-<td style="text-align: center;">⚠️ Overhead</td>
-<td style="text-align: center;">❌</td>
-<td>Change tracking, undo/redo</td>
-</tr>
-<tr>
-<td>BatchAddGraph</td>
-<td style="text-align: center;">depends</td>
-<td style="text-align: center;">⚡ Bulk</td>
-<td style="text-align: center;">❌</td>
-<td>Data loading</td>
-</tr>
-</tbody>
-</table>
+| Store | Persistent | Speed | Thread-Safe | Best For |
+|----|:--:|:--:|:--:|----|
+| MemoryStore | ❌ | ⚡ Fast | ❌ | Small-medium graphs, prototyping |
+| SQLiteStore | ✅ | 🔶 Medium | ❌ | Persistent storage, medium graphs |
+| DuckDBStore | ✅ | 🔶 Medium | ❌ | Analytics, large graphs |
+| ConcurrentStore | depends | ⚠️ Overhead | ✅ | Multi-threaded apps |
+| AuditableStore | depends | ⚠️ Overhead | ❌ | Change tracking, undo/redo |
+| BatchAddGraph | depends | ⚡ Bulk | ❌ | Data loading |
 
 ## Transactions
 
@@ -245,26 +191,3 @@ println("After transaction: $(length(g)) triples")
 ```
 
     After transaction: 2 triples
-
-## Isomorphic Graph
-
-A wrapper that provides canonical form for blank node-insensitive
-comparison:
-
-``` julia
-g1 = parse_rdf("""
-    @prefix ex: <http://example.org/> .
-    ex:a ex:p [ ex:q "hello" ] .
-""", TurtleFormat())
-
-g2 = parse_rdf("""
-    @prefix ex: <http://example.org/> .
-    ex:a ex:p [ ex:q "hello" ] .
-""", TurtleFormat())
-
-iso1 = to_isomorphic(g1)
-iso2 = to_isomorphic(g2)
-println("Isomorphic: ", iso1 == iso2)
-```
-
-    Isomorphic: true

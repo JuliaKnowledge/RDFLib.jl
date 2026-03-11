@@ -1,20 +1,21 @@
 # RDFLib.jl
 
+[![Build Status](https://github.com/JuliaKnowledge/RDFLib.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/JuliaKnowledge/RDFLib.jl/actions/workflows/CI.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 An idiomatic Julia port of Python's [rdflib](https://rdflib.readthedocs.io/) package for working with RDF (Resource Description Framework) data. RDFLib.jl uses Julia's type system and multiple dispatch to provide a natural, high-performance API for creating, querying, and serializing RDF graphs.
 
 ## Installation
 
-RDFLib.jl is not yet registered in the Julia General registry. Install it as a local package:
-
 ```julia
 using Pkg
-Pkg.develop(path="/path/to/RDFLib.jl")
+Pkg.add(url="https://github.com/JuliaKnowledge/RDFLib.jl")
 ```
 
 Or from the Pkg REPL:
 
 ```
-pkg> dev /path/to/RDFLib.jl
+pkg> add https://github.com/JuliaKnowledge/RDFLib.jl
 ```
 
 ## Quick Start
@@ -207,6 +208,34 @@ void_graph = generate_void(g, URIRef("http://example.org/dataset"))
 - `expand_curie(nsm, curie)` — expand `prefix:local` to full URI
 - `compute_qname(nsm, uri)` — compute qualified name for URI
 
+## Vignettes
+
+| # | Topic | Description |
+|---|-------|-------------|
+| 1 | [Getting Started](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/01-getting-started/getting-started.md) | Installation, first graph, basic operations |
+| 2 | [RDF Terms](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/02-rdf-terms/rdf-terms.md) | URIs, literals, and blank nodes |
+| 3 | [Building Graphs](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/03-building-graphs/building-graphs.md) | Graph construction and manipulation |
+| 4 | [Namespaces](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/04-namespaces/namespaces.md) | Namespaces and vocabularies |
+| 5 | [Serialization](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/05-serialization/serialization.md) | Serialization formats |
+| 6 | [SPARQL Queries](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/06-sparql-queries/sparql-queries.md) | SPARQL queries and updates |
+| 7 | [Collections & Containers](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/07-collections-containers/collections-containers.md) | RDF collections and containers |
+| 8 | [Datasets & Named Graphs](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/08-datasets-named-graphs/datasets-named-graphs.md) | Named graphs and quads |
+| 9 | [RDFS/OWL Inference](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/09-inference-rdfs-owl/inference-rdfs-owl.md) | RDFS and OWL entailment |
+| 10 | [N3 Reasoning](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/10-n3-reasoning/n3-reasoning.md) | Forward/backward chaining with N3 rules |
+| 11 | [SHACL Validation](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/11-shacl-validation/shacl-validation.md) | Shape constraint validation |
+| 12 | [Store Backends](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/12-store-backends/store-backends.md) | SQLite, DuckDB, auditable, concurrent stores |
+| 13 | [Tabular Mapping](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/13-tabular-mapping/tabular-mapping.md) | CSV/DataFrame to RDF with OTTR templates |
+| 14 | [Datalog](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/14-datalog/datalog.md) | Semi-naive bottom-up reasoning |
+| 15 | [ProbLog](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/15-problog/problog.md) | Probabilistic logic programming |
+| 16 | [GeoSPARQL](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/16-geosparql/geosparql.md) | Spatial data in RDF |
+| 16 | [Property Paths](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/16-property-paths/property-paths.md) | SPARQL property path expressions |
+| 17 | [Graph Utilities](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/17-graph-utilities/graph-utilities.md) | Isomorphism, CBD, VoID, visualization |
+| 18 | [Ecology](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/18-ecology/ecology.md) | Marine food web knowledge graph |
+| 19 | [Ash Dieback](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/19-ash-dieback/ash-dieback.md) | UK ash dieback disease modeling |
+| 20 | [Bayesian Belief Networks](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/20-bayesian-belief-networks/bayesian-belief-networks.md) | BBN for species interaction networks |
+| 21 | [Epidemiology](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/21-epidemiology/epidemiology.md) | Infectious disease surveillance |
+| 22 | [Lassa Fever](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/22-lassa-fever/lassa-fever.md) | Lassa fever surveillance in Nigeria |
+
 ## Dependencies
 
 - [EzXML.jl](https://github.com/JuliaIO/EzXML.jl) — XML parsing
@@ -218,6 +247,10 @@ void_graph = generate_void(g, URIRef("http://example.org/dataset"))
 - [GraphViz.jl](https://github.com/Keno/GraphViz.jl) — DOT visualization
 - [SHA.jl](https://github.com/JuliaCrypto/SHA.jl) — hashing
 
+## Contributing
+
+Contributions are welcome! Please open an [issue](https://github.com/JuliaKnowledge/RDFLib.jl/issues) or submit a [pull request](https://github.com/JuliaKnowledge/RDFLib.jl/pulls) on GitHub.
+
 ## License
 
-MIT
+[MIT](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/LICENSE)

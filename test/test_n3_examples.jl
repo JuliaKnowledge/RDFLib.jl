@@ -179,11 +179,11 @@
 
     # ── 10. EYE comparison ──────────────────────────────────────────────
     @testset "Compare with EYE reasoner" begin
-        swipl = "/opt/homebrew/bin/swipl"
-        eye = "/Users/sdwfrost/Projects/rdf/eye/eye.pl"
-        tmpdir = "/Users/sdwfrost/Projects/rdf/tmp"
+        swipl = Sys.which("swipl")
+        eye = get(ENV, "EYE_PATH", joinpath(dirname(@__DIR__), "..", "eye", "eye.pl"))
+        tmpdir = mktempdir()
 
-        if isfile(swipl) && isfile(eye)
+        if swipl !== nothing && isfile(swipl) && isfile(eye)
             mkpath(tmpdir)
 
             data_n3 = """

@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>Ash Dieback in the UK</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="ash-dieback_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="ash-dieback_files/libs/quarto-html/anchor.min.js"></script>
 <link href="ash-dieback_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="ash-dieback_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="ash-dieback_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="ash-dieback_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="ash-dieback_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="ash-dieback_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="ash-dieback_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../ash-dieback.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="ash-dieback.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -89,6 +94,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -104,14 +115,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>Ash dieback, caused by the fungus <em>Hymenoscyphus fraxineus</em>, is the most serious tree disease to affect the UK in a generation. First confirmed in the UK in 2012, it is expected to kill up to 80% of the country’s 80 million ash trees (<em>Fraxinus excelsior</em>), with cascading consequences for the ~955 species that depend on ash.</p>
 <p>This vignette builds a <strong>knowledge graph for ash dieback</strong> that integrates pathology, ecology, and surveillance data, then analyses it using the full breadth of RDFLib.jl: ontology design, tabular data import, SHACL validation, SPARQL queries, property paths, Datalog reasoning, ProbLog probabilistic inference, and visualization.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="disease-ontology" class="level2">
 <h2 class="anchored" data-anchor-id="disease-ontology">1. Disease Ontology</h2>
 <p>We define an ontology covering tree species, pathogens, associated organisms, symptoms, woodland sites, and surveillance observations.</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Namespaces</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>adb <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/ashdieback#"</span>)</span>
@@ -156,7 +167,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">adb</span>(prop), RDF.<span class="kw">type</span>, OWL.DatatypeProperty))</span>
 <span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Ontology: 51 triples</code></pre>
 </div>
@@ -165,7 +176,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="the-pathogen-and-its-hosts" class="level2">
 <h2 class="anchored" data-anchor-id="the-pathogen-and-its-hosts">2. The Pathogen and Its Hosts</h2>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The pathogen</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The pathogen</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>hf <span class="op">=</span> <span class="fu">tax</span>(<span class="st">"hymenoscyphus_fraxineus"</span>)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(hf, RDF.<span class="kw">type</span>, <span class="fu">adb</span>(<span class="st">"Pathogen"</span>)))</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(hf, <span class="fu">adb</span>(<span class="st">"common_name"</span>), <span class="fu">Literal</span>(<span class="st">"Ash dieback fungus"</span>)))</span>
@@ -235,7 +246,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(hf, <span class="fu">adb</span>(<span class="st">"causes"</span>), s))</span>
 <span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Disease model: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Disease model: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Disease model: 126 triples</code></pre>
 </div>
@@ -245,7 +256,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="species-dependent-on-ash">3. Species Dependent on Ash</h2>
 <p>Of ~955 species associated with ash in the UK, 45 are obligate specialists and 62 are highly associated. We model representative species across taxonomic groups.</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Conservation status categories</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Conservation status categories</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> status <span class="kw">in</span> [<span class="st">"critical"</span>, <span class="st">"endangered"</span>, <span class="st">"vulnerable"</span>, <span class="st">"least_concern"</span>]</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">adb</span>(status), RDF.<span class="kw">type</span>, <span class="fu">adb</span>(<span class="st">"ConservationStatus"</span>)))</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">adb</span>(status), RDFS.label, <span class="fu">Literal</span>(<span class="fu">replace</span>(status, <span class="ch">'_'</span> <span class="op">=&gt;</span> <span class="ch">' '</span>))))</span>
@@ -281,7 +292,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Associated species added: </span><span class="sc">$</span>(<span class="fu">length</span>(associated))<span class="st">"</span>)</span>
-<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Associated species added: 15
 Total graph: 224 triples</code></pre>
@@ -291,7 +302,7 @@ Total graph: 224 triples</code></pre>
 <section id="woodland-survey-sites" class="level2">
 <h2 class="anchored" data-anchor-id="woodland-survey-sites">4. Woodland Survey Sites</h2>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sites <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sites <span class="op">=</span> [</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"thetford"</span>,     <span class="st">"Thetford Forest"</span>,     <span class="st">"East Anglia"</span>,       <span class="fl">52.45</span>, <span class="fl">0.82</span>,  <span class="st">"TL8384"</span>),</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"ashdown"</span>,      <span class="st">"Ashdown Forest"</span>,      <span class="st">"South East"</span>,        <span class="fl">51.07</span>, <span class="fl">0.03</span>,  <span class="st">"TQ4432"</span>),</span>
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"wyre"</span>,         <span class="st">"Wyre Forest"</span>,         <span class="st">"West Midlands"</span>,     <span class="fl">52.37</span>, <span class="op">-</span><span class="fl">2.35</span>, <span class="st">"SO7476"</span>),</span>
@@ -312,7 +323,7 @@ Total graph: 224 triples</code></pre>
 <span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">adb</span>(<span class="st">"grid_ref"</span>), <span class="fu">Literal</span>(gridref)))</span>
 <span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>(<span class="fu">length</span>(sites))<span class="st"> woodland sites added"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>(<span class="fu">length</span>(sites))<span class="st"> woodland sites added"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>8 woodland sites added</code></pre>
 </div>
@@ -322,7 +333,7 @@ Total graph: 224 triples</code></pre>
 <h2 class="anchored" data-anchor-id="importing-surveillance-data-from-tabular-sources">5. Importing Surveillance Data from Tabular Sources</h2>
 <p>Forest Research runs annual ash dieback surveillance. We import survey data using <strong>tabular mapping</strong>.</p>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> [</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">1</span>,  site_id<span class="op">=</span><span class="st">"thetford"</span>,      stage<span class="op">=</span><span class="st">"severe"</span>,   infection_pct<span class="op">=</span><span class="fl">78</span>, tree_count<span class="op">=</span><span class="fl">150</span>, crown_loss_pct<span class="op">=</span><span class="fl">62</span>, date<span class="op">=</span><span class="st">"2023-06-15"</span>, surveyor<span class="op">=</span><span class="st">"J.Smith"</span>),</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">2</span>,  site_id<span class="op">=</span><span class="st">"ashdown"</span>,       stage<span class="op">=</span><span class="st">"moderate"</span>,  infection_pct<span class="op">=</span><span class="fl">55</span>, tree_count<span class="op">=</span><span class="fl">200</span>, crown_loss_pct<span class="op">=</span><span class="fl">38</span>, date<span class="op">=</span><span class="st">"2023-06-20"</span>, surveyor<span class="op">=</span><span class="st">"A.Brown"</span>),</span>
 <span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">3</span>,  site_id<span class="op">=</span><span class="st">"wyre"</span>,          stage<span class="op">=</span><span class="st">"severe"</span>,    infection_pct<span class="op">=</span><span class="fl">82</span>, tree_count<span class="op">=</span><span class="fl">180</span>, crown_loss_pct<span class="op">=</span><span class="fl">71</span>, date<span class="op">=</span><span class="st">"2023-07-01"</span>, surveyor<span class="op">=</span><span class="st">"M.Jones"</span>),</span>
@@ -364,7 +375,7 @@ Total graph: 224 triples</code></pre>
 <span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>before <span class="op">=</span> <span class="fu">length</span>(g)</span>
 <span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a><span class="fu">rdf_map!</span>(m, surveys_rdf, tpl)</span>
 <span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Imported </span><span class="sc">$</span>(<span class="fu">length</span>(g) <span class="op">-</span> before)<span class="st"> triples from </span><span class="sc">$</span>(<span class="fu">length</span>(surveys))<span class="st"> survey records"</span>)</span>
-<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total knowledge graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total knowledge graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Imported 96 triples from 12 survey records
 Total knowledge graph: 368 triples</code></pre>
@@ -375,7 +386,7 @@ Total knowledge graph: 368 triples</code></pre>
 <h2 class="anchored" data-anchor-id="validating-survey-data-with-shacl">6. Validating Survey Data with SHACL</h2>
 <p>We ensure every survey observation has required fields and valid ranges.</p>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>shapes_ttl <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>shapes_ttl <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .</span></span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix adb: &lt;http://example.org/ashdieback#&gt; .</span></span>
 <span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .</span></span>
@@ -405,14 +416,14 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
 <span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> <span class="fu">rdf_validate</span>(m, shapes_ttl)</span>
-<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Survey data validation: conforms = </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Survey data validation: conforms = </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Survey data validation: conforms = true</code></pre>
 </div>
 </div>
 <p>Test with an incomplete record:</p>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>bad <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/observation/survey_incomplete"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>bad <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/observation/survey_incomplete"</span>)</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">adb</span>(<span class="st">"SurveyObservation"</span>)))</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">adb</span>(<span class="st">"surveyor"</span>), <span class="fu">Literal</span>(<span class="st">"Unknown"</span>)))</span>
 <span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -424,14 +435,14 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">adb</span>(<span class="st">"SurveyObservation"</span>)))</span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">adb</span>(<span class="st">"surveyor"</span>), <span class="fu">Literal</span>(<span class="st">"Unknown"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">adb</span>(<span class="st">"surveyor"</span>), <span class="fu">Literal</span>(<span class="st">"Unknown"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>After adding incomplete survey:
   Conforms: false
   ✗ Expected at least 1 values for http://example.org/ashdieback#observed_at, got 0
   ✗ Expected at least 1 values for http://example.org/ashdieback#has_disease_stage, got 0
-  ✗ Expected at least 1 values for http://example.org/ashdieback#infection_pct, got 0
-  ✗ Expected at least 1 values for http://example.org/ashdieback#survey_date, got 0</code></pre>
+  ✗ Expected at least 1 values for http://example.org/ashdieback#survey_date, got 0
+  ✗ Expected at least 1 values for http://example.org/ashdieback#infection_pct, got 0</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>RDFGraph (368 triples)</code></pre>
@@ -441,10 +452,10 @@ Total knowledge graph: 368 triples</code></pre>
 <section id="querying-the-knowledge-graph" class="level2">
 <h2 class="anchored" data-anchor-id="querying-the-knowledge-graph">7. Querying the Knowledge Graph</h2>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper for readable output</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper for readable output</span></span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">Literal</span>) <span class="op">=</span> x.lexical</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">URIRef</span>) <span class="op">=</span> <span class="fu">split</span>(x.value, <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>readable (generic function with 3 methods)</code></pre>
 </div>
@@ -452,7 +463,7 @@ Total knowledge graph: 368 triples</code></pre>
 <section id="infection-severity-by-site" class="level3">
 <h3 class="anchored" data-anchor-id="infection-severity-by-site">Infection severity by site</h3>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX adb: &lt;http://example.org/ashdieback#&gt;</span></span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?site_name ?region ?date ?infection ?crown_loss ?stage WHERE {</span></span>
@@ -478,7 +489,7 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb19-24"><a href="#cb19-24" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"infection"</span>]), <span class="fl">6</span>))<span class="st">"</span> <span class="op">*</span></span>
 <span id="cb19-25"><a href="#cb19-25" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"crown_loss"</span>]), <span class="fl">8</span>))<span class="st">"</span> <span class="op">*</span></span>
 <span id="cb19-26"><a href="#cb19-26" aria-hidden="true" tabindex="-1"></a>            <span class="fu">readable</span>(row[<span class="st">"stage"</span>]))</span>
-<span id="cb19-27"><a href="#cb19-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb19-27"><a href="#cb19-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Survey results by infection severity:
   Site                 Region               Date         Inf%  Crown%  Stage
@@ -501,7 +512,7 @@ Total knowledge graph: 368 triples</code></pre>
 <section id="obligate-species-at-risk" class="level3">
 <h3 class="anchored" data-anchor-id="obligate-species-at-risk">Obligate species at risk</h3>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX adb: &lt;http://example.org/ashdieback#&gt;</span></span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name ?group ?status WHERE {</span></span>
@@ -517,7 +528,7 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Obligate ash specialists (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st"> species):"</span>)</span>
 <span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">28</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"group"</span>]), <span class="fl">12</span>))<span class="st"> [</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"status"</span>]))<span class="st">]"</span>)</span>
-<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Obligate ash specialists (6 species):
   Ash Lichen                   lichen       [critical]
@@ -532,7 +543,7 @@ Total knowledge graph: 368 triples</code></pre>
 <section id="sites-with-70-infection" class="level3">
 <h3 class="anchored" data-anchor-id="sites-with-70-infection">Sites with &gt;70% infection</h3>
 <div id="24" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX adb: &lt;http://example.org/ashdieback#&gt;</span></span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name ?infection ?date WHERE {</span></span>
 <span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="st">        ?obs a adb:SurveyObservation .</span></span>
@@ -547,7 +558,7 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Critically affected sites (&gt;70% infection):"</span>)</span>
 <span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"infection"</span>]))<span class="st">%  (</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"date"</span>]))<span class="st">)"</span>)</span>
-<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Critically affected sites (&gt;70% infection):
   Epping Forest        95%  (2024-08-05)
@@ -563,7 +574,7 @@ Total knowledge graph: 368 triples</code></pre>
 <h2 class="anchored" data-anchor-id="tracing-impact-pathways-with-property-paths">8. Tracing Impact Pathways with Property Paths</h2>
 <p>Which species are transitively threatened by the pathogen?</p>
 <div id="26" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX adb: &lt;http://example.org/ashdieback#&gt;</span></span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX tax: &lt;http://example.org/taxon/&gt;</span></span>
 <span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name ?specificity WHERE {</span></span>
@@ -576,7 +587,7 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Species threatened via ash dependency (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st">):"</span>)</span>
 <span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">30</span>))<span class="st"> [</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"specificity"</span>]))<span class="st">]"</span>)</span>
-<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Species threatened via ash dependency (15):
   Bullfinch                      [associated]
@@ -599,7 +610,7 @@ Total knowledge graph: 368 triples</code></pre>
 <section id="replacement-tree-options" class="level3">
 <h3 class="anchored" data-anchor-id="replacement-tree-options">Replacement tree options</h3>
 <div id="28" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX adb: &lt;http://example.org/ashdieback#&gt;</span></span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX tax: &lt;http://example.org/taxon/&gt;</span></span>
 <span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name ?latin WHERE {</span></span>
@@ -612,7 +623,7 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Potential replacement species for ash:"</span>)</span>
 <span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]))<span class="st"> (</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"latin"</span>]))<span class="st">)"</span>)</span>
-<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Potential replacement species for ash:
   Common Alder (Alnus glutinosa)
@@ -628,7 +639,7 @@ Total knowledge graph: 368 triples</code></pre>
 <h2 class="anchored" data-anchor-id="inferring-risk-with-datalog-reasoning">9. Inferring Risk with Datalog Reasoning</h2>
 <p>We use Datalog to derive which species face extinction risk based on host specificity and conservation status, and which sites are critical.</p>
 <div id="30" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>n3_rules <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>n3_rules <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix adb: &lt;http://example.org/ashdieback#&gt; .</span></span>
 <span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix tax: &lt;http://example.org/taxon/&gt; .</span></span>
 <span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix site: &lt;http://example.org/site/&gt; .</span></span>
@@ -695,7 +706,7 @@ Total knowledge graph: 368 triples</code></pre>
 <span id="cb29-65"><a href="#cb29-65" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">All obligate species facing extinction risk (</span><span class="sc">$</span>(<span class="fu">length</span>(general))<span class="st">):"</span>)</span>
 <span id="cb29-66"><a href="#cb29-66" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sp <span class="kw">in</span> <span class="fu">sort</span>(general; by<span class="op">=</span>x <span class="op">-&gt;</span> <span class="fu">split</span>(<span class="fu">string</span>(x), <span class="ch">'/'</span>)[<span class="kw">end</span>])</span>
 <span id="cb29-67"><a href="#cb29-67" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  • </span><span class="sc">$</span>(<span class="fu">split</span>(<span class="fu">string</span>(sp), <span class="ch">'/'</span>)[<span class="kw">end</span>])<span class="st">"</span>)</span>
-<span id="cb29-68"><a href="#cb29-68" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb29-68"><a href="#cb29-68" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Before reasoning: 27 triples
 After reasoning:  38 triples
@@ -724,7 +735,7 @@ All obligate species facing extinction risk (6):
 <h2 class="anchored" data-anchor-id="probabilistic-outcomes-with-problog">10. Probabilistic Outcomes with ProbLog</h2>
 <p>We model the probability of different outcomes for an ash woodland given ash dieback, considering factors like genetic resistance, management intervention, and secondary infection.</p>
 <div id="32" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>woodland_model <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>woodland_model <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="st">    0.05::genetic_resistance.</span></span>
 <span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.90::pathogen_present.</span></span>
 <span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.30::management_intervention.</span></span>
@@ -750,7 +761,7 @@ All obligate species facing extinction risk (6):
 <span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ash woodland outcome probabilities (baseline):"</span>)</span>
 <span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"infection"</span>, <span class="st">"rapid_decline"</span>, <span class="st">"slow_decline"</span>, <span class="st">"managed_decline"</span>, <span class="st">"tree_survival"</span>]</span>
 <span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">haskey</span>(results, key) <span class="op">&amp;&amp;</span> <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Ash woodland outcome probabilities (baseline):
   infection            0.513
@@ -763,13 +774,13 @@ All obligate species facing extinction risk (6):
 <section id="scenario-active-management-intervention-guaranteed" class="level3">
 <h3 class="anchored" data-anchor-id="scenario-active-management-intervention-guaranteed">Scenario: Active management (intervention guaranteed)</h3>
 <div id="34" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>managed <span class="op">=</span> woodland_model <span class="op">*</span> <span class="st">"</span><span class="sc">\n</span><span class="st">    evidence(management_intervention, true).</span><span class="sc">\n</span><span class="st">"</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>managed <span class="op">=</span> woodland_model <span class="op">*</span> <span class="st">"</span><span class="sc">\n</span><span class="st">    evidence(management_intervention, true).</span><span class="sc">\n</span><span class="st">"</span></span>
 <span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>r_managed <span class="op">=</span> <span class="fu">problog_query</span>(managed)</span>
 <span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"With active management:"</span>)</span>
 <span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"infection"</span>, <span class="st">"rapid_decline"</span>, <span class="st">"slow_decline"</span>, <span class="st">"managed_decline"</span>, <span class="st">"tree_survival"</span>]</span>
 <span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">haskey</span>(r_managed, key) <span class="op">&amp;&amp;</span> <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">round</span>(r_managed[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>With active management:
   infection            0.513
@@ -783,7 +794,7 @@ All obligate species facing extinction risk (6):
 <section id="scenario-no-management-wet-summer" class="level3">
 <h3 class="anchored" data-anchor-id="scenario-no-management-wet-summer">Scenario: No management, wet summer</h3>
 <div id="36" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>worst <span class="op">=</span> woodland_model <span class="op">*</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>worst <span class="op">=</span> woodland_model <span class="op">*</span> <span class="st">"""</span></span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="st">    evidence(management_intervention, false).</span></span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="st">    evidence(wet_summer, true).</span></span>
 <span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
@@ -792,7 +803,7 @@ All obligate species facing extinction risk (6):
 <span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Worst case (no management, wet summer):"</span>)</span>
 <span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"infection"</span>, <span class="st">"rapid_decline"</span>, <span class="st">"slow_decline"</span>, <span class="st">"managed_decline"</span>, <span class="st">"tree_survival"</span>]</span>
 <span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">haskey</span>(r_worst, key) <span class="op">&amp;&amp;</span> <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">round</span>(r_worst[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Worst case (no management, wet summer):
   infection            0.855
@@ -806,7 +817,7 @@ All obligate species facing extinction risk (6):
 <section id="comparing-management-scenarios" class="level3">
 <h3 class="anchored" data-anchor-id="comparing-management-scenarios">Comparing management scenarios</h3>
 <div id="38" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Impact of management on ash woodland outcomes:</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Impact of management on ash woodland outcomes:</span><span class="sc">\n</span><span class="st">"</span>)</span>
 <span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Outcome"</span>, <span class="fl">22</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Baseline"</span>, <span class="fl">12</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Managed"</span>, <span class="fl">12</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Worst case"</span>, <span class="fl">12</span>))<span class="st"> Managed vs Worst"</span>)</span>
 <span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="st">"-"</span><span class="op">^</span><span class="fl">72</span>)<span class="st">"</span>)</span>
 <span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"infection"</span>, <span class="st">"rapid_decline"</span>, <span class="st">"slow_decline"</span>, <span class="st">"managed_decline"</span>, <span class="st">"tree_survival"</span>]</span>
@@ -818,7 +829,7 @@ All obligate species facing extinction risk (6):
 <span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">22</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">round</span>(p_base; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>))<span class="st"> "</span> <span class="op">*</span></span>
 <span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">round</span>(p_man; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">round</span>(p_bad; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>))<span class="st"> "</span> <span class="op">*</span></span>
 <span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(sign)<span class="sc">$</span>(<span class="fu">round</span>(delta; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
-<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Impact of management on ash woodland outcomes:
 
@@ -838,7 +849,7 @@ All obligate species facing extinction risk (6):
 <section id="disease-impact-network" class="level3">
 <h3 class="anchored" data-anchor-id="disease-impact-network">Disease impact network</h3>
 <div id="40" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build a focused graph showing pathogen → host → dependent species</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build a focused graph showing pathogen → host → dependent species</span></span>
 <span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>viz_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(viz_g, <span class="st">"adb"</span>, adb)</span>
 <span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(viz_g, <span class="st">"tax"</span>, tax)</span>
@@ -857,14 +868,14 @@ All obligate species facing extinction risk (6):
 <span id="cb39-17"><a href="#cb39-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb39-18"><a href="#cb39-18" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb39-19"><a href="#cb39-19" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">to_dot</span>(viz_g; label<span class="op">=</span><span class="st">"Ash Dieback Impact Network"</span>)</span>
-<span id="cb39-20"><a href="#cb39-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Impact network: </span><span class="sc">$</span>(<span class="fu">length</span>(viz_g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb39-20"><a href="#cb39-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Impact network: </span><span class="sc">$</span>(<span class="fu">length</span>(viz_g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Impact network: 29 triples</code></pre>
 </div>
 </div>
 <div id="42" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
-<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb41"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <div>
 <figure class="figure">
@@ -877,14 +888,14 @@ All obligate species facing extinction risk (6):
 <section id="graph-statistics" class="level3">
 <h3 class="anchored" data-anchor-id="graph-statistics">Graph statistics</h3>
 <div id="44" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>stats <span class="op">=</span> <span class="fu">graph_stats</span>(g)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>stats <span class="op">=</span> <span class="fu">graph_stats</span>(g)</span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ash dieback knowledge graph summary:"</span>)</span>
 <span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Total triples:    </span><span class="sc">$</span>(stats.triples)<span class="st">"</span>)</span>
 <span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Unique subjects:  </span><span class="sc">$</span>(stats.subjects)<span class="st">"</span>)</span>
 <span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Unique predicates: </span><span class="sc">$</span>(stats.predicates)<span class="st">"</span>)</span>
 <span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Unique objects:   </span><span class="sc">$</span>(stats.objects)<span class="st">"</span>)</span>
 <span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  URI references:   </span><span class="sc">$</span>(stats.uri_refs)<span class="st">"</span>)</span>
-<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Literals:         </span><span class="sc">$</span>(stats.literals)<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Literals:         </span><span class="sc">$</span>(stats.literals)<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Ash dieback knowledge graph summary:
   Total triples:    368
@@ -899,13 +910,13 @@ All obligate species facing extinction risk (6):
 <section id="serialization" class="level3">
 <h3 class="anchored" data-anchor-id="serialization">Serialization</h3>
 <div id="46" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>ttl <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>ttl <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
 <span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>lines <span class="op">=</span> <span class="fu">split</span>(ttl, <span class="ch">'\n'</span>)</span>
 <span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Serialized to Turtle: </span><span class="sc">$</span>(<span class="fu">length</span>(lines))<span class="st"> lines, </span><span class="sc">$</span>(<span class="fu">length</span>(ttl))<span class="st"> bytes"</span>)</span>
 <span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">First 20 lines:"</span>)</span>
 <span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> line <span class="kw">in</span> <span class="bu">Iterators</span>.<span class="fu">take</span>(lines, <span class="fl">20</span>)</span>
 <span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>line<span class="st">"</span>)</span>
-<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Serialized to Turtle: 469 lines, 13819 bytes
 
@@ -1039,13 +1050,14 @@ First 20 lines:
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

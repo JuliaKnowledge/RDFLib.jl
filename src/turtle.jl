@@ -38,13 +38,16 @@ mutable struct _TurtleSerContext
     serialized::Set{Node}
     # Collected namespace prefixes to emit
     prefixes::Dict{String, String}
+    # Cache for qname lookups: URI string → "prefix:local" or nothing
+    qname_cache::Dict{String, Union{String, Nothing}}
 
     function _TurtleSerContext(g::RDFGraph)
         new(g,
             Dict{Node, Dict{URIRef, Vector{Identifier}}}(),
             Dict{Identifier, Int}(),
             Set{Node}(),
-            Dict{String, String}())
+            Dict{String, String}(),
+            Dict{String, Union{String, Nothing}}())
     end
 end
 
@@ -204,11 +207,19 @@ end
 # ─── Term formatting ────────────────────────────────────────────────
 
 function _turtle_format_node(ctx::_TurtleSerContext, u::URIRef)
+    # Use cached qname if available
+    cached = get(ctx.qname_cache, u.value, missing)
+    if cached !== missing
+        return cached !== nothing ? cached : n3(u)
+    end
     # Try prefixed name
     try
         prefix, _, localname = compute_qname(ctx.graph.namespace_manager, u)
-        return string(prefix, ":", localname)
+        result = string(prefix, ":", localname)
+        ctx.qname_cache[u.value] = result
+        return result
     catch
+        ctx.qname_cache[u.value] = nothing
         return n3(u)
     end
 end

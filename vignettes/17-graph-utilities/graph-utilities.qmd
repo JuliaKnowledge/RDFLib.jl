@@ -1,7 +1,12 @@
 ---
 title: "Graph Utilities"
+author: "Simon Frost"
 format:
   html:
+    code-fold: false
+  pdf:
+    code-fold: false
+  gfm:
     code-fold: false
 engine: julia
 ---

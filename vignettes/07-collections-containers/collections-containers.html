@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>Collections and Containers</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="collections-containers_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="collections-containers_files/libs/quarto-html/anchor.min.js"></script>
 <link href="collections-containers_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="collections-containers_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="collections-containers_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="collections-containers_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="collections-containers_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="collections-containers_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="collections-containers_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../collections-containers.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="collections-containers.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -88,6 +93,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -102,8 +113,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>RDF provides two mechanisms for grouping resources: <strong>Collections</strong> (ordered, closed lists using <code>rdf:first</code>/<code>rdf:rest</code>) and <strong>Containers</strong> (open groups using <code>rdf:Bag</code>, <code>rdf:Seq</code>, <code>rdf:Alt</code>). This vignette covers both.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>Namespace("http://example.org/")</code></pre>
 </div>
@@ -115,14 +126,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="creating-collections" class="level3">
 <h3 class="anchored" data-anchor-id="creating-collections">Creating Collections</h3>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"ex"</span>, ex)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Add a collection (list) of items linked to a subject</span></span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>items <span class="op">=</span> Identifier[<span class="fu">Literal</span>(<span class="st">"Mercury"</span>), <span class="fu">Literal</span>(<span class="st">"Venus"</span>), <span class="fu">Literal</span>(<span class="st">"Earth"</span>), <span class="fu">Literal</span>(<span class="st">"Mars"</span>)]</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">add_collection!</span>(g, <span class="fu">ex</span>(<span class="st">"innerPlanets"</span>), <span class="fu">ex</span>(<span class="st">"members"</span>), items)</span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -143,13 +154,13 @@ ex:innerPlanets ex:members [ rdf:first "Mercury" ;
 <section id="extracting-collections" class="level3">
 <h3 class="anchored" data-anchor-id="extracting-collections">Extracting Collections</h3>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Find the list head and retrieve items</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Find the list head and retrieve items</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>list_head <span class="op">=</span> <span class="fu">first</span>(<span class="fu">objects</span>(g, <span class="fu">ex</span>(<span class="st">"innerPlanets"</span>), <span class="fu">ex</span>(<span class="st">"members"</span>)))</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>extracted <span class="op">=</span> <span class="fu">collect_list</span>(g, list_head)</span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Inner planets:"</span>)</span>
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> item <span class="kw">in</span> extracted</span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  "</span>, item)</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Inner planets:
   Literal("Mercury")
@@ -163,7 +174,7 @@ ex:innerPlanets ex:members [ rdf:first "Mercury" ;
 <h3 class="anchored" data-anchor-id="turtle-shorthand">Turtle Shorthand</h3>
 <p>In Turtle, collections are written with parentheses:</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>g2 <span class="op">=</span> <span class="fu">parse_rdf</span>(<span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>g2 <span class="op">=</span> <span class="fu">parse_rdf</span>(<span class="st">"""</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix ex: &lt;http://example.org/&gt; .</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="st">    ex:recipe ex:ingredients ( "flour" "sugar" "eggs" "butter" ) .</span></span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>, <span class="fu">TurtleFormat</span>())</span>
@@ -172,7 +183,7 @@ ex:innerPlanets ex:members [ rdf:first "Mercury" ;
 <span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(g2, (<span class="fu">ex</span>(<span class="st">"recipe"</span>), <span class="fu">ex</span>(<span class="st">"ingredients"</span>), <span class="cn">nothing</span>))</span>
 <span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    items <span class="op">=</span> <span class="fu">collect_list</span>(g2, t.object)</span>
 <span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"Ingredients: "</span>, items)</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Ingredients: Identifier[Literal("flour"), Literal("sugar"), Literal("eggs"), Literal("butter")]</code></pre>
 </div>
@@ -182,10 +193,10 @@ ex:innerPlanets ex:members [ rdf:first "Mercury" ;
 <h3 class="anchored" data-anchor-id="collection-views">Collection Views</h3>
 <p><code>CollectionView</code> provides indexed access to RDF lists:</p>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>cv <span class="op">=</span> <span class="fu">collection_view</span>(g2, <span class="fu">collect</span>(<span class="fu">triples</span>(g2, (<span class="fu">ex</span>(<span class="st">"recipe"</span>), <span class="fu">ex</span>(<span class="st">"ingredients"</span>), <span class="cn">nothing</span>)))[<span class="fl">1</span>].object)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>cv <span class="op">=</span> <span class="fu">collection_view</span>(g2, <span class="fu">collect</span>(<span class="fu">triples</span>(g2, (<span class="fu">ex</span>(<span class="st">"recipe"</span>), <span class="fu">ex</span>(<span class="st">"ingredients"</span>), <span class="cn">nothing</span>)))[<span class="fl">1</span>].object)</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"First ingredient: "</span>, cv[<span class="fl">1</span>])</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Last ingredient:  "</span>, cv[<span class="fu">length</span>(cv)])</span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Number of items:  "</span>, <span class="fu">length</span>(cv))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Number of items:  "</span>, <span class="fu">length</span>(cv))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>First ingredient: Literal("flour")
 Last ingredient:  Literal("butter")
@@ -200,14 +211,14 @@ Number of items:  4</code></pre>
 <section id="bag-unordered" class="level3">
 <h3 class="anchored" data-anchor-id="bag-unordered">Bag (Unordered)</h3>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>g3 <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>g3 <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g3, <span class="st">"ex"</span>, ex)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a Bag of authors</span></span>
 <span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>authors <span class="op">=</span> Identifier[<span class="fu">Literal</span>(<span class="st">"Alice"</span>), <span class="fu">Literal</span>(<span class="st">"Bob"</span>), <span class="fu">Literal</span>(<span class="st">"Carol"</span>)]</span>
 <span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="fu">add_container!</span>(g3, <span class="fu">ex</span>(<span class="st">"paper1Authors"</span>), <span class="op">:</span>Bag, authors)</span>
 <span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g3, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g3, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -227,14 +238,14 @@ ex:paper1Authors a rdf:Bag ;
 <section id="seq-ordered" class="level3">
 <h3 class="anchored" data-anchor-id="seq-ordered">Seq (Ordered)</h3>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>g4 <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>g4 <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g4, <span class="st">"ex"</span>, ex)</span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create an ordered sequence</span></span>
 <span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>steps <span class="op">=</span> Identifier[<span class="fu">Literal</span>(<span class="st">"Preheat oven"</span>), <span class="fu">Literal</span>(<span class="st">"Mix ingredients"</span>), <span class="fu">Literal</span>(<span class="st">"Bake for 30 min"</span>)]</span>
 <span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="fu">add_container!</span>(g4, <span class="fu">ex</span>(<span class="st">"recipe_steps"</span>), <span class="op">:</span>Seq, steps)</span>
 <span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g4, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g4, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -254,11 +265,11 @@ ex:recipe_steps a rdf:Seq ;
 <section id="extracting-container-items" class="level3">
 <h3 class="anchored" data-anchor-id="extracting-container-items">Extracting Container Items</h3>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>items <span class="op">=</span> <span class="fu">collect_container</span>(g4, <span class="fu">ex</span>(<span class="st">"recipe_steps"</span>))</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>items <span class="op">=</span> <span class="fu">collect_container</span>(g4, <span class="fu">ex</span>(<span class="st">"recipe_steps"</span>))</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Recipe steps:"</span>)</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i, item) <span class="kw">in</span> <span class="fu">enumerate</span>(items)</span>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>i<span class="st">. </span><span class="sc">$</span>item<span class="st">"</span>)</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Recipe steps:
   1. Literal("Preheat oven")
@@ -270,7 +281,7 @@ ex:recipe_steps a rdf:Seq ;
 <section id="alt-alternatives" class="level3">
 <h3 class="anchored" data-anchor-id="alt-alternatives">Alt (Alternatives)</h3>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>g5 <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>g5 <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g5, <span class="st">"ex"</span>, ex)</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Alternatives (e.g., translations)</span></span>
@@ -281,7 +292,7 @@ ex:recipe_steps a rdf:Seq ;
 <span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>]</span>
 <span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="fu">add_container!</span>(g5, <span class="fu">ex</span>(<span class="st">"greeting"</span>), <span class="op">:</span>Alt, translations)</span>
 <span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g5, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g5, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -302,7 +313,7 @@ ex:greeting a rdf:Alt ;
 <section id="collections-in-sparql" class="level2">
 <h2 class="anchored" data-anchor-id="collections-in-sparql">Collections in SPARQL</h2>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>g6 <span class="op">=</span> <span class="fu">parse_rdf</span>(<span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>g6 <span class="op">=</span> <span class="fu">parse_rdf</span>(<span class="st">"""</span></span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix ex: &lt;http://example.org/&gt; .</span></span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .</span></span>
 <span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -322,13 +333,13 @@ ex:greeting a rdf:Alt ;
 <span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Favorites:"</span>)</span>
 <span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  "</span>, row[<span class="st">"item"</span>])</span>
-<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Favorites:
-  Literal("gamma")
   Literal("alpha")
-  Literal("delta")
-  Literal("beta")</code></pre>
+  Literal("beta")
+  Literal("gamma")
+  Literal("delta")</code></pre>
 </div>
 </div>
 </section>
@@ -336,7 +347,7 @@ ex:greeting a rdf:Alt ;
 <h2 class="anchored" data-anchor-id="nested-collections">Nested Collections</h2>
 <p>Collections can contain other collections or complex structures:</p>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>g7 <span class="op">=</span> <span class="fu">parse_rdf</span>(<span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>g7 <span class="op">=</span> <span class="fu">parse_rdf</span>(<span class="st">"""</span></span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix ex: &lt;http://example.org/&gt; .</span></span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="st">    ex:matrix ex:rows (</span></span>
@@ -347,7 +358,7 @@ ex:greeting a rdf:Alt ;
 <span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>, <span class="fu">TurtleFormat</span>())</span>
 <span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Matrix graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g7))<span class="st"> triples"</span>)</span>
-<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g7, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g7, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Matrix graph: 25 triples
 @prefix ex: &lt;http://example.org/&gt; .
@@ -428,13 +439,14 @@ ex:matrix ex:rows [ rdf:first [ rdf:first 1 ;
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

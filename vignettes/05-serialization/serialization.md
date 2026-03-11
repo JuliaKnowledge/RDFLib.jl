@@ -1,5 +1,5 @@
 # Serialization Formats
-
+Simon Frost
 
 ## Overview
 
@@ -416,79 +416,14 @@ println("N-Triples: ", mime_type(NTriplesFormat()))
 
 ## Format Comparison
 
-<table>
-<thead>
-<tr>
-<th>Format</th>
-<th style="text-align: center;">Human Readable</th>
-<th style="text-align: center;">Compact</th>
-<th style="text-align: center;">Named Graphs</th>
-<th style="text-align: center;">Standard</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Turtle</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>N-Triples</td>
-<td style="text-align: center;">⚠️</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>N3</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅ (formulas)</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>RDF/XML</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">⚠️</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>JSON-LD</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>TriG</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>N-Quads</td>
-<td style="text-align: center;">⚠️</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>TriX</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">W3C</td>
-</tr>
-<tr>
-<td>HexTuples</td>
-<td style="text-align: center;">⚠️</td>
-<td style="text-align: center;">❌</td>
-<td style="text-align: center;">✅</td>
-<td style="text-align: center;">Community</td>
-</tr>
-</tbody>
-</table>
+| Format    | Human Readable | Compact | Named Graphs  | Standard  |
+|-----------|:--------------:|:-------:|:-------------:|:---------:|
+| Turtle    |       ✅       |   ✅    |      ❌       |    W3C    |
+| N-Triples |       ⚠️       |   ❌    |      ❌       |    W3C    |
+| N3        |       ✅       |   ✅    | ✅ (formulas) |    W3C    |
+| RDF/XML   |       ❌       |   ⚠️    |      ❌       |    W3C    |
+| JSON-LD   |       ✅       |   ✅    |      ✅       |    W3C    |
+| TriG      |       ✅       |   ✅    |      ✅       |    W3C    |
+| N-Quads   |       ⚠️       |   ❌    |      ✅       |    W3C    |
+| TriX      |       ❌       |   ❌    |      ✅       |    W3C    |
+| HexTuples |       ⚠️       |   ❌    |      ✅       | Community |

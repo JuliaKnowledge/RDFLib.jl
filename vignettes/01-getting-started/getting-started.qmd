@@ -1,7 +1,12 @@
 ---
 title: "Getting Started with RDFLib.jl"
+author: "Simon Frost"
 format:
   html:
+    code-fold: false
+  pdf:
+    code-fold: false
+  gfm:
     code-fold: false
 engine: julia
 ---
@@ -17,9 +22,7 @@ This vignette walks through the basics: installing the package, creating your fi
 ```{julia}
 #| eval: false
 using Pkg
-Pkg.develop(path="/path/to/RDFLib.jl")
-# Or from a remote repository:
-# Pkg.add(url="https://github.com/your-org/RDFLib.jl")
+Pkg.add(url="https://github.com/JuliaKnowledge/RDFLib.jl")
 ```
 
 ## Loading the Package

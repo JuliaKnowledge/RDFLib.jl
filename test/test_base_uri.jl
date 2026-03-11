@@ -34,7 +34,7 @@ using RDFLib: namespaces
     @testset "serialize(g, fmt, filename) alternative arg order" begin
         g = RDFGraph()
         add!(g, Triple(URIRef("http://example.org/s"), URIRef("http://example.org/p"), Literal("hello")))
-        outfile = joinpath("/Users/sdwfrost/Projects/rdf/tmp", "test_base_uri_output.ttl")
+        outfile = joinpath(mktempdir(), "test_base_uri_output.ttl")
         serialize(g, TurtleFormat(), outfile)
         @test isfile(outfile)
         content = read(outfile, String)

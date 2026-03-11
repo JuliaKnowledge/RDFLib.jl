@@ -1,5 +1,5 @@
 # SHACL Validation
-
+Simon Frost
 
 ## Overview
 
@@ -116,14 +116,14 @@ end
     Number of violations: 3
 
     Violation:
-      Focus node: URIRef("http://example.org/carol")
-      Property:   URIRef("http://example.org/age")
-      Message:    Value -5 < minInclusive 0.0
-
-    Violation:
       Focus node: URIRef("http://example.org/dave")
       Property:   URIRef("http://example.org/name")
       Message:    Expected at most 1 values for http://example.org/name, got 2
+
+    Violation:
+      Focus node: URIRef("http://example.org/carol")
+      Property:   URIRef("http://example.org/age")
+      Message:    Value -5 < minInclusive 0.0
 
     Violation:
       Focus node: URIRef("http://example.org/bob")

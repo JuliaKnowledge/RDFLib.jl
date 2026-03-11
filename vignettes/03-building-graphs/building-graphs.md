@@ -1,5 +1,5 @@
 # Building and Manipulating RDF Graphs
-
+Simon Frost
 
 ## Overview
 
@@ -299,11 +299,11 @@ end
 ```
 
     Poodle superclasses:
-      URIRef("http://example.org/Animal")
       URIRef("http://example.org/Mammal")
-      URIRef("http://example.org/Canine")
       URIRef("http://example.org/Poodle")
+      URIRef("http://example.org/Animal")
       URIRef("http://example.org/Dog")
+      URIRef("http://example.org/Canine")
 
 ## Concise Bounded Description
 

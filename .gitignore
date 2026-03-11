@@ -1,0 +1,18 @@
+# Julia
+Manifest.toml
+*.jl.cov
+*.jl.mem
+deps/build.log
+
+# OS
+.DS_Store
+
+# Python venv (used by Quarto)
+.venv/
+
+# Benchmarks output
+benchmarks/*.json
+
+# Temporary files
+*.tmp
+*.bak

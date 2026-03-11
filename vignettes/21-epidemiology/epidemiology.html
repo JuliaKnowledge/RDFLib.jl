@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>Epidemiology Knowledge Graph</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="epidemiology_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="epidemiology_files/libs/quarto-html/anchor.min.js"></script>
 <link href="epidemiology_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="epidemiology_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="epidemiology_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="epidemiology_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="epidemiology_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="epidemiology_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="epidemiology_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../epidemiology.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="epidemiology.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -89,6 +94,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -116,12 +127,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ol>
 <p>The scenario models an outbreak involving three pathogens (an influenza variant, a novel coronavirus, and an RSV strain) circulating simultaneously across hospital wards and community settings, reflecting the challenges of real-world syndromic surveillance.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper to extract readable strings from SPARQL result values</span></span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">Literal</span>) <span class="op">=</span> x.lexical</span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">URIRef</span>) <span class="op">=</span> <span class="fu">split</span>(x.value, <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>readable (generic function with 3 methods)</code></pre>
 </div>
@@ -131,7 +142,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="epidemiology-ontology">1. Epidemiology Ontology</h2>
 <p>We define an OWL ontology modelling pathogens, patients, clinical presentations, diagnostic tests, locations, interventions, and contact events.</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>epi  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/epi#"</span>)</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>pat  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/patient/"</span>)</span>
@@ -198,7 +209,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Epidemiology ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Epidemiology ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Epidemiology ontology: 71 triples</code></pre>
 </div>
@@ -209,7 +220,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="a.-pathogens" class="level3">
 <h3 class="anchored" data-anchor-id="a.-pathogens">2a. Pathogens</h3>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>pathogens <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>pathogens <span class="op">=</span> [</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"influenza_A_H3N2"</span>, <span class="st">"Influenza A (H3N2)"</span>,    <span class="st">"Virus"</span>,    <span class="st">"Orthomyxoviridae"</span>, <span class="fl">1.3</span>),</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"SARS_CoV_2_JN1"</span>,   <span class="st">"SARS-CoV-2 JN.1"</span>,      <span class="st">"Virus"</span>,    <span class="st">"Coronaviridae"</span>,    <span class="fl">2.5</span>),</span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"RSV_B"</span>,            <span class="st">"RSV subtype B"</span>,          <span class="st">"Virus"</span>,    <span class="st">"Pneumoviridae"</span>,    <span class="fl">3.0</span>),</span>
@@ -224,7 +235,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, <span class="fu">epi</span>(<span class="st">"basicReproductionNumber"</span>), <span class="fu">Literal</span>(r0)))</span>
 <span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(pathogens))<span class="st"> pathogens"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(pathogens))<span class="st"> pathogens"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Added 3 pathogens</code></pre>
 </div>
@@ -233,7 +244,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="b.-locations" class="level3">
 <h3 class="anchored" data-anchor-id="b.-locations">2b. Locations</h3>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>locations <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>locations <span class="op">=</span> [</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"royal_infirmary"</span>,  <span class="st">"Royal Infirmary"</span>,       <span class="st">"Hospital"</span>),</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"general_hospital"</span>, <span class="st">"General Hospital"</span>,       <span class="st">"Hospital"</span>),</span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"care_home_A"</span>,      <span class="st">"Sunrise Care Home"</span>,      <span class="st">"CommunityFacility"</span>),</span>
@@ -249,7 +260,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(l, RDFS.label, <span class="fu">Literal</span>(name)))</span>
 <span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(locations))<span class="st"> locations"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(locations))<span class="st"> locations"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Added 6 locations</code></pre>
 </div>
@@ -258,7 +269,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="c.-symptoms-and-risk-factors" class="level3">
 <h3 class="anchored" data-anchor-id="c.-symptoms-and-risk-factors">2c. Symptoms and risk factors</h3>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>symptoms <span class="op">=</span> [<span class="st">"fever"</span>, <span class="st">"cough"</span>, <span class="st">"dyspnoea"</span>, <span class="st">"fatigue"</span>, <span class="st">"myalgia"</span>,</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>symptoms <span class="op">=</span> [<span class="st">"fever"</span>, <span class="st">"cough"</span>, <span class="st">"dyspnoea"</span>, <span class="st">"fatigue"</span>, <span class="st">"myalgia"</span>,</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>            <span class="st">"sore_throat"</span>, <span class="st">"rhinorrhoea"</span>, <span class="st">"headache"</span>, <span class="st">"wheeze"</span>,</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>            <span class="st">"hypoxia"</span>, <span class="st">"tachypnoea"</span>]</span>
 <span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -276,7 +287,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(rf), RDFS.label, <span class="fu">Literal</span>(<span class="fu">replace</span>(rf, <span class="st">"_"</span> <span class="op">=&gt;</span> <span class="st">" "</span>))))</span>
 <span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(symptoms))<span class="st"> symptoms, </span><span class="sc">$</span>(<span class="fu">length</span>(risk_factors))<span class="st"> risk factors"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(symptoms))<span class="st"> symptoms, </span><span class="sc">$</span>(<span class="fu">length</span>(risk_factors))<span class="st"> risk factors"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Added 11 symptoms, 8 risk factors</code></pre>
 </div>
@@ -285,7 +296,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="d.-patients-25-patients-in-the-outbreak" class="level3">
 <h3 class="anchored" data-anchor-id="d.-patients-25-patients-in-the-outbreak">2d. Patients (25 patients in the outbreak)</h3>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>patients <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>patients <span class="op">=</span> [</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (id, name, age_group, risk_factors, vaccination_status)</span></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"Patient 001"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"chronic_lung_disease"</span>], <span class="st">"vaccinated"</span>),</span>
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P002"</span>, <span class="st">"Patient 002"</span>, <span class="st">"65+"</span>,   [<span class="st">"age_over_65"</span>, <span class="st">"diabetes"</span>],             <span class="st">"vaccinated"</span>),</span>
@@ -325,7 +336,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(patients))<span class="st"> patients"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(patients))<span class="st"> patients"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Added 25 patients</code></pre>
 </div>
@@ -335,7 +346,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h3 class="anchored" data-anchor-id="e.-surveillance-data-via-tabular-mapping">2e. Surveillance data via tabular mapping</h3>
 <p>We import 30 case reports from a surveillance line list into the knowledge graph using <strong>tabular mapping</strong>.</p>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>case_records <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>case_records <span class="op">=</span> [</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (case_id, patient, pathogen, location, onset, severity, symptoms...)</span></span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">1</span>,  patient<span class="op">=</span><span class="st">"P001"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_A"</span>,     onset<span class="op">=</span><span class="st">"2025-01-15"</span>, severity<span class="op">=</span><span class="st">"severe"</span>,   symp<span class="op">=</span><span class="st">"fever,cough,dyspnoea,myalgia"</span>),</span>
 <span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">2</span>,  patient<span class="op">=</span><span class="st">"P002"</span>, pathogen<span class="op">=</span><span class="st">"influenza_A_H3N2"</span>, location<span class="op">=</span><span class="st">"care_home_A"</span>,     onset<span class="op">=</span><span class="st">"2025-01-16"</span>, severity<span class="op">=</span><span class="st">"moderate"</span>, symp<span class="op">=</span><span class="st">"fever,cough,fatigue"</span>),</span>
@@ -398,7 +409,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb13-61"><a href="#cb13-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb13-62"><a href="#cb13-62" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb13-63"><a href="#cb13-63" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-64"><a href="#cb13-64" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total knowledge graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb13-64"><a href="#cb13-64" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total knowledge graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Imported 150 case triples from 25 records
 Total knowledge graph: 495 triples</code></pre>
@@ -409,7 +420,7 @@ Total knowledge graph: 495 triples</code></pre>
 <h3 class="anchored" data-anchor-id="f.-contact-and-transmission-events">2f. Contact and transmission events</h3>
 <p>Known contact tracing data links patients through exposure events.</p>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Known contacts (bidirectional exposure)</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Known contacts (bidirectional exposure)</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>contacts <span class="op">=</span> [</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"P002"</span>),  <span class="co"># care home A residents</span></span>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"P001"</span>, <span class="st">"P010"</span>),</span>
@@ -455,7 +466,7 @@ Total knowledge graph: 495 triples</code></pre>
 <span id="cb15-44"><a href="#cb15-44" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb15-45"><a href="#cb15-45" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-46"><a href="#cb15-46" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Added </span><span class="sc">$</span>(<span class="fu">length</span>(contacts))<span class="st"> contact links, </span><span class="sc">$</span>(<span class="fu">length</span>(transmissions))<span class="st"> known transmissions"</span>)</span>
-<span id="cb15-47"><a href="#cb15-47" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb15-47"><a href="#cb15-47" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Added 18 contact links, 10 known transmissions
 Total: 541 triples</code></pre>
@@ -466,7 +477,7 @@ Total: 541 triples</code></pre>
 <section id="defining-the-outbreak" class="level2">
 <h2 class="anchored" data-anchor-id="defining-the-outbreak">3. Defining the Outbreak</h2>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Three concurrent outbreaks</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Three concurrent outbreaks</span></span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"flu_outbreak"</span>),   RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Outbreak"</span>)))</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"flu_outbreak"</span>),   RDFS.label, <span class="fu">Literal</span>(<span class="st">"Influenza A H3N2 winter outbreak"</span>)))</span>
 <span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">epi</span>(<span class="st">"covid_outbreak"</span>), RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"Outbreak"</span>)))</span>
@@ -487,7 +498,7 @@ Total: 541 triples</code></pre>
 <span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(case_uri, <span class="fu">epi</span>(<span class="st">"partOfOutbreak"</span>), outbreak))</span>
 <span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Three outbreaks defined, </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> total triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Three outbreaks defined, </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> total triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Three outbreaks defined, 572 total triples</code></pre>
 </div>
@@ -497,7 +508,7 @@ Total: 541 triples</code></pre>
 <h2 class="anchored" data-anchor-id="shacl-validation">4. SHACL Validation</h2>
 <p>We validate that every case report has required fields: a linked patient, pathogen, location, onset date, and severity classification.</p>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>shapes_ttl <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>shapes_ttl <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .</span></span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
 <span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .</span></span>
@@ -545,14 +556,14 @@ Total: 541 triples</code></pre>
 <span id="cb19-46"><a href="#cb19-46" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
 <span id="cb19-47"><a href="#cb19-47" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb19-48"><a href="#cb19-48" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> <span class="fu">rdf_validate</span>(m, shapes_ttl)</span>
-<span id="cb19-49"><a href="#cb19-49" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"SHACL validation: conforms = </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb19-49"><a href="#cb19-49" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"SHACL validation: conforms = </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>SHACL validation: conforms = true</code></pre>
 </div>
 </div>
 <p>Test with an incomplete case report:</p>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>bad <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/case/incomplete"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>bad <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/case/incomplete"</span>)</span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"CaseReport"</span>)))</span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">epi</span>(<span class="st">"severity"</span>), <span class="fu">Literal</span>(<span class="st">"unknown"</span>)))</span>
 <span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -565,14 +576,14 @@ Total: 541 triples</code></pre>
 <span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Clean up</span></span>
 <span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">epi</span>(<span class="st">"CaseReport"</span>)))</span>
-<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">epi</span>(<span class="st">"severity"</span>), <span class="fu">Literal</span>(<span class="st">"unknown"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">epi</span>(<span class="st">"severity"</span>), <span class="fu">Literal</span>(<span class="st">"unknown"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>After adding incomplete case:
   Conforms: false
   ✗ Expected at least 1 values for http://example.org/epi#caseForPatient, got 0
   ✗ Expected at least 1 values for http://example.org/epi#infectedBy, got 0
-  ✗ Expected at least 1 values for http://example.org/epi#locatedAt, got 0
-  ✗ Expected at least 1 values for http://example.org/epi#onsetDate, got 0</code></pre>
+  ✗ Expected at least 1 values for http://example.org/epi#onsetDate, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#locatedAt, got 0</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>RDFGraph (572 triples)</code></pre>
@@ -584,7 +595,7 @@ Total: 541 triples</code></pre>
 <section id="a.-cases-per-pathogen" class="level3">
 <h3 class="anchored" data-anchor-id="a.-cases-per-pathogen">5a. Cases per pathogen</h3>
 <div id="24" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -601,7 +612,7 @@ Total: 541 triples</code></pre>
 <span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Cases by pathogen:"</span>)</span>
 <span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]), <span class="fl">30</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"cases"</span>]))<span class="st"> cases"</span>)</span>
-<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Cases by pathogen:
   SARS-CoV-2 JN.1                10 cases
@@ -613,7 +624,7 @@ Total: 541 triples</code></pre>
 <section id="b.-severity-distribution-per-pathogen" class="level3">
 <h3 class="anchored" data-anchor-id="b.-severity-distribution-per-pathogen">5b. Severity distribution per pathogen</h3>
 <div id="26" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -634,7 +645,7 @@ Total: 541 triples</code></pre>
 <span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]), <span class="fl">28</span>),</span>
 <span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"severity"</span>]), <span class="fl">12</span>),</span>
 <span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>            <span class="fu">readable</span>(row[<span class="st">"count"</span>]))</span>
-<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Pathogen                    Severity    Count
 ──────────────────────────────────────────────────
@@ -653,7 +664,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <section id="c.-cases-per-location" class="level3">
 <h3 class="anchored" data-anchor-id="c.-cases-per-location">5c. Cases per location</h3>
 <div id="28" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -670,11 +681,11 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb28-15"><a href="#cb28-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Cases by location:"</span>)</span>
 <span id="cb28-16"><a href="#cb28-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb28-17"><a href="#cb28-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"location_name"</span>]), <span class="fl">30</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"cases"</span>]))<span class="st"> cases"</span>)</span>
-<span id="cb28-18"><a href="#cb28-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb28-18"><a href="#cb28-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Cases by location:
-  General Hospital               7 cases
   Royal Infirmary                7 cases
+  General Hospital               7 cases
   Sunrise Care Home              4 cases
   Oakfield Primary School        3 cases
   Riverside Academy              2 cases
@@ -685,7 +696,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <section id="d.-most-common-symptoms-across-all-cases" class="level3">
 <h3 class="anchored" data-anchor-id="d.-most-common-symptoms-across-all-cases">5d. Most common symptoms across all cases</h3>
 <div id="30" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -703,7 +714,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb30-16"><a href="#cb30-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb30-17"><a href="#cb30-17" aria-hidden="true" tabindex="-1"></a>    freq <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"frequency"</span>])</span>
 <span id="cb30-18"><a href="#cb30-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"symptom_name"</span>]), <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(freq)<span class="st"> cases"</span>)</span>
-<span id="cb30-19"><a href="#cb30-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb30-19"><a href="#cb30-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Symptom frequency across all cases:
   cough                24 cases
@@ -723,7 +734,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <section id="e.-vulnerable-patients-with-severe-outcomes" class="level3">
 <h3 class="anchored" data-anchor-id="e.-vulnerable-patients-with-severe-outcomes">5e. Vulnerable patients with severe outcomes</h3>
 <div id="32" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -746,17 +757,17 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"patient_name"</span>]))<span class="st"> (</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"age"</span>]))<span class="st">) — "</span> <span class="op">*</span></span>
 <span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]))<span class="st">, risk: </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"risk_name"</span>]))<span class="st">"</span>)</span>
-<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Severe cases with risk factors:
-  Patient 001 (65+) — Influenza A (H3N2), risk: chronic lung disease
   Patient 001 (65+) — Influenza A (H3N2), risk: age over 65
-  Patient 005 (65+) — SARS-CoV-2 JN.1, risk: cardiovascular disease
+  Patient 001 (65+) — Influenza A (H3N2), risk: chronic lung disease
   Patient 005 (65+) — SARS-CoV-2 JN.1, risk: age over 65
+  Patient 005 (65+) — SARS-CoV-2 JN.1, risk: cardiovascular disease
   Patient 010 (65+) — Influenza A (H3N2), risk: age over 65
   Patient 010 (65+) — Influenza A (H3N2), risk: immunocompromised
-  Patient 014 (65+) — Influenza A (H3N2), risk: chronic lung disease
   Patient 014 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 014 (65+) — Influenza A (H3N2), risk: chronic lung disease
   Patient 022 (65+) — Influenza A (H3N2), risk: age over 65
   Patient 022 (65+) — Influenza A (H3N2), risk: immunocompromised</code></pre>
 </div>
@@ -765,7 +776,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <section id="f.-healthcare-worker-cases-potential-nosocomial-amplifiers" class="level3">
 <h3 class="anchored" data-anchor-id="f.-healthcare-worker-cases-potential-nosocomial-amplifiers">5f. Healthcare worker cases (potential nosocomial amplifiers)</h3>
 <div id="34" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -788,7 +799,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb34-21"><a href="#cb34-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb34-22"><a href="#cb34-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"onset"</span>]))<span class="st"> | </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"patient_name"</span>]))<span class="st"> | "</span> <span class="op">*</span></span>
 <span id="cb34-23"><a href="#cb34-23" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"pathogen_name"</span>]))<span class="st"> | </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"location_name"</span>]))<span class="st">"</span>)</span>
-<span id="cb34-24"><a href="#cb34-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb34-24"><a href="#cb34-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Healthcare worker cases (potential nosocomial transmission):
   2025-01-17 | Patient 003 | Influenza A (H3N2) | Royal Infirmary
@@ -803,7 +814,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <h2 class="anchored" data-anchor-id="property-paths-contact-tracing-chains">6. Property Paths — Contact Tracing Chains</h2>
 <p>Using property paths we can trace multi-step contact chains to identify potential transmission routes.</p>
 <div id="36" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="co"># All patients reachable from P001 through contact chains</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb36"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="co"># All patients reachable from P001 through contact chains</span></span>
 <span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX pat: &lt;http://example.org/patient/&gt;</span></span>
@@ -821,7 +832,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb36-16"><a href="#cb36-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Contact chain from index case P001 (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st"> reachable):"</span>)</span>
 <span id="cb36-17"><a href="#cb36-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb36-18"><a href="#cb36-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"contact_name"</span>]))<span class="st">"</span>)</span>
-<span id="cb36-19"><a href="#cb36-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb36-19"><a href="#cb36-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Contact chain from index case P001 (7 reachable):
   → Patient 002
@@ -834,7 +845,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 </div>
 </div>
 <div id="38" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission chains — who infected whom, transitively</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission chains — who infected whom, transitively</span></span>
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX pat: &lt;http://example.org/patient/&gt;</span></span>
@@ -851,7 +862,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb38-15"><a href="#cb38-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Downstream transmission from P001 (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st"> infected):"</span>)</span>
 <span id="cb38-16"><a href="#cb38-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb38-17"><a href="#cb38-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"downstream_name"</span>]))<span class="st">"</span>)</span>
-<span id="cb38-18"><a href="#cb38-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb38-18"><a href="#cb38-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Downstream transmission from P001 (3 infected):
   → Patient 002
@@ -864,7 +875,7 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <h2 class="anchored" data-anchor-id="datalog-reasoning-transmission-risk-inference">7. Datalog Reasoning — Transmission Risk Inference</h2>
 <p>We use <strong>Datalog</strong> to infer transmission risk categories and identify potential super-spreader settings.</p>
 <div id="40" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb40"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>n3_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>n3_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix epi: &lt;http://example.org/epi#&gt; ."</span>)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix pat: &lt;http://example.org/patient/&gt; ."</span>)</span>
 <span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">""</span>)</span>
@@ -917,37 +928,37 @@ SARS-CoV-2 JN.1             severe      1</code></pre>
 <span id="cb40-51"><a href="#cb40-51" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Patients exposed via HCW contact (</span><span class="sc">$</span>(<span class="fu">length</span>(hcw_exposed))<span class="st">):"</span>)</span>
 <span id="cb40-52"><a href="#cb40-52" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> hcw_exposed</span>
 <span id="cb40-53"><a href="#cb40-53" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>])<span class="st">"</span>)</span>
-<span id="cb40-54"><a href="#cb40-54" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb40-54"><a href="#cb40-54" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Before reasoning: 36 triples
 After reasoning:  72 triples
 
 Potential spreaders (transmitted to ≥2):
-  ⚠ P001
   ⚠ P002
-  ⚠ P006
-  ⚠ P004
-  ⚠ P009
-  ⚠ P013
   ⚠ P016
   ⚠ P011
+  ⚠ P001
+  ⚠ P006
+  ⚠ P009
+  ⚠ P013
+  ⚠ P004
   ⚠ P003
 
 Patients exposed via HCW contact (14):
-  → P001
-  → P017
-  → P012
-  → P024
-  → P019
-  → P002
-  → P010
-  → P022
-  → P007
   → P015
   → P009
-  → P013
+  → P020
+  → P017
   → P016
-  → P020</code></pre>
+  → P019
+  → P022
+  → P010
+  → P012
+  → P007
+  → P013
+  → P024
+  → P002
+  → P001</code></pre>
 </div>
 </div>
 </section>
@@ -958,7 +969,7 @@ Patients exposed via HCW contact (14):
 <h3 class="anchored" data-anchor-id="a.-outbreak-classification-rules">8a. Outbreak classification rules</h3>
 <p>We classify cases using forward-chaining N3 rules with <code>math:</code> builtins to evaluate thresholds.</p>
 <div id="42" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>n3_epi <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>n3_epi <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
 <span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix pat: &lt;http://example.org/patient/&gt; .</span></span>
 <span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
@@ -1024,7 +1035,7 @@ Patients exposed via HCW contact (14):
 <span id="cb42-64"><a href="#cb42-64" aria-hidden="true" tabindex="-1"></a><span class="co"># Priority cases</span></span>
 <span id="cb42-65"><a href="#cb42-65" aria-hidden="true" tabindex="-1"></a>priority <span class="op">=</span> [<span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
 <span id="cb42-66"><a href="#cb42-66" aria-hidden="true" tabindex="-1"></a>            for t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, <span class="fu">epi</span>(<span class="st">"priority"</span>), <span class="fu">Literal</span>(<span class="st">"critical"</span>)))]</span>
-<span id="cb42-67"><a href="#cb42-67" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">⚠ Critical priority cases: </span><span class="sc">$</span>(<span class="fu">join</span>(<span class="fu">sort</span>(priority), <span class="st">", "</span>))<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb42-67"><a href="#cb42-67" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">⚠ Critical priority cases: </span><span class="sc">$</span>(<span class="fu">join</span>(<span class="fu">sort</span>(priority), <span class="st">", "</span>))<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>N3 Reasoning Results
 ════════════════════
@@ -1043,7 +1054,7 @@ High Risk Paediatric: P011
 <h3 class="anchored" data-anchor-id="b.-serial-interval-and-generation-time-analysis">8b. Serial interval and generation time analysis</h3>
 <p>Using N3 math builtins to compute epidemiological metrics from pairs of linked cases.</p>
 <div id="44" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>n3_serial <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>n3_serial <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
 <span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
 <span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -1098,7 +1109,7 @@ High Risk Paediatric: P011
 <span id="cb44-53"><a href="#cb44-53" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"pair</span><span class="sc">$</span>i<span class="st">"</span>, <span class="fl">10</span>), <span class="fu">rpad</span>(infector, <span class="fl">10</span>), <span class="fu">rpad</span>(infectee, <span class="fl">10</span>),</span>
 <span id="cb44-54"><a href="#cb44-54" aria-hidden="true" tabindex="-1"></a>                <span class="fu">rpad</span>(si, <span class="fl">12</span>), cls)</span>
 <span id="cb44-55"><a href="#cb44-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb44-56"><a href="#cb44-56" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb44-56"><a href="#cb44-56" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Serial Interval Analysis (N3 math builtins)
 ════════════════════════════════════════════
@@ -1121,7 +1132,7 @@ pair10    P003      P017      7           long</code></pre>
 <h3 class="anchored" data-anchor-id="c.-rule-based-clinical-decision-support">8c. Rule-based clinical decision support</h3>
 <p>N3 rules can implement clinical decision logic, combining patient attributes with epidemiological criteria to flag cases needing specific interventions.</p>
 <div id="46" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>n3_decisions <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>n3_decisions <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix epi: &lt;http://example.org/epi#&gt; .</span></span>
 <span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix pat: &lt;http://example.org/patient/&gt; .</span></span>
 <span id="cb46-4"><a href="#cb46-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
@@ -1171,7 +1182,7 @@ pair10    P003      P017      7           long</code></pre>
 <span id="cb46-48"><a href="#cb46-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> <span class="fu">sort</span>(pids)</span>
 <span id="cb46-49"><a href="#cb46-49" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"    → </span><span class="sc">$</span>p<span class="st">"</span>)</span>
 <span id="cb46-50"><a href="#cb46-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb46-51"><a href="#cb46-51" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb46-51"><a href="#cb46-51" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Clinical Decision Support (N3 forward chaining)
 ════════════════════════════════════════════════
@@ -1200,7 +1211,7 @@ pair10    P003      P017      7           long</code></pre>
 <h2 class="anchored" data-anchor-id="problog-probabilistic-outbreak-modeling">9. ProbLog — Probabilistic Outbreak Modeling</h2>
 <p>We model the probability of outbreak outcomes given interventions using ProbLog. The model captures: vaccination effectiveness, quarantine compliance, and secondary attack rates.</p>
 <div id="48" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb48"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb48"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a><span class="st">    % Pathogen-specific secondary attack rates</span></span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
 <span id="cb48-4"><a href="#cb48-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
@@ -1290,7 +1301,7 @@ pair10    P003      P017      7           long</code></pre>
 <span id="cb48-88"><a href="#cb48-88" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">startswith</span>(key, <span class="st">"nosocomial"</span>) <span class="op">||</span> <span class="fu">startswith</span>(key, <span class="st">"community"</span>)</span>
 <span id="cb48-89"><a href="#cb48-89" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">40</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
 <span id="cb48-90"><a href="#cb48-90" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb48-91"><a href="#cb48-91" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb48-91"><a href="#cb48-91" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Outbreak Containment Probabilities
 ═══════════════════════════════════
@@ -1322,7 +1333,7 @@ Spread Risk
 <section id="intervention-scenario-comparison" class="level3">
 <h3 class="anchored" data-anchor-id="intervention-scenario-comparison">Intervention scenario comparison</h3>
 <div id="50" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb50"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scenario: enhanced infection control (higher quarantine compliance)</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb50"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scenario: enhanced infection control (higher quarantine compliance)</span></span>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>enhanced_program <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.35::secondary_attack(influenza).</span></span>
 <span id="cb50-4"><a href="#cb50-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.25::secondary_attack(covid).</span></span>
@@ -1380,7 +1391,7 @@ Spread Risk
 <span id="cb50-56"><a href="#cb50-56" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(key, <span class="fl">42</span>),</span>
 <span id="cb50-57"><a href="#cb50-57" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(b; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">12</span>),</span>
 <span id="cb50-58"><a href="#cb50-58" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(<span class="cn">e</span>; digits<span class="op">=</span><span class="fl">4</span>), arrow)</span>
-<span id="cb50-59"><a href="#cb50-59" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb50-59"><a href="#cb50-59" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Intervention Comparison: Spread Risk
 ═════════════════════════════════════
@@ -1401,7 +1412,7 @@ nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
 <section id="a.-outbreak-transmission-network" class="level3">
 <h3 class="anchored" data-anchor-id="a.-outbreak-transmission-network">9a. Outbreak transmission network</h3>
 <div id="52" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb52"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb52-3"><a href="#cb52-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Build DOT for transmission network with pathogen colouring</span></span>
 <span id="cb52-4"><a href="#cb52-4" aria-hidden="true" tabindex="-1"></a>dot_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
@@ -1454,7 +1465,7 @@ nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
 <span id="cb52-51"><a href="#cb52-51" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb52-52"><a href="#cb52-52" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(dot_lines, <span class="st">"}"</span>)</span>
 <span id="cb52-53"><a href="#cb52-53" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">join</span>(dot_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb52-54"><a href="#cb52-54" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb52-54"><a href="#cb52-54" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <div>
 <figure class="figure">
@@ -1468,7 +1479,7 @@ nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
 <h3 class="anchored" data-anchor-id="b.-epidemic-curve-by-pathogen">9b. Epidemic curve by pathogen</h3>
 <p>We visualise the onset dates as a textual epidemic curve.</p>
 <div id="54" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb53"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>dates <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([r.onset for r <span class="kw">in</span> case_records]))</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb53"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>dates <span class="op">=</span> <span class="fu">sort</span>(<span class="fu">unique</span>([r.onset for r <span class="kw">in</span> case_records]))</span>
 <span id="cb53-2"><a href="#cb53-2" aria-hidden="true" tabindex="-1"></a>pathogen_short <span class="op">=</span> <span class="fu">Dict</span>(</span>
 <span id="cb53-3"><a href="#cb53-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"influenza_A_H3N2"</span> <span class="op">=&gt;</span> <span class="st">"Flu"</span>,</span>
 <span id="cb53-4"><a href="#cb53-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"SARS_CoV_2_JN1"</span> <span class="op">=&gt;</span> <span class="st">"CoV"</span>,</span>
@@ -1483,7 +1494,7 @@ nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre>
 <span id="cb53-13"><a href="#cb53-13" aria-hidden="true" tabindex="-1"></a>    bar <span class="op">=</span> <span class="st">"█"</span> <span class="op">^</span> <span class="fu">length</span>(cases_on_date)</span>
 <span id="cb53-14"><a href="#cb53-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>d<span class="st"> | </span><span class="sc">$</span>bar<span class="st"> </span><span class="sc">$</span>(<span class="fu">length</span>(cases_on_date))<span class="st"> (</span><span class="sc">$</span>markers<span class="st">)"</span>)</span>
 <span id="cb53-15"><a href="#cb53-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb53-16"><a href="#cb53-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb53-16"><a href="#cb53-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Epidemic Curve (onset dates)
 ════════════════════════════
@@ -1508,7 +1519,7 @@ Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B</code></pre>
 <section id="c.-locationpathogen-heatmap" class="level3">
 <h3 class="anchored" data-anchor-id="c.-locationpathogen-heatmap">9c. Location–Pathogen heatmap</h3>
 <div id="56" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count cases per location-pathogen combination using SPARQL</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb55"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count cases per location-pathogen combination using SPARQL</span></span>
 <span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX epi: &lt;http://example.org/epi#&gt;</span></span>
 <span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
@@ -1545,7 +1556,7 @@ Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B</code></pre>
 <span id="cb55-35"><a href="#cb55-35" aria-hidden="true" tabindex="-1"></a>        <span class="fu">print</span>(<span class="fu">rpad</span>(cell, <span class="fl">14</span>))</span>
 <span id="cb55-36"><a href="#cb55-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb55-37"><a href="#cb55-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>()</span>
-<span id="cb55-38"><a href="#cb55-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb55-38"><a href="#cb55-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Location                    Influenza A   RSV subtype   SARS-CoV-2 J  
 ──────────────────────────────────────────────────────────────────────
@@ -1675,13 +1686,14 @@ Sunrise Care Home             ████ 4        ·             ·           
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

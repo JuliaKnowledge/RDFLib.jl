@@ -272,10 +272,10 @@
 
     # ── 12. Compare with EYE ─────────────────────────────────────────
     @testset "Compare with EYE reasoner" begin
-        swipl = "/opt/homebrew/bin/swipl"
-        eye = "/Users/sdwfrost/Projects/rdf/eye/eye.pl"
+        swipl = Sys.which("swipl")
+        eye = get(ENV, "EYE_PATH", joinpath(dirname(@__DIR__), "..", "eye", "eye.pl"))
 
-        if isfile(swipl) && isfile(eye)
+        if swipl !== nothing && isfile(swipl) && isfile(eye)
             # Write data file
             data_file = tempname() * ".n3"
             query_file = tempname() * ".n3"

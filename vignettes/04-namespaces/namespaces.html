@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>Namespaces and Vocabularies</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="namespaces_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="namespaces_files/libs/quarto-html/anchor.min.js"></script>
 <link href="namespaces_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="namespaces_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="namespaces_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="namespaces_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="namespaces_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="namespaces_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="namespaces_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../namespaces.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="namespaces.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -88,6 +93,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -102,14 +113,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>Namespaces provide short, readable prefixes for long URI bases. RDFLib.jl comes with many predefined namespaces for common RDF vocabularies and lets you create your own.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="predefined-namespaces" class="level2">
 <h2 class="anchored" data-anchor-id="predefined-namespaces">Predefined Namespaces</h2>
 <p>RDFLib.jl includes all major W3C and community vocabularies:</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Core W3C vocabularies</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Core W3C vocabularies</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"RDF type:          "</span>, RDF.<span class="kw">type</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"RDFS label:        "</span>, <span class="fu">RDFS</span>(<span class="st">"label"</span>))</span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"OWL Class:         "</span>, <span class="fu">OWL</span>(<span class="st">"Class"</span>))</span>
@@ -122,7 +133,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"DCTERMS created:   "</span>, <span class="fu">DCTERMS</span>(<span class="st">"created"</span>))</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"SKOS prefLabel:    "</span>, <span class="fu">SKOS</span>(<span class="st">"prefLabel"</span>))</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"PROV wasGeneratedBy: "</span>, <span class="fu">PROV</span>(<span class="st">"wasGeneratedBy"</span>))</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Schema.org name:   "</span>, <span class="fu">SDO</span>(<span class="st">"name"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Schema.org name:   "</span>, <span class="fu">SDO</span>(<span class="st">"name"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>RDF type:          URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
 RDFS label:        URIRef("http://www.w3.org/2000/01/rdf-schema#label")
@@ -141,7 +152,7 @@ Schema.org name:   URIRef("https://schema.org/name")</code></pre>
 <section id="creating-custom-namespaces" class="level2">
 <h2 class="anchored" data-anchor-id="creating-custom-namespaces">Creating Custom Namespaces</h2>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple namespace from a URI base</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple namespace from a URI base</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>bio <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://purl.org/vocab/bio/0.1/"</span>)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">bio</span>(<span class="st">"Birth"</span>))</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">bio</span>(<span class="st">"Event"</span>))</span>
@@ -153,7 +164,7 @@ Schema.org name:   URIRef("https://schema.org/name")</code></pre>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), RDF.<span class="kw">type</span>, <span class="fu">dbo</span>(<span class="st">"ProgrammingLanguage"</span>)))</span>
 <span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), <span class="fu">dbo</span>(<span class="st">"designer"</span>), <span class="fu">dbr</span>(<span class="st">"Jeff_Bezanson"</span>)))</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), <span class="fu">RDFS</span>(<span class="st">"label"</span>), <span class="fu">Literal</span>(<span class="st">"Julia"</span>; lang<span class="op">=</span><span class="st">"en"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">dbr</span>(<span class="st">"Julia_Language"</span>), <span class="fu">RDFS</span>(<span class="st">"label"</span>), <span class="fu">Literal</span>(<span class="st">"Julia"</span>; lang<span class="op">=</span><span class="st">"en"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef("http://purl.org/vocab/bio/0.1/Birth")
 URIRef("http://purl.org/vocab/bio/0.1/Event")</code></pre>
@@ -167,10 +178,10 @@ URIRef("http://purl.org/vocab/bio/0.1/Event")</code></pre>
 <h2 class="anchored" data-anchor-id="binding-prefixes-to-graphs">Binding Prefixes to Graphs</h2>
 <p>Prefix bindings control how URIs are shortened in serialized output:</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"dbr"</span>, <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/resource/"</span>))</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"dbr"</span>, <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/resource/"</span>))</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"dbo"</span>, <span class="fu">Namespace</span>(<span class="st">"http://dbpedia.org/ontology/"</span>))</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix dbo: &lt;http://dbpedia.org/ontology/&gt; .
 @prefix dbr: &lt;http://dbpedia.org/resource/&gt; .
@@ -191,23 +202,23 @@ dbr:Julia_Language a dbo:ProgrammingLanguage ;
 <h2 class="anchored" data-anchor-id="namespace-manager">Namespace Manager</h2>
 <p>The <code>NamespaceManager</code> provides centralized prefix management:</p>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>nsm <span class="op">=</span> <span class="fu">NamespaceManager</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>nsm <span class="op">=</span> <span class="fu">NamespaceManager</span>()</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(nsm, <span class="st">"ex"</span>, <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>))</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(nsm, <span class="st">"foaf"</span>, <span class="fu">Namespace</span>(<span class="st">"http://xmlns.com/foaf/0.1/"</span>))</span>
 <span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(nsm, <span class="st">"schema"</span>, <span class="fu">Namespace</span>(<span class="st">"http://schema.org/"</span>))</span>
 <span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Expand CURIEs (Compact URIs)</span></span>
 <span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">expand_curie</span>(nsm, <span class="st">"ex:alice"</span>))</span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">expand_curie</span>(nsm, <span class="st">"foaf:name"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">expand_curie</span>(nsm, <span class="st">"foaf:name"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef("http://example.org/alice")
 URIRef("http://xmlns.com/foaf/0.1/name")</code></pre>
 </div>
 </div>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute qualified names (reverse of expand)</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute qualified names (reverse of expand)</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>qname <span class="op">=</span> <span class="fu">compute_qname</span>(nsm, <span class="fu">URIRef</span>(<span class="st">"http://xmlns.com/foaf/0.1/Person"</span>))</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"QName: "</span>, qname)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"QName: "</span>, qname)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>QName: ("foaf", "http://xmlns.com/foaf/0.1/", "Person")</code></pre>
 </div>
@@ -217,7 +228,7 @@ URIRef("http://xmlns.com/foaf/0.1/name")</code></pre>
 <h2 class="anchored" data-anchor-id="programmatic-namespace-creation">Programmatic Namespace Creation</h2>
 <p>Create new vocabulary namespaces with metadata:</p>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># create_namespace generates Julia code for a DefinedNamespace from a graph</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># create_namespace generates Julia code for a DefinedNamespace from a graph</span></span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co"># First, build a small ontology graph</span></span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>vocab_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>vocab_ns <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/myvocab#"</span>)</span>
@@ -230,7 +241,7 @@ URIRef("http://xmlns.com/foaf/0.1/name")</code></pre>
 <span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="co"># For direct use, just create a Namespace</span></span>
 <span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>my_vocab <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/myvocab#"</span>)</span>
 <span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">my_vocab</span>(<span class="st">"Person"</span>))</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">my_vocab</span>(<span class="st">"hasFriend"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">my_vocab</span>(<span class="st">"hasFriend"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># Auto-generated namespace: MyVocab
 # URI: http://example.org/myvocab#
@@ -252,7 +263,7 @@ URIRef("http://example.org/myvocab#hasFriend")</code></pre>
 <h2 class="anchored" data-anchor-id="using-namespaces-in-practice">Using Namespaces in Practice</h2>
 <p>A common pattern is to define all your namespaces at the top of your code:</p>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define project namespaces</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define project namespaces</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>schema <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://schema.org/"</span>)</span>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -271,7 +282,7 @@ URIRef("http://example.org/myvocab#hasFriend")</code></pre>
 <span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"location"</span>), <span class="fu">Literal</span>(<span class="st">"Aachen, Germany"</span>)))</span>
 <span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(conf, <span class="fu">schema</span>(<span class="st">"url"</span>), <span class="fu">URIRef</span>(<span class="st">"https://juliacon.org/2025/"</span>)))</span>
 <span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix ns1: &lt;https://juliacon.org/2025/&gt; .
@@ -421,13 +432,14 @@ ex:juliacon2025 a schema:Event ;
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

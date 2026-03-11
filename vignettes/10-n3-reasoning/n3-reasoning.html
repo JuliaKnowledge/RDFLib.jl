@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>N3 Reasoning</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="n3-reasoning_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="n3-reasoning_files/libs/quarto-html/anchor.min.js"></script>
 <link href="n3-reasoning_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="n3-reasoning_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="n3-reasoning_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="n3-reasoning_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="n3-reasoning_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="n3-reasoning_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="n3-reasoning_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../n3-reasoning.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="n3-reasoning.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -88,6 +93,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -102,14 +113,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>Notation3 (N3) extends RDF with formulas (quoted graphs), variables, and implication rules. RDFLib.jl includes a full N3 reasoner based on the Euler Abstract Machine (EAM) with support for 100+ built-in predicates covering math, string, list, logic, cryptography, and time operations.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="basic-forward-chaining" class="level2">
 <h2 class="anchored" data-anchor-id="basic-forward-chaining">Basic Forward Chaining</h2>
 <p>Rules in N3 use <code>=&gt;</code> (log:implies) to express “if antecedent then consequent”:</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="st">:Socrates a :Human .</span></span>
@@ -125,7 +136,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Mortals:"</span>)</span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, RDF.<span class="kw">type</span>, <span class="fu">URIRef</span>(<span class="st">"urn:example:Mortal"</span>)))</span>
 <span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  "</span>, t.subject)</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Mortals:
   URIRef("urn:example:Socrates")
@@ -137,7 +148,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="chained-rules">Chained Rules</h2>
 <p>Rules can chain — the conclusion of one rule feeds the antecedent of another:</p>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .</span></span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -155,13 +166,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Whiskers is a:"</span>)</span>
 <span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="fu">URIRef</span>(<span class="st">"urn:example:whiskers"</span>), RDF.<span class="kw">type</span>, <span class="cn">nothing</span>))</span>
 <span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  "</span>, t.object)</span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Whiskers is a:
-  URIRef("urn:example:Cat")
+  URIRef("urn:example:Animal")
   URIRef("urn:example:Feline")
   URIRef("urn:example:Mammal")
-  URIRef("urn:example:Animal")</code></pre>
+  URIRef("urn:example:Cat")</code></pre>
 </div>
 </div>
 </section>
@@ -169,7 +180,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="backward-chaining">Backward Chaining</h2>
 <p>Rules using <code>&lt;=</code> fire backward (goal-directed):</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -188,7 +199,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, <span class="fu">URIRef</span>(<span class="st">"urn:example:isAdult"</span>), <span class="cn">nothing</span>))</span>
 <span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>(t.subject)<span class="st"> isAdult </span><span class="sc">$</span>(t.object)<span class="st">"</span>)</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef("urn:example:alice") isAdult Variable("R1")
 URIRef("urn:example:bob") isAdult Variable("R2")</code></pre>
@@ -199,7 +210,7 @@ URIRef("urn:example:bob") isAdult Variable("R2")</code></pre>
 <h2 class="anchored" data-anchor-id="math-builtins">Math Builtins</h2>
 <p>N3 provides built-in predicates for arithmetic:</p>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .</span></span>
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -232,12 +243,12 @@ URIRef("urn:example:bob") isAdult Variable("R2")</code></pre>
 <span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="fu">ex</span>(<span class="st">"result"</span>), <span class="fu">ex</span>(prop), <span class="cn">nothing</span>))</span>
 <span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>label<span class="st">: "</span>, t.object)</span>
 <span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Sum: Literal("13", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
 Diff: Literal("7", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
 Prod: Literal("30", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
-Quot: Literal("3.3333333333333335", datatype=URIRef("http://www.w3.org/2001/XMLSchema#double"))
+Quot: Literal("3.3333333333333335", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decimal"))
 Abs: Literal("10", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))</code></pre>
 </div>
 </div>
@@ -245,7 +256,7 @@ Abs: Literal("10", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))<
 <section id="string-builtins" class="level2">
 <h2 class="anchored" data-anchor-id="string-builtins">String Builtins</h2>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix string: &lt;http://www.w3.org/2000/10/swap/string#&gt; .</span></span>
 <span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -275,7 +286,7 @@ Abs: Literal("10", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))<
 <span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="fu">ex</span>(<span class="st">"result"</span>), <span class="fu">ex</span>(prop), <span class="cn">nothing</span>))</span>
 <span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>prop<span class="st">: "</span>, t.object)</span>
 <span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>length: Literal("13", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
 upper: Literal("HELLO, WORLD!")
@@ -287,7 +298,7 @@ replaced: Literal("HelloGoodbye")</code></pre>
 <section id="list-builtins" class="level2">
 <h2 class="anchored" data-anchor-id="list-builtins">List Builtins</h2>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix list: &lt;http://www.w3.org/2000/10/swap/list#&gt; .</span></span>
 <span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -319,7 +330,7 @@ replaced: Literal("HelloGoodbye")</code></pre>
 <span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="fu">ex</span>(<span class="st">"result"</span>), <span class="fu">ex</span>(prop), <span class="cn">nothing</span>))</span>
 <span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>prop<span class="st">: "</span>, t.object)</span>
 <span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>length: Literal("5", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
 first: Literal("5", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
@@ -330,7 +341,7 @@ last: Literal("2", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))<
 <section id="cryptographic-builtins" class="level2">
 <h2 class="anchored" data-anchor-id="cryptographic-builtins">Cryptographic Builtins</h2>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix crypto: &lt;http://www.w3.org/2000/10/swap/crypto#&gt; .</span></span>
 <span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -353,7 +364,7 @@ last: Literal("2", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))<
 <span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="fu">ex</span>(<span class="st">"result"</span>), <span class="fu">ex</span>(prop), <span class="cn">nothing</span>))</span>
 <span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"</span><span class="sc">$</span>prop<span class="st">: "</span>, t.object)</span>
 <span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>md5: Literal("5eb63bbbe01eeed093cb22bb8f5acdc3")
 sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
@@ -363,7 +374,7 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
 <section id="log-builtins" class="level2">
 <h2 class="anchored" data-anchor-id="log-builtins">Log Builtins</h2>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># log:equalTo — structural equality</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># log:equalTo — structural equality</span></span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .</span></span>
@@ -387,7 +398,7 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
 <span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"urn:example:"</span>)</span>
 <span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>eq <span class="op">=</span> <span class="fu">any</span>(t <span class="op">-&gt;</span> t.subject <span class="op">==</span> <span class="fu">ex</span>(<span class="st">"result"</span>), result)</span>
-<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Lists are equal: </span><span class="sc">$</span>eq<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Lists are equal: </span><span class="sc">$</span>eq<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Lists are equal: true</code></pre>
 </div>
@@ -397,7 +408,7 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
 <h2 class="anchored" data-anchor-id="meta-reasoning-logconclusion">Meta-Reasoning: log:conclusion</h2>
 <p>The <code>log:conclusion</code> builtin runs the reasoner on a formula — enabling meta-reasoning:</p>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .</span></span>
 <span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .</span></span>
@@ -425,7 +436,7 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
 <span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"urn:example:"</span>)</span>
 <span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>proved <span class="op">=</span> <span class="fu">any</span>(t <span class="op">-&gt;</span> t.subject <span class="op">==</span> <span class="fu">ex</span>(<span class="st">"test"</span>) <span class="op">&amp;&amp;</span> t.object <span class="op">==</span> <span class="fu">Literal</span>(<span class="cn">true</span>), result)</span>
-<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Meta-reasoning proved whiskers is an Animal: </span><span class="sc">$</span>proved<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Meta-reasoning proved whiskers is an Animal: </span><span class="sc">$</span>proved<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Meta-reasoning proved whiskers is an Animal: true</code></pre>
 </div>
@@ -434,7 +445,7 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
 <section id="a-practical-example-family-relationships" class="level2">
 <h2 class="anchored" data-anchor-id="a-practical-example-family-relationships">A Practical Example: Family Relationships</h2>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:family:&gt; .</span></span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .</span></span>
 <span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -497,7 +508,7 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
 <span id="cb20-61"><a href="#cb20-61" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb20-62"><a href="#cb20-62" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(result, (<span class="cn">nothing</span>, <span class="fu">fam</span>(<span class="st">"auntOf"</span>), <span class="cn">nothing</span>))</span>
 <span id="cb20-63"><a href="#cb20-63" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(t.subject)<span class="st"> is aunt of </span><span class="sc">$</span>(t.object)<span class="st">"</span>)</span>
-<span id="cb20-64"><a href="#cb20-64" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb20-64"><a href="#cb20-64" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Grandchildren of Alice:
   URIRef("urn:family:dave")
@@ -505,8 +516,8 @@ sha: Literal("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")</code></pre>
   URIRef("urn:family:frank")
 
 Siblings:
-  URIRef("urn:family:bob") ↔ URIRef("urn:family:carol")
   URIRef("urn:family:dave") ↔ URIRef("urn:family:eve")
+  URIRef("urn:family:carol") ↔ URIRef("urn:family:bob")
 
 Uncle/Aunt relationships:
   URIRef("urn:family:bob") is uncle of URIRef("urn:family:frank")
@@ -569,13 +580,14 @@ Uncle/Aunt relationships:
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

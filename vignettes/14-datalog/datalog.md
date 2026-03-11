@@ -1,5 +1,5 @@
 # Datalog Reasoning
-
+Simon Frost
 
 ## Overview
 
@@ -129,8 +129,8 @@ end
 ```
 
     Grandchildren of Alice:
-      URIRef("http://example.org/dave")
       URIRef("http://example.org/eve")
+      URIRef("http://example.org/dave")
       URIRef("http://example.org/frank")
 
     Sibling pairs:
@@ -189,10 +189,10 @@ end
 ```
 
     Whiskers is a:
-      URIRef("http://example.org/Cat")
-      URIRef("http://example.org/Mammal")
-      URIRef("http://example.org/Feline")
       URIRef("http://example.org/Animal")
+      URIRef("http://example.org/Cat")
+      URIRef("http://example.org/Feline")
+      URIRef("http://example.org/Mammal")
 
     Whiskers is a:
       URIRef("http://example.org/Cat")
@@ -276,8 +276,8 @@ end
 ```
 
     x has types:
-      URIRef("http://example.org/a")
       URIRef("http://example.org/c")
+      URIRef("http://example.org/a")
       URIRef("http://example.org/b")
 
     x has types:
@@ -311,57 +311,15 @@ println("Triples: ", length(result))
 
 RDFLib.jl provides two reasoning engines. Choose based on your needs:
 
-<table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
-<thead>
-<tr>
-<th>Feature</th>
-<th><code>datalog_reason</code></th>
-<th><code>reason</code> (N3)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Evaluation</strong></td>
-<td>Semi-naive bottom-up</td>
-<td>Euler Abstract Machine (backward chaining)</td>
-</tr>
-<tr>
-<td><strong>Rule scope</strong></td>
-<td>Pure Datalog (conjunctive body, no built-ins)</td>
-<td>Full N3 (built-ins, negation, backward chaining)</td>
-</tr>
-<tr>
-<td><strong>Built-in predicates</strong></td>
-<td>None</td>
-<td>100+ (math, string, list, crypto, log)</td>
-</tr>
-<tr>
-<td><strong>Backward chaining (<code>&lt;=</code>)</strong></td>
-<td>Not supported</td>
-<td>Supported</td>
-</tr>
-<tr>
-<td><strong>Inequality (<code>log:notEqualTo</code>)</strong></td>
-<td>Not supported</td>
-<td>Supported</td>
-</tr>
-<tr>
-<td><strong>Multiple head atoms</strong></td>
-<td>Supported</td>
-<td>Supported</td>
-</tr>
-<tr>
-<td><strong>Optimal for</strong></td>
-<td>Large-scale relational inference</td>
-<td>Rules needing built-in computations</td>
-</tr>
-</tbody>
-</table>
+| Feature | `datalog_reason` | `reason` (N3) |
+|----|----|----|
+| **Evaluation** | Semi-naive bottom-up | Euler Abstract Machine (backward chaining) |
+| **Rule scope** | Pure Datalog (conjunctive body, no built-ins) | Full N3 (built-ins, negation, backward chaining) |
+| **Built-in predicates** | None | 100+ (math, string, list, crypto, log) |
+| **Backward chaining (`<=`)** | Not supported | Supported |
+| **Inequality (`log:notEqualTo`)** | Not supported | Supported |
+| **Multiple head atoms** | Supported | Supported |
+| **Optimal for** | Large-scale relational inference | Rules needing built-in computations |
 
 Both reasoners produce identical results for pure Datalog rules:
 
@@ -407,17 +365,17 @@ meta-reasoning (`log:conclusion`), or list/formula manipulation.
 
 The Datalog reasoner uses several optimizations:
 
--   **Semi-naive evaluation:** Each iteration only considers newly
-    derived facts (delta tuples), avoiding redundant work from
-    re-processing previously known facts.
--   **Integer encoding:** RDF terms are mapped to compact integer IDs
-    before evaluation. All pattern matching operates on integers rather
-    than string comparisons.
--   **Hash joins:** Multi-body rules use hash-based indices (SPO, POS,
-    PSO) to efficiently join body atoms on shared variables.
--   **Body reordering:** The reasoner automatically reorders body atoms
-    using a greedy algorithm that maximizes the number of bound
-    variables at each join step.
+- **Semi-naive evaluation:** Each iteration only considers newly derived
+  facts (delta tuples), avoiding redundant work from re-processing
+  previously known facts.
+- **Integer encoding:** RDF terms are mapped to compact integer IDs
+  before evaluation. All pattern matching operates on integers rather
+  than string comparisons.
+- **Hash joins:** Multi-body rules use hash-based indices (SPO, POS,
+  PSO) to efficiently join body atoms on shared variables.
+- **Body reordering:** The reasoner automatically reorders body atoms
+  using a greedy algorithm that maximizes the number of bound variables
+  at each join step.
 
 The `max_iterations` parameter (default 1000) bounds the evaluation
 loop. For graphs where the fixpoint requires more iterations, increase

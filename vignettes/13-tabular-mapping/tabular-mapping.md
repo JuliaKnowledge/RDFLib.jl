@@ -1,5 +1,5 @@
 # Tabular RDF Mapping
-
+Simon Frost
 
 ## Overview
 
@@ -187,42 +187,12 @@ println(serialize(m3, TurtleFormat()))
         ns4:score 4.5e0 ;
         ns2:homepage ns3:alice.example.org .
 
-<table>
-<colgroup>
-<col style="width: 37%" />
-<col style="width: 20%" />
-<col style="width: 42%" />
-</colgroup>
-<thead>
-<tr>
-<th>Column Type</th>
-<th>Usage</th>
-<th>Example Output</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>AutoColumn()</code></td>
-<td>Detect from Julia type</td>
-<td><code>"42"^^xsd:integer</code></td>
-</tr>
-<tr>
-<td><code>IRIColumn()</code></td>
-<td>Value becomes a URI</td>
-<td><code>&lt;http://...&gt;</code></td>
-</tr>
-<tr>
-<td><code>LiteralColumn(XSD.integer)</code></td>
-<td>Explicit datatype</td>
-<td><code>"42"^^xsd:integer</code></td>
-</tr>
-<tr>
-<td><code>LangColumn("en")</code></td>
-<td>Language tag</td>
-<td><code>"hello"@en</code></td>
-</tr>
-</tbody>
-</table>
+| Column Type                  | Usage                  | Example Output      |
+|------------------------------|------------------------|---------------------|
+| `AutoColumn()`               | Detect from Julia type | `"42"^^xsd:integer` |
+| `IRIColumn()`                | Value becomes a URI    | `<http://...>`      |
+| `LiteralColumn(XSD.integer)` | Explicit datatype      | `"42"^^xsd:integer` |
+| `LangColumn("en")`           | Language tag           | `"hello"@en`        |
 
 ## OTTR Templates
 
@@ -396,70 +366,28 @@ println("After reasoning: $(length(m_dl)) triples")
 
 RDFLib.jl’s mapping engine is optimized for bulk operations:
 
--   **Deferred indexing**: index building is deferred until a query is
-    issued
--   **Skip dedup**: when the store is empty, duplicate checking is
-    skipped
--   **Pre-allocated vectors**: `sizehint!` reduces memory reallocation
--   **Integer subject fast-path**: numeric IDs avoid string encoding
-    overhead
+- **Deferred indexing**: index building is deferred until a query is
+  issued
+- **Skip dedup**: when the store is empty, duplicate checking is skipped
+- **Pre-allocated vectors**: `sizehint!` reduces memory reallocation
+- **Integer subject fast-path**: numeric IDs avoid string encoding
+  overhead
 
 These optimizations make RDFLib.jl **1.6–3.5× faster** than maplib (Rust
 backend) on mapping benchmarks across 1K–100K rows.
 
 ## API Summary
 
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>RDFMapping()</code></td>
-<td>Create mapping context</td>
-</tr>
-<tr>
-<td><code>map_default!(m, table, :col)</code></td>
-<td>Auto-map columns to predicates</td>
-</tr>
-<tr>
-<td><code>rdf_map!(m, table, template)</code></td>
-<td>Map using explicit template</td>
-</tr>
-<tr>
-<td><code>rdf_query(m, sparql)</code></td>
-<td>SPARQL SELECT → NamedTuple</td>
-</tr>
-<tr>
-<td><code>rdf_insert!(m, sparql)</code></td>
-<td>SPARQL CONSTRUCT → insert triples</td>
-</tr>
-<tr>
-<td><code>rdf_update!(m, sparql)</code></td>
-<td>SPARQL UPDATE</td>
-</tr>
-<tr>
-<td><code>add_template!(m, stottr)</code></td>
-<td>Register OTTR template</td>
-</tr>
-<tr>
-<td><code>ottr_map!(m, iri, table)</code></td>
-<td>Expand OTTR template</td>
-</tr>
-<tr>
-<td><code>rdf_validate(m, shapes)</code></td>
-<td>SHACL validation</td>
-</tr>
-<tr>
-<td><code>rdf_reason!(m)</code></td>
-<td>Datalog reasoning</td>
-</tr>
-<tr>
-<td><code>serialize(m, format)</code></td>
-<td>Serialize graph</td>
-</tr>
-</tbody>
-</table>
+| Function                       | Purpose                           |
+|--------------------------------|-----------------------------------|
+| `RDFMapping()`                 | Create mapping context            |
+| `map_default!(m, table, :col)` | Auto-map columns to predicates    |
+| `rdf_map!(m, table, template)` | Map using explicit template       |
+| `rdf_query(m, sparql)`         | SPARQL SELECT → NamedTuple        |
+| `rdf_insert!(m, sparql)`       | SPARQL CONSTRUCT → insert triples |
+| `rdf_update!(m, sparql)`       | SPARQL UPDATE                     |
+| `add_template!(m, stottr)`     | Register OTTR template            |
+| `ottr_map!(m, iri, table)`     | Expand OTTR template              |
+| `rdf_validate(m, shapes)`      | SHACL validation                  |
+| `rdf_reason!(m)`               | Datalog reasoning                 |
+| `serialize(m, format)`         | Serialize graph                   |

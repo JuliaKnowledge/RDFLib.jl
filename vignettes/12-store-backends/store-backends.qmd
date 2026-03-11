@@ -1,7 +1,12 @@
 ---
 title: "Store Backends"
+author: "Simon Frost"
 format:
   html:
+    code-fold: false
+  pdf:
+    code-fold: false
+  gfm:
     code-fold: false
 engine: julia
 ---
@@ -105,7 +110,7 @@ undo!(store)
 println("After undo: $(length(g)) triples")
 
 # Check what's left
-for t in g
+for t in collect(triples(g))
     println("  ", t)
 end
 ```
@@ -169,24 +174,4 @@ transaction(store) do
 end
 
 println("After transaction: $(length(g)) triples")
-```
-
-## Isomorphic Graph
-
-A wrapper that provides canonical form for blank node-insensitive comparison:
-
-```{julia}
-g1 = parse_rdf("""
-    @prefix ex: <http://example.org/> .
-    ex:a ex:p [ ex:q "hello" ] .
-""", TurtleFormat())
-
-g2 = parse_rdf("""
-    @prefix ex: <http://example.org/> .
-    ex:a ex:p [ ex:q "hello" ] .
-""", TurtleFormat())
-
-iso1 = to_isomorphic(g1)
-iso2 = to_isomorphic(g2)
-println("Isomorphic: ", iso1 == iso2)
 ```

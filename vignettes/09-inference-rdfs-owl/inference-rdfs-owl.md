@@ -1,5 +1,5 @@
 # RDFS and OWL Inference
-
+Simon Frost
 
 ## Overview
 
@@ -58,10 +58,10 @@ end
     Fido is an Animal: true
 
     Fido's types:
+      URIRef("http://example.org/LivingThing")
+      URIRef("http://example.org/Animal")
       URIRef("http://example.org/Dog")
       URIRef("http://example.org/Mammal")
-      URIRef("http://example.org/Animal")
-      URIRef("http://example.org/LivingThing")
 
 ### Domain and Range Inference
 
@@ -202,9 +202,9 @@ end
 ```
 
     Transitive partOf:
-      cell partOf URIRef("http://example.org/tissue")
       cell partOf URIRef("http://example.org/organ")
       cell partOf URIRef("http://example.org/body")
+      cell partOf URIRef("http://example.org/tissue")
 
 ## Entailment Checking
 

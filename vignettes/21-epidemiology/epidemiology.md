@@ -1,5 +1,5 @@
 # Epidemiology Knowledge Graph
-
+Simon Frost
 
 ## Introduction
 
@@ -489,8 +489,8 @@ remove!(g, Triple(bad, epi("severity"), Literal("unknown")))
       Conforms: false
       ✗ Expected at least 1 values for http://example.org/epi#caseForPatient, got 0
       ✗ Expected at least 1 values for http://example.org/epi#infectedBy, got 0
-      ✗ Expected at least 1 values for http://example.org/epi#locatedAt, got 0
       ✗ Expected at least 1 values for http://example.org/epi#onsetDate, got 0
+      ✗ Expected at least 1 values for http://example.org/epi#locatedAt, got 0
 
     RDFGraph (572 triples)
 
@@ -587,8 +587,8 @@ end
 ```
 
     Cases by location:
-      General Hospital               7 cases
       Royal Infirmary                7 cases
+      General Hospital               7 cases
       Sunrise Care Home              4 cases
       Oakfield Primary School        3 cases
       Riverside Academy              2 cases
@@ -661,14 +661,14 @@ end
 ```
 
     Severe cases with risk factors:
-      Patient 001 (65+) — Influenza A (H3N2), risk: chronic lung disease
       Patient 001 (65+) — Influenza A (H3N2), risk: age over 65
-      Patient 005 (65+) — SARS-CoV-2 JN.1, risk: cardiovascular disease
+      Patient 001 (65+) — Influenza A (H3N2), risk: chronic lung disease
       Patient 005 (65+) — SARS-CoV-2 JN.1, risk: age over 65
+      Patient 005 (65+) — SARS-CoV-2 JN.1, risk: cardiovascular disease
       Patient 010 (65+) — Influenza A (H3N2), risk: age over 65
       Patient 010 (65+) — Influenza A (H3N2), risk: immunocompromised
-      Patient 014 (65+) — Influenza A (H3N2), risk: chronic lung disease
       Patient 014 (65+) — Influenza A (H3N2), risk: age over 65
+      Patient 014 (65+) — Influenza A (H3N2), risk: chronic lung disease
       Patient 022 (65+) — Influenza A (H3N2), risk: age over 65
       Patient 022 (65+) — Influenza A (H3N2), risk: immunocompromised
 
@@ -835,31 +835,31 @@ end
     After reasoning:  72 triples
 
     Potential spreaders (transmitted to ≥2):
-      ⚠ P001
       ⚠ P002
-      ⚠ P006
-      ⚠ P004
-      ⚠ P009
-      ⚠ P013
       ⚠ P016
       ⚠ P011
+      ⚠ P001
+      ⚠ P006
+      ⚠ P009
+      ⚠ P013
+      ⚠ P004
       ⚠ P003
 
     Patients exposed via HCW contact (14):
-      → P001
-      → P017
-      → P012
-      → P024
-      → P019
-      → P002
-      → P010
-      → P022
-      → P007
       → P015
       → P009
-      → P013
-      → P016
       → P020
+      → P017
+      → P016
+      → P019
+      → P022
+      → P010
+      → P012
+      → P007
+      → P013
+      → P024
+      → P002
+      → P001
 
 ## 8. N3 Reasoning — Epidemiological Inference with Builtins
 
@@ -1375,7 +1375,7 @@ dot_str = join(dot_lines, "\n")
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](epidemiology_files/figure-markdown_strict/cell-27-output-1.svg)
+![](epidemiology_files/figure-commonmark/cell-27-output-1.svg)
 
 ### 9b. Epidemic curve by pathogen
 
@@ -1476,69 +1476,29 @@ This vignette demonstrated a comprehensive **epidemiology knowledge
 graph** integrating pathogen biology, patient demographics, clinical
 surveillance, contact tracing, and intervention data.
 
-<table>
-<colgroup>
-<col style="width: 23%" />
-<col style="width: 76%" />
-</colgroup>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Epidemiological Application</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>OWL ontology</strong></td>
-<td>Pathogen taxonomy, patient risk factors, clinical entities</td>
-</tr>
-<tr>
-<td><strong>Tabular mapping</strong></td>
-<td>Line list / surveillance data import</td>
-</tr>
-<tr>
-<td><strong>SHACL validation</strong></td>
-<td>Case report completeness and data quality</td>
-</tr>
-<tr>
-<td><strong>SPARQL queries</strong></td>
-<td>Outbreak analytics: attack rates, severity, hotspots</td>
-</tr>
-<tr>
-<td><strong>Property paths</strong></td>
-<td>Multi-step contact tracing and transmission chains</td>
-</tr>
-<tr>
-<td><strong>Datalog reasoning</strong></td>
-<td>Transitive transmission inference, super-spreader detection</td>
-</tr>
-<tr>
-<td><strong>N3 reasoning</strong></td>
-<td>Risk classification with math builtins, serial interval analysis,
-backward-chaining clinical decision support</td>
-</tr>
-<tr>
-<td><strong>ProbLog</strong></td>
-<td>Probabilistic containment and intervention effectiveness</td>
-</tr>
-<tr>
-<td><strong>GraphViz</strong></td>
-<td>Transmission network and epidemic curve visualization</td>
-</tr>
-</tbody>
-</table>
+| Feature | Epidemiological Application |
+|----|----|
+| **OWL ontology** | Pathogen taxonomy, patient risk factors, clinical entities |
+| **Tabular mapping** | Line list / surveillance data import |
+| **SHACL validation** | Case report completeness and data quality |
+| **SPARQL queries** | Outbreak analytics: attack rates, severity, hotspots |
+| **Property paths** | Multi-step contact tracing and transmission chains |
+| **Datalog reasoning** | Transitive transmission inference, super-spreader detection |
+| **N3 reasoning** | Risk classification with math builtins, serial interval analysis, backward-chaining clinical decision support |
+| **ProbLog** | Probabilistic containment and intervention effectiveness |
+| **GraphViz** | Transmission network and epidemic curve visualization |
 
 Key epidemiological findings from the scenario analysis:
 
--   **Influenza A H3N2** clustered in care homes (10 cases), with severe
-    outcomes concentrated among elderly patients with comorbidities.
--   **SARS-CoV-2 JN.1** formed a nosocomial chain at General Hospital
-    (P004→P009→P013→P016→P020) amplified by healthcare worker contacts.
--   **RSV-B** primarily affected children in school settings, with two
-    severe paediatric cases requiring hospitalisation.
--   **ProbLog modelling** showed that enhanced infection prevention and
-    control (IPC) measures reduce nosocomial and community spread risk,
-    with the greatest impact in care home settings.
--   **Contact tracing** from index case P001 reached patients across
-    multiple settings, highlighting the role of healthcare workers as
-    epidemiological bridges.
+- **Influenza A H3N2** clustered in care homes (10 cases), with severe
+  outcomes concentrated among elderly patients with comorbidities.
+- **SARS-CoV-2 JN.1** formed a nosocomial chain at General Hospital
+  (P004→P009→P013→P016→P020) amplified by healthcare worker contacts.
+- **RSV-B** primarily affected children in school settings, with two
+  severe paediatric cases requiring hospitalisation.
+- **ProbLog modelling** showed that enhanced infection prevention and
+  control (IPC) measures reduce nosocomial and community spread risk,
+  with the greatest impact in care home settings.
+- **Contact tracing** from index case P001 reached patients across
+  multiple settings, highlighting the role of healthcare workers as
+  epidemiological bridges.

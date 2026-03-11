@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>RDF Terms: URIs, Literals, and Blank Nodes</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="rdf-terms_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="rdf-terms_files/libs/quarto-html/anchor.min.js"></script>
 <link href="rdf-terms_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="rdf-terms_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="rdf-terms_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="rdf-terms_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="rdf-terms_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="rdf-terms_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="rdf-terms_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../rdf-terms.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="rdf-terms.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -88,6 +93,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -102,53 +113,41 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>Every RDF triple is built from three kinds of <em>terms</em>: URIs (resources), Literals (values), and Blank Nodes (anonymous resources). This vignette covers how to create and work with each type.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
-<span class="ansi-cyan-fg ansi-bold">Info</span> Given RDFLib was explicitly requested, output will be shown live 
-WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
-ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
-   1015.6 ms<span class="ansi-yellow-fg">  ? </span>RDFLib
-WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
-ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
-</pre>
-</div>
-</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="uris-uriref" class="level2">
 <h2 class="anchored" data-anchor-id="uris-uriref">URIs (URIRef)</h2>
 <p>A URI (Uniform Resource Identifier) uniquely identifies a resource. In RDFLib.jl, they are represented by <code>URIRef</code>.</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create URIs directly</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create URIs directly</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>person <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/person/alice"</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(person)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Type: "</span>, <span class="fu">typeof</span>(person))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Type: "</span>, <span class="fu">typeof</span>(person))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef("http://example.org/person/alice")
 Type: URIRef</code></pre>
 </div>
 </div>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Using namespaces (preferred)</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Using namespaces (preferred)</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>alice <span class="op">=</span> <span class="fu">ex</span>(<span class="st">"alice"</span>)</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>knows <span class="op">=</span> <span class="fu">ex</span>(<span class="st">"knows"</span>)</span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(alice)</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Value: "</span>, alice.value)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Value: "</span>, alice.value)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef("http://example.org/alice")
 Value: http://example.org/alice</code></pre>
 </div>
 </div>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># URI utilities</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># URI utilities</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>uri <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/vocab#name"</span>)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Fragment: "</span>, <span class="fu">fragment</span>(uri))</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Defragmented: "</span>, <span class="fu">defrag</span>(uri))</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3 syntax: "</span>, <span class="fu">n3</span>(uri))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3 syntax: "</span>, <span class="fu">n3</span>(uri))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Fragment: name
 Defragmented: URIRef("http://example.org/vocab")
@@ -162,12 +161,12 @@ N3 syntax: &lt;http://example.org/vocab#name&gt;</code></pre>
 <section id="plain-strings" class="level3">
 <h3 class="anchored" data-anchor-id="plain-strings">Plain Strings</h3>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple string literal</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple string literal</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>name <span class="op">=</span> <span class="fu">Literal</span>(<span class="st">"Alice"</span>)</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(name)</span>
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Lexical value: "</span>, name.lexical)</span>
 <span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Datatype: "</span>, <span class="fu">datatype</span>(name))</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3: "</span>, <span class="fu">n3</span>(name))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3: "</span>, <span class="fu">n3</span>(name))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Literal("Alice")
 Lexical value: Alice
@@ -179,14 +178,14 @@ N3: "Alice"</code></pre>
 <section id="language-tagged-strings" class="level3">
 <h3 class="anchored" data-anchor-id="language-tagged-strings">Language-Tagged Strings</h3>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Literals with language tags</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Literals with language tags</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>label_en <span class="op">=</span> <span class="fu">Literal</span>(<span class="st">"Cat"</span>; lang<span class="op">=</span><span class="st">"en"</span>)</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>label_fr <span class="op">=</span> <span class="fu">Literal</span>(<span class="st">"Chat"</span>; lang<span class="op">=</span><span class="st">"fr"</span>)</span>
 <span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>label_de <span class="op">=</span> <span class="fu">Literal</span>(<span class="st">"Katze"</span>; lang<span class="op">=</span><span class="st">"de"</span>)</span>
 <span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"English: "</span>, label_en, <span class="st">" (lang="</span>, <span class="fu">lang</span>(label_en), <span class="st">")"</span>)</span>
 <span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"French:  "</span>, label_fr, <span class="st">" (lang="</span>, <span class="fu">lang</span>(label_fr), <span class="st">")"</span>)</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"German:  "</span>, label_de, <span class="st">" (lang="</span>, <span class="fu">lang</span>(label_de), <span class="st">")"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"German:  "</span>, label_de, <span class="st">" (lang="</span>, <span class="fu">lang</span>(label_de), <span class="st">")"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>English: Literal("Cat", lang="en") (lang=en)
 French:  Literal("Chat", lang="fr") (lang=fr)
@@ -197,7 +196,7 @@ German:  Literal("Katze", lang="de") (lang=de)</code></pre>
 <section id="typed-literals" class="level3">
 <h3 class="anchored" data-anchor-id="typed-literals">Typed Literals</h3>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Numeric types</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Numeric types</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>age <span class="op">=</span> <span class="fu">Literal</span>(<span class="fl">30</span>)</span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Integer: "</span>, age, <span class="st">" — datatype: "</span>, <span class="fu">datatype</span>(age))</span>
 <span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -210,7 +209,7 @@ German:  Literal("Katze", lang="de") (lang=de)</code></pre>
 <span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Explicit datatype</span></span>
 <span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> <span class="fu">Literal</span>(<span class="st">"98.6"</span>; datatype<span class="op">=</span>XSD.decimal)</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Decimal: "</span>, score, <span class="st">" — datatype: "</span>, <span class="fu">datatype</span>(score))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Decimal: "</span>, score, <span class="st">" — datatype: "</span>, <span class="fu">datatype</span>(score))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Integer: Literal("30", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer")) — datatype: URIRef("http://www.w3.org/2001/XMLSchema#integer")
 Float:   Literal("1.75", datatype=URIRef("http://www.w3.org/2001/XMLSchema#double")) — datatype: URIRef("http://www.w3.org/2001/XMLSchema#double")
@@ -222,28 +221,28 @@ Decimal: Literal("98.6", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decim
 <section id="xsd-datetime-types" class="level3">
 <h3 class="anchored" data-anchor-id="xsd-datetime-types">XSD Date/Time Types</h3>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">Dates</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">Dates</span></span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Date and time literals</span></span>
 <span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>today_lit <span class="op">=</span> <span class="fu">xsd_literal</span>(<span class="fu">today</span>())</span>
 <span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Date: "</span>, <span class="fu">n3</span>(today_lit))</span>
 <span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>now_lit <span class="op">=</span> <span class="fu">xsd_literal</span>(<span class="fu">now</span>())</span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"DateTime: "</span>, <span class="fu">n3</span>(now_lit))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"DateTime: "</span>, <span class="fu">n3</span>(now_lit))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Date: "2026-02-26"^^&lt;http://www.w3.org/2001/XMLSchema#date&gt;
-DateTime: "2026-02-26T10:27:55"^^&lt;http://www.w3.org/2001/XMLSchema#dateTime&gt;</code></pre>
+<pre><code>Date: "2026-03-10"^^&lt;http://www.w3.org/2001/XMLSchema#date&gt;
+DateTime: "2026-03-10T09:39:41"^^&lt;http://www.w3.org/2001/XMLSchema#dateTime&gt;</code></pre>
 </div>
 </div>
 </section>
 <section id="extracting-values" class="level3">
 <h3 class="anchored" data-anchor-id="extracting-values">Extracting Values</h3>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># convert(Any, lit) extracts the native Julia value from a Literal</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># convert(Any, lit) extracts the native Julia value from a Literal</span></span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(42))     = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">42</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">42</span>))))</span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(3.14))   = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">3.14</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="fl">3.14</span>))))</span>
 <span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(true))   = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="cn">true</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="cn">true</span>))))</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(</span><span class="sc">\"</span><span class="st">hi</span><span class="sc">\"</span><span class="st">)) = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="st">"hi"</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="st">"hi"</span>))))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"convert(Any, Literal(</span><span class="sc">\"</span><span class="st">hi</span><span class="sc">\"</span><span class="st">)) = "</span>, <span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="st">"hi"</span>)), <span class="st">" :: "</span>, <span class="fu">typeof</span>(<span class="fu">convert</span>(<span class="dt">Any</span>, <span class="fu">Literal</span>(<span class="st">"hi"</span>))))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>convert(Any, Literal(42))     = 42 :: Int64
 convert(Any, Literal(3.14))   = 3.14 :: Float64
@@ -257,22 +256,22 @@ convert(Any, Literal("hi")) = hi :: String</code></pre>
 <h2 class="anchored" data-anchor-id="blank-nodes-bnode">Blank Nodes (BNode)</h2>
 <p>Blank nodes represent anonymous resources — they have no global identifier.</p>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Auto-generated blank node (UUID-based)</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Auto-generated blank node (UUID-based)</span></span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>b1 <span class="op">=</span> <span class="fu">BNode</span>()</span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Auto BNode: "</span>, b1, <span class="st">" (id="</span>, b1.id, <span class="st">")"</span>)</span>
 <span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Named blank node</span></span>
 <span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>b2 <span class="op">=</span> <span class="fu">BNode</span>(<span class="st">"address1"</span>)</span>
 <span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Named BNode: "</span>, b2, <span class="st">" (id="</span>, b2.id, <span class="st">")"</span>)</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3 syntax: "</span>, <span class="fu">n3</span>(b2))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3 syntax: "</span>, <span class="fu">n3</span>(b2))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Auto BNode: BNode("N2c458ebe465647a68d1e5195528b502b") (id=N2c458ebe465647a68d1e5195528b502b)
+<pre><code>Auto BNode: BNode("N3a0deea8a9b3e32370ef50dc00e9d319") (id=N3a0deea8a9b3e32370ef50dc00e9d319)
 Named BNode: BNode("address1") (id=address1)
 N3 syntax: _:address1</code></pre>
 </div>
 </div>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Blank nodes are useful for structured data without global identity</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Blank nodes are useful for structured data without global identity</span></span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span>
 <span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -284,7 +283,7 @@ N3 syntax: _:address1</code></pre>
 <span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(address, <span class="fu">ex</span>(<span class="st">"city"</span>), <span class="fu">Literal</span>(<span class="st">"Springfield"</span>)))</span>
 <span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(address, <span class="fu">ex</span>(<span class="st">"zip"</span>), <span class="fu">Literal</span>(<span class="st">"62701"</span>)))</span>
 <span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ns1: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -304,12 +303,12 @@ ns1:alice ns1:address [ ns1:city "Springfield" ;
 <h2 class="anchored" data-anchor-id="variables">Variables</h2>
 <p>Variables are used in SPARQL queries and N3 rules. They represent unknowns to be bound during matching.</p>
 <div id="24" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create variables</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create variables</span></span>
 <span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="fu">Variable</span>(<span class="st">"x"</span>)</span>
 <span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>name_var <span class="op">=</span> <span class="fu">Variable</span>(<span class="st">"name"</span>)</span>
 <span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Variable: "</span>, x, <span class="st">" — name: "</span>, x.name)</span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3: "</span>, <span class="fu">n3</span>(x))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3: "</span>, <span class="fu">n3</span>(x))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Variable: Variable("x") — name: x
 N3: ?x</code></pre>
@@ -320,13 +319,13 @@ N3: ?x</code></pre>
 <h2 class="anchored" data-anchor-id="triples">Triples</h2>
 <p>A triple combines a subject, predicate, and object into a single statement.</p>
 <div id="26" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>ex <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/"</span>)</span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> <span class="fu">Triple</span>(<span class="fu">ex</span>(<span class="st">"earth"</span>), RDF.<span class="kw">type</span>, <span class="fu">ex</span>(<span class="st">"Planet"</span>))</span>
 <span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Subject:   "</span>, t.subject)</span>
 <span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Predicate: "</span>, t.predicate)</span>
 <span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Object:    "</span>, t.object)</span>
-<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3:        "</span>, <span class="fu">n3</span>(t.subject), <span class="st">" "</span>, <span class="fu">n3</span>(t.predicate), <span class="st">" "</span>, <span class="fu">n3</span>(t.object), <span class="st">" ."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N3:        "</span>, <span class="fu">n3</span>(t.subject), <span class="st">" "</span>, <span class="fu">n3</span>(t.predicate), <span class="st">" "</span>, <span class="fu">n3</span>(t.object), <span class="st">" ."</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Subject:   URIRef("http://example.org/earth")
 Predicate: URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -347,11 +346,11 @@ N3:        &lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf
 ├── Literal
 └── Variable</code></pre>
 <div id="28" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Type checking</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Type checking</span></span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"URIRef &lt;: Node: "</span>, URIRef <span class="op">&lt;:</span><span class="dt"> Node</span>)</span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Literal &lt;: Identifier: "</span>, Literal <span class="op">&lt;:</span><span class="dt"> Identifier</span>)</span>
 <span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"BNode &lt;: IdentifiedNode: "</span>, BNode <span class="op">&lt;:</span><span class="dt"> IdentifiedNode</span>)</span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Variable &lt;: Identifier: "</span>, Variable <span class="op">&lt;:</span><span class="dt"> Identifier</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Variable &lt;: Identifier: "</span>, Variable <span class="op">&lt;:</span><span class="dt"> Identifier</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef &lt;: Node: true
 Literal &lt;: Identifier: true
@@ -364,14 +363,14 @@ Variable &lt;: Identifier: true</code></pre>
 <h2 class="anchored" data-anchor-id="equality-and-hashing">Equality and Hashing</h2>
 <p>RDF terms support equality comparison and hashing, which is important for graph operations.</p>
 <div id="30" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># URIs are equal if their values match</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># URIs are equal if their values match</span></span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">URIRef</span>(<span class="st">"http://example.org/a"</span>) <span class="op">==</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/a"</span>))  <span class="co"># true</span></span>
 <span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">URIRef</span>(<span class="st">"http://example.org/a"</span>) <span class="op">==</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/b"</span>))  <span class="co"># false</span></span>
 <span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Literals compare by value, datatype, and language</span></span>
 <span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">Literal</span>(<span class="st">"hello"</span>) <span class="op">==</span> <span class="fu">Literal</span>(<span class="st">"hello"</span>))     <span class="co"># true</span></span>
 <span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">Literal</span>(<span class="fl">42</span>) <span class="op">==</span> <span class="fu">Literal</span>(<span class="fl">42</span>))               <span class="co"># true</span></span>
-<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">Literal</span>(<span class="st">"hi"</span>; lang<span class="op">=</span><span class="st">"en"</span>) <span class="op">==</span> <span class="fu">Literal</span>(<span class="st">"hi"</span>; lang<span class="op">=</span><span class="st">"fr"</span>))  <span class="co"># false</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">Literal</span>(<span class="st">"hi"</span>; lang<span class="op">=</span><span class="st">"en"</span>) <span class="op">==</span> <span class="fu">Literal</span>(<span class="st">"hi"</span>; lang<span class="op">=</span><span class="st">"fr"</span>))  <span class="co"># false</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>true
 false
@@ -385,11 +384,11 @@ false</code></pre>
 <h2 class="anchored" data-anchor-id="parsing-terms-from-n3-syntax">Parsing Terms from N3 Syntax</h2>
 <p>You can parse individual terms from N3/SPARQL string syntax:</p>
 <div id="32" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parse various term types from N3 notation</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parse various term types from N3 notation</span></span>
 <span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">from_n3</span>(<span class="st">"&lt;http://example.org/alice&gt;"</span>))</span>
 <span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">from_n3</span>(<span class="st">"</span><span class="sc">\"</span><span class="st">hello</span><span class="sc">\"</span><span class="st">"</span>))</span>
 <span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">from_n3</span>(<span class="st">"</span><span class="sc">\"</span><span class="st">42</span><span class="sc">\"</span><span class="st">^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt;"</span>))</span>
-<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">from_n3</span>(<span class="st">"_:blank1"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">from_n3</span>(<span class="st">"_:blank1"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>URIRef("http://example.org/alice")
 Literal("hello")
@@ -452,13 +451,14 @@ BNode("blank1")</code></pre>
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

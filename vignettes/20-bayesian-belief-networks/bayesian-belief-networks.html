@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>Bayesian Belief Networks for Ecology</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="bayesian-belief-networks_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="bayesian-belief-networks_files/libs/quarto-html/anchor.min.js"></script>
 <link href="bayesian-belief-networks_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="bayesian-belief-networks_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="bayesian-belief-networks_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="bayesian-belief-networks_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="bayesian-belief-networks_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="bayesian-belief-networks_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="bayesian-belief-networks_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../bayesian-belief-networks.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="bayesian-belief-networks.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -89,6 +94,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -115,12 +126,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ol>
 <p>We use two datasets from the bbnet package: a <strong>rocky shore intertidal community</strong> (9 species) and a <strong>marine protected area (MPA) management network</strong> (11 nodes).</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper to extract readable string from SPARQL result values</span></span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">Literal</span>) <span class="op">=</span> x.lexical</span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">URIRef</span>) <span class="op">=</span> <span class="fu">split</span>(x.value, <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>readable (generic function with 3 methods)</code></pre>
 </div>
@@ -130,7 +141,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="rocky-shore-bbn-ontology">1. Rocky Shore BBN — Ontology</h2>
 <p>We define a lightweight BBN ontology: nodes have types (predator, grazer, sessile, primary producer) and directed weighted interactions.</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>bbn  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/bbn#"</span>)</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>node <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/node/"</span>)</span>
@@ -167,7 +178,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ontology: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Ontology: 27 triples</code></pre>
 </div>
@@ -177,7 +188,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="populating-the-rocky-shore-network">2. Populating the Rocky Shore Network</h2>
 <p>The rocky shore BBN from Stafford et al.&nbsp;(2015) models 9 species with interaction weights on a −4 to +4 scale. We encode the interaction matrix directly from the bbnet <code>my_BBN</code> dataset.</p>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Species: (name, id, type)</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Species: (name, id, type)</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>species <span class="op">=</span> [</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Dogwhelk"</span>,       <span class="st">"dogwhelk"</span>,       <span class="st">"Predator"</span>),</span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Topshell"</span>,       <span class="st">"topshell"</span>,       <span class="st">"Grazer"</span>),</span>
@@ -230,7 +241,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Rocky shore network: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples, </span><span class="sc">$</span>interaction_count<span class="st"> interactions"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Rocky shore network: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples, </span><span class="sc">$</span>interaction_count<span class="st"> interactions"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Rocky shore network: 149 triples, 19 interactions</code></pre>
 </div>
@@ -240,7 +251,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="scenarios">3. Scenarios</h2>
 <p>The bbnet package provides three perturbation scenarios for the rocky shore: removal of dogwhelk, increase in periwinkle, and a combined scenario.</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>scenarios <span class="op">=</span> [</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>scenarios <span class="op">=</span> [</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Dogwhelk removal"</span>,    [(<span class="st">"dogwhelk"</span>, <span class="op">-</span><span class="fl">4</span>)]),</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Periwinkle increase"</span>, [(<span class="st">"periwinkle"</span>, <span class="fl">3</span>)]),</span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"Combined"</span>,            [(<span class="st">"dogwhelk"</span>, <span class="op">-</span><span class="fl">4</span>), (<span class="st">"periwinkle"</span>, <span class="fl">3</span>)]),</span>
@@ -257,7 +268,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total triples: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total triples: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Total triples: 163</code></pre>
 </div>
@@ -267,7 +278,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="shacl-validation">4. SHACL Validation</h2>
 <p>We validate that every interaction has a valid weight (integer between −4 and +4), and that all nodes have labels.</p>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>shacl_ttl <span class="op">=</span> <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>shacl_ttl <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .</span></span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix bbn: &lt;http://example.org/bbn#&gt; .</span></span>
 <span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .</span></span>
@@ -310,7 +321,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> v <span class="kw">in</span> report.results</span>
 <span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  ⚠ </span><span class="sc">$</span>(v.message)<span class="st">"</span>)</span>
 <span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>SHACL valid: true</code></pre>
 </div>
@@ -321,7 +332,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="a.-all-interactions-with-their-weights" class="level3">
 <h3 class="anchored" data-anchor-id="a.-all-interactions-with-their-weights">5a. All interactions with their weights</h3>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -344,7 +355,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    to   <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"to_name"</span>])</span>
 <span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>    w    <span class="op">=</span> <span class="fu">readable</span>(row[<span class="st">"w"</span>])</span>
 <span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"</span><span class="sc">$</span>from<span class="st"> → </span><span class="sc">$</span>to<span class="st">"</span>, <span class="fl">21</span>), <span class="st">"| "</span>, w)</span>
-<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Interaction          | Weight
 ─────────────────────|───────
@@ -373,7 +384,7 @@ Topshell → Periwinkle| -1</code></pre>
 <section id="b.-node-degrees-most-connected-species" class="level3">
 <h3 class="anchored" data-anchor-id="b.-node-degrees-most-connected-species">5b. Node degrees — most connected species</h3>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -391,14 +402,14 @@ Topshell → Periwinkle| -1</code></pre>
 <span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─────────────────|───────────"</span>)</span>
 <span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">17</span>), <span class="st">"| "</span>, <span class="fu">readable</span>(row[<span class="st">"out_degree"</span>]))</span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Species          | Out-degree
 ─────────────────|───────────
 Periwinkle       | 4
+Limpet           | 4
 Dogwhelk         | 4
 Topshell         | 4
-Limpet           | 4
 Green Algae      | 3</code></pre>
 </div>
 </div>
@@ -406,7 +417,7 @@ Green Algae      | 3</code></pre>
 <section id="c.-strongest-suppressors" class="level3">
 <h3 class="anchored" data-anchor-id="c.-strongest-suppressors">5c. Strongest suppressors</h3>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -426,17 +437,17 @@ Green Algae      | 3</code></pre>
 <span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Strong suppressions (weight ≤ −3):"</span>)</span>
 <span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"from_name"</span>]))<span class="st"> ──</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"w"</span>]))<span class="st">──▶ </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"to_name"</span>]))<span class="st">"</span>)</span>
-<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Strong suppressions (weight ≤ −3):
   Limpet ──-4──▶ Biofilm
   Limpet ──-4──▶ Green Algae
-  Periwinkle ──-3──▶ Green Algae
-  Topshell ──-3──▶ Green Algae
-  Green Algae ──-3──▶ Coralline Algae
   Periwinkle ──-3──▶ Biofilm
+  Dogwhelk ──-3──▶ Barnacle
+  Periwinkle ──-3──▶ Green Algae
   Topshell ──-3──▶ Biofilm
-  Dogwhelk ──-3──▶ Barnacle</code></pre>
+  Topshell ──-3──▶ Green Algae
+  Green Algae ──-3──▶ Coralline Algae</code></pre>
 </div>
 </div>
 </section>
@@ -445,7 +456,7 @@ Green Algae      | 3</code></pre>
 <h2 class="anchored" data-anchor-id="property-paths-indirect-interaction-chains">6. Property Paths — Indirect Interaction Chains</h2>
 <p>Using property paths, we can find which species are indirectly connected through chains of interactions.</p>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Species reachable from Dogwhelk through any chain of interactions</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Species reachable from Dogwhelk through any chain of interactions</span></span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX bbn: &lt;http://example.org/bbn#&gt;</span></span>
 <span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;</span></span>
@@ -462,7 +473,7 @@ Green Algae      | 3</code></pre>
 <span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Species reachable from Dogwhelk via interaction chains:"</span>)</span>
 <span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
 <span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  → </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"target_name"</span>]))<span class="st">"</span>)</span>
-<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Species reachable from Dogwhelk via interaction chains:
   → Limpet
@@ -477,7 +488,7 @@ Green Algae      | 3</code></pre>
 <h2 class="anchored" data-anchor-id="datalog-reasoning">7. Datalog Reasoning</h2>
 <p>We use Datalog to infer indirect effects: if A suppresses B and B suppresses C, then A indirectly benefits C through a trophic cascade. We encode the interactions and rules as N3.</p>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build N3 with interactions and inference rules</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build N3 with interactions and inference rules</span></span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>n3_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix bbn: &lt;http://example.org/bbn#&gt; ."</span>)</span>
 <span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="fu">push!</span>(n3_lines, <span class="st">"@prefix node: &lt;http://example.org/node/&gt; ."</span>)</span>
@@ -512,7 +523,7 @@ Green Algae      | 3</code></pre>
 <span id="cb19-33"><a href="#cb19-33" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
 <span id="cb19-34"><a href="#cb19-34" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.object), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
 <span id="cb19-35"><a href="#cb19-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>x<span class="st"> ──cascade──▶ </span><span class="sc">$</span>z<span class="st">"</span>)</span>
-<span id="cb19-36"><a href="#cb19-36" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb19-36"><a href="#cb19-36" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Before reasoning: 21 triples
 After reasoning:  81 triples
@@ -551,7 +562,7 @@ Indirect facilitation (A suppresses B, B suppresses C):
 <h2 class="anchored" data-anchor-id="bbn-propagation-algorithm">8. BBN Propagation Algorithm</h2>
 <p>The core bbnet algorithm converts the −4 to +4 scale to probabilities (0.1–0.9), then iteratively propagates perturbations using Bayesian combination rules from Stafford et al.&nbsp;(2015).</p>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="st">Convert bbnet integer scale (-4 to +4) to probability (0.1 to 0.9).</span></span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="st">0 maps to 0.5 (no change).</span></span>
 <span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
@@ -669,7 +680,7 @@ Indirect facilitation (A suppresses B, B suppresses C):
 <span id="cb21-116"><a href="#cb21-116" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> state, trajectory</span>
 <span id="cb21-117"><a href="#cb21-117" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
 <span id="cb21-118"><a href="#cb21-118" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-119"><a href="#cb21-119" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"BBN propagation engine defined ✓"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb21-119"><a href="#cb21-119" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"BBN propagation engine defined ✓"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>BBN propagation engine defined ✓</code></pre>
 </div>
@@ -677,7 +688,7 @@ Indirect facilitation (A suppresses B, B suppresses C):
 <section id="a.-scenario-dogwhelk-removal" class="level3">
 <h3 class="anchored" data-anchor-id="a.-scenario-dogwhelk-removal">8a. Scenario: Dogwhelk Removal</h3>
 <div id="24" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>names <span class="op">=</span> [n for (n, _, _) <span class="kw">in</span> species]</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>names <span class="op">=</span> [n for (n, _, _) <span class="kw">in</span> species]</span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Dogwhelk removal: -4 for dogwhelk, 0 for all others</span></span>
 <span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>dogwhelk_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
@@ -696,7 +707,7 @@ Indirect facilitation (A suppresses B, B suppresses C):
 <span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
 <span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(posterior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
 <span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
-<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Dogwhelk Removal Scenario
 ─────────────────────────────────────────
@@ -717,7 +728,7 @@ Fucoid Algae        0.5     0.536     0.7 ↑</code></pre>
 <section id="b.-scenario-periwinkle-increase" class="level3">
 <h3 class="anchored" data-anchor-id="b.-scenario-periwinkle-increase">8b. Scenario: Periwinkle Increase</h3>
 <div id="26" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>winkle_priors <span class="op">=</span> [<span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>winkle_priors <span class="op">=</span> [<span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>state, traj <span class="op">=</span> <span class="fu">bbn_propagate</span>(interaction_matrix, winkle_priors)</span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Periwinkle Increase Scenario"</span>)</span>
@@ -732,7 +743,7 @@ Fucoid Algae        0.5     0.536     0.7 ↑</code></pre>
 <span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
 <span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
 <span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
-<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Periwinkle Increase Scenario
 ─────────────────────────────────────────
@@ -753,7 +764,7 @@ Fucoid Algae        0.5     0.536     0.7 ↑</code></pre>
 <section id="c.-combined-scenario" class="level3">
 <h3 class="anchored" data-anchor-id="c.-combined-scenario">8c. Combined Scenario</h3>
 <div id="28" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>combined_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>combined_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>state, traj <span class="op">=</span> <span class="fu">bbn_propagate</span>(interaction_matrix, combined_priors)</span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Combined Scenario (Dogwhelk removal + Periwinkle increase)"</span>)</span>
@@ -768,7 +779,7 @@ Fucoid Algae        0.5     0.536     0.7 ↑</code></pre>
 <span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
 <span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
 <span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
-<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Combined Scenario (Dogwhelk removal + Periwinkle increase)
 ─────────────────────────────────────────
@@ -791,7 +802,7 @@ Fucoid Algae        0.5     0.545     0.9 ↑</code></pre>
 <h2 class="anchored" data-anchor-id="problog-probabilistic-interaction-modeling">9. ProbLog — Probabilistic Interaction Modeling</h2>
 <p>We can model the BBN interactions as probabilistic logic rules. Each interaction becomes a probabilistic fact encoding how likely one species is to affect another.</p>
 <div id="30" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build ProbLog program from interaction matrix</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build ProbLog program from interaction matrix</span></span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>problog_lines <span class="op">=</span> <span class="dt">String</span>[]</span>
 <span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Encode each interaction as a probabilistic fact</span></span>
@@ -819,7 +830,7 @@ Fucoid Algae        0.5     0.545     0.9 ↑</code></pre>
 <span id="cb29-26"><a href="#cb29-26" aria-hidden="true" tabindex="-1"></a>problog_program <span class="op">=</span> <span class="fu">join</span>(problog_lines, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
 <span id="cb29-27"><a href="#cb29-27" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"ProbLog program (</span><span class="sc">$</span>(<span class="fu">length</span>(problog_lines))<span class="st"> lines):"</span>)</span>
 <span id="cb29-28"><a href="#cb29-28" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(problog_program[<span class="fl">1</span><span class="op">:</span><span class="fu">min</span>(<span class="fl">500</span>, <span class="fu">length</span>(problog_program))])</span>
-<span id="cb29-29"><a href="#cb29-29" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"..."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb29-29"><a href="#cb29-29" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"..."</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>ProbLog program (25 lines):
 0.4::suppresses(dogwhelk, topshell).
@@ -840,7 +851,7 @@ Fucoid Algae        0.5     0.545     0.9 ↑</code></pre>
 </div>
 </div>
 <div id="32" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run ProbLog inference</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run ProbLog inference</span></span>
 <span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>prob_results <span class="op">=</span> <span class="fu">problog_query</span>(problog_program)</span>
 <span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">ProbLog: Cascade effects from Dogwhelk"</span>)</span>
@@ -849,7 +860,7 @@ Fucoid Algae        0.5     0.545     0.9 ↑</code></pre>
 <span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> prob <span class="op">&gt;</span> <span class="fl">0.001</span></span>
 <span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(atom, <span class="fl">45</span>))<span class="st"> P = </span><span class="sc">$</span>(<span class="fu">round</span>(prob, digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
 <span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
 ProbLog: Cascade effects from Dogwhelk
@@ -873,7 +884,7 @@ ProbLog: Cascade effects from Dogwhelk
 <h2 class="anchored" data-anchor-id="mpa-network">10. MPA Network</h2>
 <p>The marine protected area (MPA) network from bbnet models the effects of fishery management on a marine ecosystem with 11 nodes including fisheries, species, and economic outcomes.</p>
 <div id="34" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>mpa_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>mpa_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
 <span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>mpa <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/mpa#"</span>)</span>
 <span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>mn  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/mpa/node/"</span>)</span>
 <span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -930,7 +941,7 @@ ProbLog: Cascade effects from Dogwhelk
 <span id="cb33-55"><a href="#cb33-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
 <span id="cb33-56"><a href="#cb33-56" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb33-57"><a href="#cb33-57" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb33-58"><a href="#cb33-58" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"MPA network: </span><span class="sc">$</span>(<span class="fu">length</span>(mpa_g))<span class="st"> triples, </span><span class="sc">$</span>mpa_interaction_count<span class="st"> interactions"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb33-58"><a href="#cb33-58" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"MPA network: </span><span class="sc">$</span>(<span class="fu">length</span>(mpa_g))<span class="st"> triples, </span><span class="sc">$</span>mpa_interaction_count<span class="st"> interactions"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>MPA network: 134 triples, 28 interactions</code></pre>
 </div>
@@ -938,7 +949,7 @@ ProbLog: Cascade effects from Dogwhelk
 <section id="a.-mpa-scenario-no-potting" class="level3">
 <h3 class="anchored" data-anchor-id="a.-mpa-scenario-no-potting">10a. MPA Scenario: No Potting</h3>
 <div id="36" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>mpa_names <span class="op">=</span> [n for (n, _) <span class="kw">in</span> mpa_species]</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>mpa_names <span class="op">=</span> [n for (n, _) <span class="kw">in</span> mpa_species]</span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="co"># No potting: lobster fishery -4</span></span>
 <span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>no_potting_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
@@ -956,7 +967,7 @@ ProbLog: Cascade effects from Dogwhelk
 <span id="cb35-16"><a href="#cb35-16" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
 <span id="cb35-17"><a href="#cb35-17" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
 <span id="cb35-18"><a href="#cb35-18" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
-<span id="cb35-19"><a href="#cb35-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb35-19"><a href="#cb35-19" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>No Potting Scenario (Lobster fishery closed)
 ─────────────────────────────────────────────
@@ -979,7 +990,7 @@ Revenue                 0.5     0.18      -6.4 ↓</code></pre>
 <section id="b.-mpa-scenario-no-take-zone" class="level3">
 <h3 class="anchored" data-anchor-id="b.-mpa-scenario-no-take-zone">10b. MPA Scenario: No Take Zone</h3>
 <div id="38" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># No take: both fisheries -4</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># No take: both fisheries -4</span></span>
 <span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>no_take_priors <span class="op">=</span> [<span class="op">-</span><span class="fl">4</span>, <span class="op">-</span><span class="fl">4</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0</span>]</span>
 <span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>state, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(mpa_matrix, no_take_priors)</span>
 <span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -995,7 +1006,7 @@ Revenue                 0.5     0.18      -6.4 ↓</code></pre>
 <span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(prior_p, digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">8</span>),</span>
 <span id="cb37-15"><a href="#cb37-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="fu">round</span>(state[i], digits<span class="op">=</span><span class="fl">3</span>), <span class="fl">10</span>),</span>
 <span id="cb37-16"><a href="#cb37-16" aria-hidden="true" tabindex="-1"></a>            <span class="fu">round</span>(delta, digits<span class="op">=</span><span class="fl">1</span>), marker)</span>
-<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>No Take Zone Scenario (Both fisheries closed)
 ─────────────────────────────────────────────
@@ -1018,7 +1029,7 @@ Revenue                 0.5     0.137     -7.3 ↓</code></pre>
 <section id="c.-comparing-management-scenarios" class="level3">
 <h3 class="anchored" data-anchor-id="c.-comparing-management-scenarios">10c. Comparing Management Scenarios</h3>
 <div id="40" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Scenario Comparison: Key nodes"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Scenario Comparison: Key nodes"</span>)</span>
 <span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"═══════════════════════════════════════════════════════"</span>)</span>
 <span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">rpad</span>(<span class="st">"Node"</span>, <span class="fl">24</span>), <span class="fu">rpad</span>(<span class="st">"No Potting"</span>, <span class="fl">14</span>), <span class="st">"No Take"</span>)</span>
 <span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"─"</span><span class="op">^</span><span class="fl">50</span>)</span>
@@ -1034,7 +1045,7 @@ Revenue                 0.5     0.137     -7.3 ↓</code></pre>
 <span id="cb39-14"><a href="#cb39-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="fu">rpad</span>(mpa_names[i], <span class="fl">24</span>),</span>
 <span id="cb39-15"><a href="#cb39-15" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rpad</span>(<span class="st">"</span><span class="sc">$</span>(<span class="fu">round</span>(d1, digits<span class="op">=</span><span class="fl">1</span>))<span class="st"> </span><span class="sc">$</span>m1<span class="st">"</span>, <span class="fl">14</span>),</span>
 <span id="cb39-16"><a href="#cb39-16" aria-hidden="true" tabindex="-1"></a>            <span class="st">"</span><span class="sc">$</span>(<span class="fu">round</span>(d2, digits<span class="op">=</span><span class="fl">1</span>))<span class="st"> </span><span class="sc">$</span>m2<span class="st">"</span>)</span>
-<span id="cb39-17"><a href="#cb39-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb39-17"><a href="#cb39-17" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Scenario Comparison: Key nodes
 ═══════════════════════════════════════════════════════
@@ -1060,7 +1071,7 @@ Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
 <section id="a.-rocky-shore-network" class="level3">
 <h3 class="anchored" data-anchor-id="a.-rocky-shore-network">11a. Rocky Shore Network</h3>
 <div id="42" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb41"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
 <span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">bbn_to_dot</span>(names, matrix; title<span class="op">=</span><span class="st">"BBN"</span>)</span>
 <span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="fu">length</span>(names)</span>
@@ -1093,7 +1104,7 @@ Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
 <span id="cb41-31"><a href="#cb41-31" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb41-32"><a href="#cb41-32" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">bbn_to_dot</span>([n for (n, _, _) <span class="kw">in</span> species], interaction_matrix;</span>
 <span id="cb41-33"><a href="#cb41-33" aria-hidden="true" tabindex="-1"></a>                      title<span class="op">=</span><span class="st">"Rocky Shore BBN"</span>)</span>
-<span id="cb41-34"><a href="#cb41-34" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb41-34"><a href="#cb41-34" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <div>
 <figure class="figure">
@@ -1106,9 +1117,9 @@ Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
 <section id="b.-mpa-network" class="level3">
 <h3 class="anchored" data-anchor-id="b.-mpa-network">11b. MPA Network</h3>
 <div id="44" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">bbn_to_dot</span>([n for (n, _) <span class="kw">in</span> mpa_species], mpa_matrix;</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">bbn_to_dot</span>([n for (n, _) <span class="kw">in</span> mpa_species], mpa_matrix;</span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a>                      title<span class="op">=</span><span class="st">"Marine Protected Area BBN"</span>)</span>
-<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <div>
 <figure class="figure">
@@ -1122,7 +1133,7 @@ Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
 <h3 class="anchored" data-anchor-id="c.-scenario-impact-diagram">11c. Scenario Impact Diagram</h3>
 <p>We visualise the combined dogwhelk/periwinkle scenario by colouring nodes according to their predicted change.</p>
 <div id="46" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">scenario_to_dot</span>(names, matrix, priors; title<span class="op">=</span><span class="st">"Scenario"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb43"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">scenario_to_dot</span>(names, matrix, priors; title<span class="op">=</span><span class="st">"Scenario"</span>)</span>
 <span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>    state, _ <span class="op">=</span> <span class="fu">bbn_propagate</span>(matrix, priors)</span>
 <span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="fu">length</span>(names)</span>
 <span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>    lines <span class="op">=</span> <span class="dt">String</span>[]</span>
@@ -1165,7 +1176,7 @@ Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
 <span id="cb43-41"><a href="#cb43-41" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">scenario_to_dot</span>([n for (n, _, _) <span class="kw">in</span> species], interaction_matrix,</span>
 <span id="cb43-42"><a href="#cb43-42" aria-hidden="true" tabindex="-1"></a>                           combined_priors;</span>
 <span id="cb43-43"><a href="#cb43-43" aria-hidden="true" tabindex="-1"></a>                           title<span class="op">=</span><span class="st">"Combined Scenario: Dogwhelk Removal + Periwinkle Increase"</span>)</span>
-<span id="cb43-44"><a href="#cb43-44" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb43-44"><a href="#cb43-44" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <div>
 <figure class="figure">
@@ -1292,13 +1303,14 @@ Revenue                 -6.4 ↓        -7.3 ↓</code></pre>
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

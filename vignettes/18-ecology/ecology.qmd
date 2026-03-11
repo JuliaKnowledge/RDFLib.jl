@@ -1,6 +1,14 @@
 ---
 title: "Ecological Knowledge Graphs"
+author: "Simon Frost"
 subtitle: "Modeling a Marine Food Web with RDFLib.jl"
+format:
+  html:
+    code-fold: false
+  pdf:
+    code-fold: false
+  gfm:
+    code-fold: false
 engine: julia
 ---
 

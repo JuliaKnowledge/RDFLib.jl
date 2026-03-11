@@ -1,6 +1,14 @@
 ---
 title: "Bayesian Belief Networks for Ecology"
+author: "Simon Frost"
 subtitle: "Modeling Species Interactions with RDFLib.jl and the bbnet Rocky Shore Dataset"
+format:
+  html:
+    code-fold: false
+  pdf:
+    code-fold: false
+  gfm:
+    code-fold: false
 engine: julia
 ---
 

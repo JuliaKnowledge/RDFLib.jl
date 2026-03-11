@@ -1,5 +1,5 @@
 # RDF Terms: URIs, Literals, and Blank Nodes
-
+Simon Frost
 
 ## Overview
 
@@ -10,14 +10,6 @@ covers how to create and work with each type.
 ``` julia
 using RDFLib
 ```
-
-    Precompiling packages...
-    Info Given RDFLib was explicitly requested, output will be shown live 
-    WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
-    ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
-       1142.9 ms  ? RDFLib
-    WARNING: Method definition convert(Type{Any}, RDFLib.Literal) in module RDFLib at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:239 overwritten at /Users/sdwfrost/Projects/rdf/RDFLib.jl/src/terms.jl:254.
-    ERROR: Method overwriting is not permitted during Module precompilation. Use `__precompile__(false)` to opt-out of precompilation.
 
 ## URIs (URIRef)
 
@@ -134,8 +126,8 @@ now_lit = xsd_literal(now())
 println("DateTime: ", n3(now_lit))
 ```
 
-    Date: "2026-02-26"^^<http://www.w3.org/2001/XMLSchema#date>
-    DateTime: "2026-02-26T10:23:15"^^<http://www.w3.org/2001/XMLSchema#dateTime>
+    Date: "2026-03-10"^^<http://www.w3.org/2001/XMLSchema#date>
+    DateTime: "2026-03-10T09:40:09"^^<http://www.w3.org/2001/XMLSchema#dateTime>
 
 ### Extracting Values
 
@@ -168,7 +160,7 @@ println("Named BNode: ", b2, " (id=", b2.id, ")")
 println("N3 syntax: ", n3(b2))
 ```
 
-    Auto BNode: BNode("Nd80b528b57534e49b1b08d6661a186cf") (id=Nd80b528b57534e49b1b08d6661a186cf)
+    Auto BNode: BNode("Nae8dab45210f526ae0d1202f6c803340") (id=Nae8dab45210f526ae0d1202f6c803340)
     Named BNode: BNode("address1") (id=address1)
     N3 syntax: _:address1
 

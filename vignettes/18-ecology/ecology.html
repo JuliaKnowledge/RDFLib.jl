@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.28">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Simon Frost">
+
+<title>Ecological Knowledge Graphs</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="ecology_files/libs/clipboard/clipboard.min.js"></script>
+<script src="ecology_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="ecology_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="ecology_files/libs/quarto-html/popper.min.js"></script>
+<script src="ecology_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="ecology_files/libs/quarto-html/anchor.min.js"></script>
+<link href="ecology_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="ecology_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="ecology_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="ecology_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="ecology_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../ecology.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="ecology.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Ecological Knowledge Graphs</h1>
+<p class="subtitle lead">Modeling a Marine Food Web with RDFLib.jl</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>This vignette demonstrates how RDFLib.jl’s features work together in a realistic scientific scenario: modeling a <strong>northeastern Atlantic coastal ecosystem</strong> as a knowledge graph. We build a food web ontology, import field survey data from tabular sources, validate data quality, query trophic relationships, reason about indirect ecological interactions, and model probabilistic trophic cascades.</p>
+<p><strong>Features demonstrated:</strong> OWL ontology design, tabular data import, SHACL validation, SPARQL queries, property paths, Datalog reasoning, probabilistic logic (ProbLog), visualization, and graph analytics.</p>
+<div id="2" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Helper to extract readable string from SPARQL result values</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">Literal</span>) <span class="op">=</span> x.lexical</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x<span class="op">::</span><span class="dt">URIRef</span>) <span class="op">=</span> <span class="fu">split</span>(x.value, <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">readable</span>(x) <span class="op">=</span> <span class="fu">string</span>(x)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>readable (generic function with 3 methods)</code></pre>
+</div>
+</div>
+</section>
+<section id="defining-the-ecosystem-ontology" class="level2">
+<h2 class="anchored" data-anchor-id="defining-the-ecosystem-ontology">1. Defining the Ecosystem Ontology</h2>
+<p>We define a lightweight ecology ontology with classes for species, habitats, and observations, plus properties for feeding relationships, habitat associations, and conservation metadata.</p>
+<div id="4" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Namespaces</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>eco <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/ecology#"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>sp  <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/species/"</span>)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>hab <span class="op">=</span> <span class="fu">Namespace</span>(<span class="st">"http://example.org/habitat/"</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"eco"</span>, eco)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"sp"</span>, sp)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(g, <span class="st">"hab"</span>, hab)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co"># OWL classes</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cls <span class="kw">in</span> [<span class="st">"Species"</span>, <span class="st">"Habitat"</span>, <span class="st">"Observation"</span>, <span class="st">"TrophicLevel"</span>]</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">eco</span>(cls), RDF.<span class="kw">type</span>, OWL.Class))</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Object properties</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (prop, dom, rng) <span class="kw">in</span> [</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"feeds_on"</span>,          <span class="st">"Species"</span>, <span class="st">"Species"</span>),</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"inhabits"</span>,          <span class="st">"Species"</span>, <span class="st">"Habitat"</span>),</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"has_trophic_level"</span>, <span class="st">"Species"</span>, <span class="st">"TrophicLevel"</span>),</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"competes_with"</span>,     <span class="st">"Species"</span>, <span class="st">"Species"</span>),</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"observed_species"</span>,  <span class="st">"Observation"</span>, <span class="st">"Species"</span>),</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> <span class="fu">eco</span>(prop)</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDF.<span class="kw">type</span>, OWL.ObjectProperty))</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDFS.domain, <span class="fu">eco</span>(dom)))</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(p, RDFS.range, <span class="fu">eco</span>(rng)))</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="co"># competes_with is symmetric</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">eco</span>(<span class="st">"competes_with"</span>), RDF.<span class="kw">type</span>, OWL.SymmetricProperty))</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a><span class="co"># Datatype properties</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> prop <span class="kw">in</span> [<span class="st">"common_name"</span>, <span class="st">"conservation_status"</span>, <span class="st">"typical_size_cm"</span>,</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>             <span class="st">"site"</span>, <span class="st">"count"</span>, <span class="st">"method"</span>, <span class="st">"date"</span>]</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">eco</span>(prop), RDF.<span class="kw">type</span>, OWL.DatatypeProperty))</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ontology schema: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Ontology schema: 27 triples</code></pre>
+</div>
+</div>
+</section>
+<section id="populating-the-food-web" class="level2">
+<h2 class="anchored" data-anchor-id="populating-the-food-web">2. Populating the Food Web</h2>
+<p>We populate the graph with 14 species spanning five trophic levels, five coastal habitat types, and a realistic feeding network.</p>
+<div id="6" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Trophic levels</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> tl <span class="kw">in</span> [<span class="st">"producer"</span>, <span class="st">"primary_consumer"</span>, <span class="st">"secondary_consumer"</span>,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>           <span class="st">"tertiary_consumer"</span>, <span class="st">"apex_predator"</span>]</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">eco</span>(tl), RDF.<span class="kw">type</span>, <span class="fu">eco</span>(<span class="st">"TrophicLevel"</span>)))</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">eco</span>(tl), RDFS.label, <span class="fu">Literal</span>(<span class="fu">replace</span>(tl, <span class="ch">'_'</span> <span class="op">=&gt;</span> <span class="ch">' '</span>))))</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Habitats</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>habitats <span class="op">=</span> [</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"pelagic"</span>,          <span class="st">"Open water column"</span>),</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"rocky_intertidal"</span>, <span class="st">"Rocky shore between tides"</span>),</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"subtidal_reef"</span>,    <span class="st">"Submerged rocky reef"</span>),</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"kelp_forest"</span>,      <span class="st">"Dense kelp canopy and understory"</span>),</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"sandy_bottom"</span>,     <span class="st">"Soft sediment seafloor"</span>),</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (id, desc) <span class="kw">in</span> habitats</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">hab</span>(id), RDF.<span class="kw">type</span>, <span class="fu">eco</span>(<span class="st">"Habitat"</span>)))</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">hab</span>(id), RDFS.label, <span class="fu">Literal</span>(id)))</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">hab</span>(id), RDFS.comment, <span class="fu">Literal</span>(desc)))</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Species: (id, name, trophic_level, status, size_cm, habitats)</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>species_data <span class="op">=</span> [</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"orca"</span>,            <span class="st">"Killer Whale"</span>,      <span class="st">"apex_predator"</span>,      <span class="st">"Data Deficient"</span>,  <span class="fl">700</span>, [<span class="st">"pelagic"</span>]),</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"grey_seal"</span>,       <span class="st">"Grey Seal"</span>,         <span class="st">"tertiary_consumer"</span>,  <span class="st">"Least Concern"</span>,   <span class="fl">230</span>, [<span class="st">"pelagic"</span>, <span class="st">"rocky_intertidal"</span>]),</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"atlantic_cod"</span>,    <span class="st">"Atlantic Cod"</span>,      <span class="st">"tertiary_consumer"</span>,  <span class="st">"Vulnerable"</span>,      <span class="fl">120</span>, [<span class="st">"pelagic"</span>, <span class="st">"kelp_forest"</span>]),</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"herring"</span>,         <span class="st">"Atlantic Herring"</span>,  <span class="st">"secondary_consumer"</span>, <span class="st">"Least Concern"</span>,    <span class="fl">35</span>, [<span class="st">"pelagic"</span>]),</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"shore_crab"</span>,      <span class="st">"Shore Crab"</span>,        <span class="st">"secondary_consumer"</span>, <span class="st">"Least Concern"</span>,     <span class="fl">8</span>, [<span class="st">"rocky_intertidal"</span>, <span class="st">"subtidal_reef"</span>]),</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"common_starfish"</span>, <span class="st">"Common Starfish"</span>,   <span class="st">"secondary_consumer"</span>, <span class="st">"Least Concern"</span>,    <span class="fl">30</span>, [<span class="st">"subtidal_reef"</span>, <span class="st">"rocky_intertidal"</span>]),</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"blue_mussel"</span>,     <span class="st">"Blue Mussel"</span>,       <span class="st">"primary_consumer"</span>,   <span class="st">"Least Concern"</span>,    <span class="fl">10</span>, [<span class="st">"rocky_intertidal"</span>]),</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"common_limpet"</span>,   <span class="st">"Common Limpet"</span>,     <span class="st">"primary_consumer"</span>,   <span class="st">"Least Concern"</span>,     <span class="fl">6</span>, [<span class="st">"rocky_intertidal"</span>]),</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"sea_urchin"</span>,      <span class="st">"Sea Urchin"</span>,        <span class="st">"primary_consumer"</span>,   <span class="st">"Least Concern"</span>,     <span class="fl">8</span>, [<span class="st">"subtidal_reef"</span>, <span class="st">"kelp_forest"</span>]),</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"barnacle"</span>,        <span class="st">"Acorn Barnacle"</span>,    <span class="st">"primary_consumer"</span>,   <span class="st">"Least Concern"</span>,     <span class="fl">2</span>, [<span class="st">"rocky_intertidal"</span>]),</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"zooplankton"</span>,     <span class="st">"Zooplankton"</span>,       <span class="st">"primary_consumer"</span>,   <span class="st">"Not Evaluated"</span>,   <span class="fl">0.1</span>, [<span class="st">"pelagic"</span>]),</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"kelp"</span>,            <span class="st">"Oarweed Kelp"</span>,      <span class="st">"producer"</span>,           <span class="st">"Least Concern"</span>,   <span class="fl">150</span>, [<span class="st">"subtidal_reef"</span>, <span class="st">"kelp_forest"</span>]),</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"phytoplankton"</span>,   <span class="st">"Phytoplankton"</span>,     <span class="st">"producer"</span>,           <span class="st">"Not Evaluated"</span>,  <span class="fl">0.01</span>, [<span class="st">"pelagic"</span>]),</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"coralline_algae"</span>, <span class="st">"Coralline Algae"</span>,   <span class="st">"producer"</span>,           <span class="st">"Least Concern"</span>,     <span class="fl">5</span>, [<span class="st">"rocky_intertidal"</span>, <span class="st">"subtidal_reef"</span>]),</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (id, name, tl, status, size, habs) <span class="kw">in</span> species_data</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="fu">sp</span>(id)</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, RDF.<span class="kw">type</span>, <span class="fu">eco</span>(<span class="st">"Species"</span>)))</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">eco</span>(<span class="st">"common_name"</span>), <span class="fu">Literal</span>(name)))</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">eco</span>(<span class="st">"has_trophic_level"</span>), <span class="fu">eco</span>(tl)))</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">eco</span>(<span class="st">"conservation_status"</span>), <span class="fu">Literal</span>(status)))</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">eco</span>(<span class="st">"typical_size_cm"</span>), <span class="fu">Literal</span>(size)))</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> h <span class="kw">in</span> habs</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>        <span class="fu">add!</span>(g, <span class="fu">Triple</span>(s, <span class="fu">eco</span>(<span class="st">"inhabits"</span>), <span class="fu">hab</span>(h)))</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a><span class="co"># Feeding relationships (predator → prey)</span></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>food_web <span class="op">=</span> [</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>    <span class="st">"orca"</span>            <span class="op">=&gt;</span> <span class="st">"grey_seal"</span>,</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>    <span class="st">"grey_seal"</span>       <span class="op">=&gt;</span> <span class="st">"atlantic_cod"</span>,</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>    <span class="st">"grey_seal"</span>       <span class="op">=&gt;</span> <span class="st">"herring"</span>,</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>    <span class="st">"atlantic_cod"</span>    <span class="op">=&gt;</span> <span class="st">"herring"</span>,</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>    <span class="st">"atlantic_cod"</span>    <span class="op">=&gt;</span> <span class="st">"shore_crab"</span>,</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>    <span class="st">"herring"</span>         <span class="op">=&gt;</span> <span class="st">"zooplankton"</span>,</span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>    <span class="st">"shore_crab"</span>      <span class="op">=&gt;</span> <span class="st">"blue_mussel"</span>,</span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>    <span class="st">"shore_crab"</span>      <span class="op">=&gt;</span> <span class="st">"barnacle"</span>,</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>    <span class="st">"shore_crab"</span>      <span class="op">=&gt;</span> <span class="st">"common_limpet"</span>,</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>    <span class="st">"common_starfish"</span> <span class="op">=&gt;</span> <span class="st">"blue_mussel"</span>,</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>    <span class="st">"common_starfish"</span> <span class="op">=&gt;</span> <span class="st">"sea_urchin"</span>,</span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>    <span class="st">"sea_urchin"</span>      <span class="op">=&gt;</span> <span class="st">"kelp"</span>,</span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>    <span class="st">"sea_urchin"</span>      <span class="op">=&gt;</span> <span class="st">"coralline_algae"</span>,</span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a>    <span class="st">"blue_mussel"</span>     <span class="op">=&gt;</span> <span class="st">"phytoplankton"</span>,</span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>    <span class="st">"barnacle"</span>        <span class="op">=&gt;</span> <span class="st">"phytoplankton"</span>,</span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>    <span class="st">"barnacle"</span>        <span class="op">=&gt;</span> <span class="st">"zooplankton"</span>,</span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>    <span class="st">"zooplankton"</span>     <span class="op">=&gt;</span> <span class="st">"phytoplankton"</span>,</span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>    <span class="st">"common_limpet"</span>   <span class="op">=&gt;</span> <span class="st">"coralline_algae"</span>,</span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (predator, prey) <span class="kw">in</span> food_web</span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">sp</span>(predator), <span class="fu">eco</span>(<span class="st">"feeds_on"</span>), <span class="fu">sp</span>(prey)))</span>
+<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a><span class="co"># Competition</span></span>
+<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">sp</span>(<span class="st">"blue_mussel"</span>), <span class="fu">eco</span>(<span class="st">"competes_with"</span>), <span class="fu">sp</span>(<span class="st">"barnacle"</span>)))</span>
+<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">sp</span>(<span class="st">"sea_urchin"</span>), <span class="fu">eco</span>(<span class="st">"competes_with"</span>), <span class="fu">sp</span>(<span class="st">"common_limpet"</span>)))</span>
+<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Ecosystem: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples — "</span> <span class="op">*</span></span>
+<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a>        <span class="st">"</span><span class="sc">$</span>(<span class="fu">length</span>(species_data))<span class="st"> species, </span><span class="sc">$</span>(<span class="fu">length</span>(food_web))<span class="st"> feeding links"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Ecosystem: 163 triples — 14 species, 18 feeding links</code></pre>
+</div>
+</div>
+</section>
+<section id="importing-field-survey-data" class="level2">
+<h2 class="anchored" data-anchor-id="importing-field-survey-data">3. Importing Field Survey Data</h2>
+<p>Field ecologists collect survey data in spreadsheets. We use <strong>tabular mapping</strong> to import a <code>DataFrame</code> of species observations directly into the knowledge graph.</p>
+<div id="8" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> [</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">1</span>,  species<span class="op">=</span><span class="st">"blue_mussel"</span>,     site<span class="op">=</span><span class="st">"St Andrews"</span>, count<span class="op">=</span><span class="fl">342</span>,  method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">2</span>,  species<span class="op">=</span><span class="st">"barnacle"</span>,        site<span class="op">=</span><span class="st">"St Andrews"</span>, count<span class="op">=</span><span class="fl">891</span>,  method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">3</span>,  species<span class="op">=</span><span class="st">"common_limpet"</span>,   site<span class="op">=</span><span class="st">"St Andrews"</span>, count<span class="op">=</span><span class="fl">156</span>,  method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">4</span>,  species<span class="op">=</span><span class="st">"shore_crab"</span>,      site<span class="op">=</span><span class="st">"St Andrews"</span>, count<span class="op">=</span><span class="fl">23</span>,   method<span class="op">=</span><span class="st">"visual"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">5</span>,  species<span class="op">=</span><span class="st">"common_starfish"</span>, site<span class="op">=</span><span class="st">"St Andrews"</span>, count<span class="op">=</span><span class="fl">7</span>,    method<span class="op">=</span><span class="st">"visual"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">6</span>,  species<span class="op">=</span><span class="st">"blue_mussel"</span>,     site<span class="op">=</span><span class="st">"Arbroath"</span>,   count<span class="op">=</span><span class="fl">567</span>,  method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">7</span>,  species<span class="op">=</span><span class="st">"barnacle"</span>,        site<span class="op">=</span><span class="st">"Arbroath"</span>,   count<span class="op">=</span><span class="fl">1204</span>, method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">8</span>,  species<span class="op">=</span><span class="st">"sea_urchin"</span>,      site<span class="op">=</span><span class="st">"Arbroath"</span>,   count<span class="op">=</span><span class="fl">45</span>,   method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">9</span>,  species<span class="op">=</span><span class="st">"kelp"</span>,            site<span class="op">=</span><span class="st">"Arbroath"</span>,   count<span class="op">=</span><span class="fl">12</span>,   method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">10</span>, species<span class="op">=</span><span class="st">"coralline_algae"</span>, site<span class="op">=</span><span class="st">"Arbroath"</span>,   count<span class="op">=</span><span class="fl">89</span>,   method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">11</span>, species<span class="op">=</span><span class="st">"herring"</span>,         site<span class="op">=</span><span class="st">"Bell Rock"</span>,  count<span class="op">=</span><span class="fl">250</span>,  method<span class="op">=</span><span class="st">"trawl"</span>,   date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">12</span>, species<span class="op">=</span><span class="st">"atlantic_cod"</span>,    site<span class="op">=</span><span class="st">"Bell Rock"</span>,  count<span class="op">=</span><span class="fl">18</span>,   method<span class="op">=</span><span class="st">"trawl"</span>,   date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">13</span>, species<span class="op">=</span><span class="st">"grey_seal"</span>,       site<span class="op">=</span><span class="st">"Bell Rock"</span>,  count<span class="op">=</span><span class="fl">3</span>,    method<span class="op">=</span><span class="st">"visual"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">14</span>, species<span class="op">=</span><span class="st">"phytoplankton"</span>,   site<span class="op">=</span><span class="st">"Bell Rock"</span>,  count<span class="op">=</span><span class="fl">1500</span>, method<span class="op">=</span><span class="st">"sample"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">15</span>, species<span class="op">=</span><span class="st">"zooplankton"</span>,     site<span class="op">=</span><span class="st">"Bell Rock"</span>,  count<span class="op">=</span><span class="fl">800</span>,  method<span class="op">=</span><span class="st">"sample"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">16</span>, species<span class="op">=</span><span class="st">"blue_mussel"</span>,     site<span class="op">=</span><span class="st">"Crail"</span>,      count<span class="op">=</span><span class="fl">423</span>,  method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">17</span>, species<span class="op">=</span><span class="st">"shore_crab"</span>,      site<span class="op">=</span><span class="st">"Crail"</span>,      count<span class="op">=</span><span class="fl">31</span>,   method<span class="op">=</span><span class="st">"visual"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">18</span>, species<span class="op">=</span><span class="st">"common_starfish"</span>, site<span class="op">=</span><span class="st">"Crail"</span>,      count<span class="op">=</span><span class="fl">5</span>,    method<span class="op">=</span><span class="st">"visual"</span>,  date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">19</span>, species<span class="op">=</span><span class="st">"sea_urchin"</span>,      site<span class="op">=</span><span class="st">"Crail"</span>,      count<span class="op">=</span><span class="fl">38</span>,   method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    (id<span class="op">=</span><span class="fl">20</span>, species<span class="op">=</span><span class="st">"barnacle"</span>,        site<span class="op">=</span><span class="st">"Crail"</span>,      count<span class="op">=</span><span class="fl">756</span>,  method<span class="op">=</span><span class="st">"quadrat"</span>, date<span class="op">=</span><span class="st">"2024-06-15"</span>),</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Add species URI column for linking to species nodes</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>surveys_with_uri <span class="op">=</span> [(; r<span class="op">...</span>, species_uri<span class="op">=</span><span class="st">"http://example.org/species/"</span> <span class="op">*</span> r.species) for r <span class="kw">in</span> surveys]</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="fu">RDFMapping</span>(graph<span class="op">=</span>g)</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>tpl <span class="op">=</span> <span class="fu">RDFTemplate</span>(</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    subject <span class="op">=</span> <span class="op">:</span>id,</span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>    subject_prefix <span class="op">=</span> <span class="st">"http://example.org/observation/"</span>,</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    properties <span class="op">=</span> [</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">eco</span>(<span class="st">"observed_species"</span>), <span class="op">:</span>species_uri, <span class="fu">IRIColumn</span>()),</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">eco</span>(<span class="st">"site"</span>),   <span class="op">:</span>site,   <span class="fu">AutoColumn</span>()),</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">eco</span>(<span class="st">"count"</span>),  <span class="op">:</span>count,  <span class="fu">LiteralColumn</span>(XSD.integer)),</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">eco</span>(<span class="st">"method"</span>), <span class="op">:</span>method, <span class="fu">AutoColumn</span>()),</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>        (<span class="fu">eco</span>(<span class="st">"date"</span>),   <span class="op">:</span>date,   <span class="fu">LiteralColumn</span>(XSD.date)),</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>    types <span class="op">=</span> [<span class="fu">eco</span>(<span class="st">"Observation"</span>)]</span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>before <span class="op">=</span> <span class="fu">length</span>(g)</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a><span class="fu">rdf_map!</span>(m, surveys_with_uri, tpl)</span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Imported </span><span class="sc">$</span>(<span class="fu">length</span>(g) <span class="op">-</span> before)<span class="st"> observation triples from </span><span class="sc">$</span>(<span class="fu">length</span>(surveys))<span class="st"> records"</span>)</span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Total knowledge graph: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Imported 120 observation triples from 20 records
+Total knowledge graph: 283 triples</code></pre>
+</div>
+</div>
+</section>
+<section id="validating-data-quality-with-shacl" class="level2">
+<h2 class="anchored" data-anchor-id="validating-data-quality-with-shacl">4. Validating Data Quality with SHACL</h2>
+<p>Before analysis, we validate that observations conform to a SHACL shapes schema — every observation must have a linked species, a non-negative integer count, and a date.</p>
+<div id="10" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>shapes_ttl <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix eco: &lt;http://example.org/ecology#&gt; .</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="st">    eco:ObservationShape a sh:NodeShape ;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:targetClass eco:Observation ;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path eco:observed_species ;</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:maxCount 1 ;</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:nodeKind sh:IRI ;</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path eco:count ;</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:datatype xsd:integer ;</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="st">        ] ;</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="st">        sh:property [</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:path eco:date ;</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a><span class="st">            sh:minCount 1 ;</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a><span class="st">        ] .</span></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> <span class="fu">rdf_validate</span>(m, shapes_ttl)</span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Valid survey data — conforms: </span><span class="sc">$</span>(report.conforms)<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Valid survey data — conforms: true</code></pre>
+</div>
+</div>
+<p>Now add an <strong>incomplete observation</strong> and see SHACL catch the errors:</p>
+<div id="12" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>bad <span class="op">=</span> <span class="fu">URIRef</span>(<span class="st">"http://example.org/observation/incomplete"</span>)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">eco</span>(<span class="st">"Observation"</span>)))</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">eco</span>(<span class="st">"site"</span>), <span class="fu">Literal</span>(<span class="st">"Unknown Site"</span>)))</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>report2 <span class="op">=</span> <span class="fu">rdf_validate</span>(m, shapes_ttl)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"After adding incomplete observation:"</span>)</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Conforms: </span><span class="sc">$</span>(report2.conforms)<span class="st">"</span>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Violations: </span><span class="sc">$</span>(<span class="fu">length</span>(report2.results))<span class="st">"</span>)</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> report2.results</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  ✗ </span><span class="sc">$</span>(r.message)<span class="st">"</span>)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Clean up</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, RDF.<span class="kw">type</span>, <span class="fu">eco</span>(<span class="st">"Observation"</span>)))</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="fu">remove!</span>(g, <span class="fu">Triple</span>(bad, <span class="fu">eco</span>(<span class="st">"site"</span>), <span class="fu">Literal</span>(<span class="st">"Unknown Site"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>After adding incomplete observation:
+  Conforms: false
+  Violations: 3
+  ✗ Expected at least 1 values for http://example.org/ecology#observed_species, got 0
+  ✗ Expected at least 1 values for http://example.org/ecology#count, got 0
+  ✗ Expected at least 1 values for http://example.org/ecology#date, got 0</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>RDFGraph (283 triples)</code></pre>
+</div>
+</div>
+</section>
+<section id="querying-the-ecosystem-with-sparql" class="level2">
+<h2 class="anchored" data-anchor-id="querying-the-ecosystem-with-sparql">5. Querying the Ecosystem with SPARQL</h2>
+<section id="species-by-trophic-level" class="level3">
+<h3 class="anchored" data-anchor-id="species-by-trophic-level">Species by trophic level</h3>
+<div id="14" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX eco: &lt;http://example.org/ecology#&gt;</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name ?level WHERE {</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s a eco:Species .</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:common_name ?name .</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:has_trophic_level ?tl .</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?tl rdfs:label ?level .</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?level ?name</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">20</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"level"</span>]))<span class="st">"</span>)</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="most-observed-species" class="level3">
+<h3 class="anchored" data-anchor-id="most-observed-species">Most observed species</h3>
+<div id="16" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX eco: &lt;http://example.org/ecology#&gt;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name ?site ?count WHERE {</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="st">        ?obs a eco:Observation .</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="st">        ?obs eco:observed_species ?species .</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="st">        ?species eco:common_name ?name .</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?obs eco:site ?site .</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="st">        ?obs eco:count ?count .</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY DESC(?count)</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Top 5 observations by abundance:"</span>)</span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> <span class="bu">Iterators</span>.<span class="fu">take</span>(results, <span class="fl">5</span>)</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]), <span class="fl">18</span>))<span class="st"> at </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">readable</span>(row[<span class="st">"site"</span>]), <span class="fl">12</span>))<span class="st">  n=</span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"count"</span>]))<span class="st">"</span>)</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Top 5 observations by abundance:
+  Phytoplankton      at Bell Rock     n=1500
+  Acorn Barnacle     at Arbroath      n=1204
+  Acorn Barnacle     at St Andrews    n=891
+  Zooplankton        at Bell Rock     n=800
+  Acorn Barnacle     at Crail         n=756</code></pre>
+</div>
+</div>
+</section>
+<section id="vulnerable-species-and-their-predators" class="level3">
+<h3 class="anchored" data-anchor-id="vulnerable-species-and-their-predators">Vulnerable species and their predators</h3>
+<div id="18" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX eco: &lt;http://example.org/ecology#&gt;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?vulnerable ?predator_name WHERE {</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:conservation_status "Vulnerable" .</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:common_name ?vulnerable .</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="st">        ?pred eco:feeds_on ?s .</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="st">        ?pred eco:common_name ?predator_name .</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Predators of vulnerable species:"</span>)</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"predator_name"</span>]))<span class="st">  →  </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"vulnerable"</span>]))<span class="st">"</span>)</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Predators of vulnerable species:
+  Grey Seal  →  Atlantic Cod</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="food-chain-analysis-with-property-paths" class="level2">
+<h2 class="anchored" data-anchor-id="food-chain-analysis-with-property-paths">6. Food Chain Analysis with Property Paths</h2>
+<p>Property paths trace multi-step feeding relationships without recursive queries.</p>
+<section id="all-species-in-the-orcas-transitive-food-chain" class="level3">
+<h3 class="anchored" data-anchor-id="all-species-in-the-orcas-transitive-food-chain">All species in the orca’s transitive food chain</h3>
+<div id="20" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX eco: &lt;http://example.org/ecology#&gt;</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX sp:  &lt;http://example.org/species/&gt;</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?prey_name WHERE {</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="st">        sp:orca eco:feeds_on+ ?prey .</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="st">        ?prey eco:common_name ?prey_name .</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?prey_name</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"The orca's transitive food chain (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st"> species):"</span>)</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  • </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"prey_name"</span>]))<span class="st">"</span>)</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>The orca's transitive food chain (10 species):
+  • Acorn Barnacle
+  • Atlantic Cod
+  • Atlantic Herring
+  • Blue Mussel
+  • Common Limpet
+  • Coralline Algae
+  • Grey Seal
+  • Phytoplankton
+  • Shore Crab
+  • Zooplankton</code></pre>
+</div>
+</div>
+</section>
+<section id="which-species-ultimately-depend-on-phytoplankton" class="level3">
+<h3 class="anchored" data-anchor-id="which-species-ultimately-depend-on-phytoplankton">Which species ultimately depend on phytoplankton?</h3>
+<div id="22" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX eco: &lt;http://example.org/ecology#&gt;</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX sp:  &lt;http://example.org/species/&gt;</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name WHERE {</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:feeds_on+ sp:phytoplankton .</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:common_name ?name .</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?name</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Species with transitive dependency on phytoplankton (</span><span class="sc">$</span>(<span class="fu">length</span>(results))<span class="st">):"</span>)</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  • </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]))<span class="st">"</span>)</span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Species with transitive dependency on phytoplankton (9):
+  • Acorn Barnacle
+  • Atlantic Cod
+  • Atlantic Herring
+  • Blue Mussel
+  • Common Starfish
+  • Grey Seal
+  • Killer Whale
+  • Shore Crab
+  • Zooplankton</code></pre>
+</div>
+</div>
+</section>
+<section id="all-consumers-of-kelp-direct-and-indirect" class="level3">
+<h3 class="anchored" data-anchor-id="all-consumers-of-kelp-direct-and-indirect">All consumers of kelp (direct and indirect)</h3>
+<div id="24" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">sparql_query</span>(g, <span class="st">"""</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX eco: &lt;http://example.org/ecology#&gt;</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="st">    PREFIX sp:  &lt;http://example.org/species/&gt;</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT ?name WHERE {</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:feeds_on+ sp:kelp .</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="st">        ?s eco:common_name ?name .</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="st">    ORDER BY ?name</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span>)</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Direct and indirect consumers of kelp:"</span>)</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> row <span class="kw">in</span> results</span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  • </span><span class="sc">$</span>(<span class="fu">readable</span>(row[<span class="st">"name"</span>]))<span class="st">"</span>)</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Direct and indirect consumers of kelp:
+  • Common Starfish
+  • Sea Urchin</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="deriving-ecological-relationships-with-datalog" class="level2">
+<h2 class="anchored" data-anchor-id="deriving-ecological-relationships-with-datalog">7. Deriving Ecological Relationships with Datalog</h2>
+<p>We use <strong>Datalog reasoning</strong> to compute derived relationships: transitive trophic dependency and shared-prey competition.</p>
+<div id="26" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>n3_food_web <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix eco: &lt;http://example.org/ecology#&gt; .</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="st">    @prefix sp:  &lt;http://example.org/species/&gt; .</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:orca            eco:feeds_on sp:grey_seal .</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:grey_seal       eco:feeds_on sp:atlantic_cod .</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:grey_seal       eco:feeds_on sp:herring .</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:atlantic_cod    eco:feeds_on sp:herring .</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:atlantic_cod    eco:feeds_on sp:shore_crab .</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:herring         eco:feeds_on sp:zooplankton .</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:shore_crab      eco:feeds_on sp:blue_mussel .</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:shore_crab      eco:feeds_on sp:barnacle .</span></span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:shore_crab      eco:feeds_on sp:common_limpet .</span></span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:common_starfish eco:feeds_on sp:blue_mussel .</span></span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:common_starfish eco:feeds_on sp:sea_urchin .</span></span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:sea_urchin      eco:feeds_on sp:kelp .</span></span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:sea_urchin      eco:feeds_on sp:coralline_algae .</span></span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:blue_mussel     eco:feeds_on sp:phytoplankton .</span></span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:barnacle        eco:feeds_on sp:phytoplankton .</span></span>
+<span id="cb25-20"><a href="#cb25-20" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:barnacle        eco:feeds_on sp:zooplankton .</span></span>
+<span id="cb25-21"><a href="#cb25-21" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:zooplankton     eco:feeds_on sp:phytoplankton .</span></span>
+<span id="cb25-22"><a href="#cb25-22" aria-hidden="true" tabindex="-1"></a><span class="st">    sp:common_limpet   eco:feeds_on sp:coralline_algae .</span></span>
+<span id="cb25-23"><a href="#cb25-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-24"><a href="#cb25-24" aria-hidden="true" tabindex="-1"></a><span class="st">    # Transitive trophic dependency</span></span>
+<span id="cb25-25"><a href="#cb25-25" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?x eco:feeds_on ?y } =&gt; { ?x eco:depends_on ?y } .</span></span>
+<span id="cb25-26"><a href="#cb25-26" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?x eco:depends_on ?y . ?y eco:depends_on ?z } =&gt; { ?x eco:depends_on ?z } .</span></span>
+<span id="cb25-27"><a href="#cb25-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-28"><a href="#cb25-28" aria-hidden="true" tabindex="-1"></a><span class="st">    # Shared-prey relationship (potential competitors)</span></span>
+<span id="cb25-29"><a href="#cb25-29" aria-hidden="true" tabindex="-1"></a><span class="st">    { ?x eco:feeds_on ?z . ?y eco:feeds_on ?z } =&gt; { ?x eco:shares_prey_with ?y } .</span></span>
+<span id="cb25-30"><a href="#cb25-30" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb25-31"><a href="#cb25-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-32"><a href="#cb25-32" aria-hidden="true" tabindex="-1"></a>g_dl <span class="op">=</span> <span class="fu">parse_rdf</span>(n3_food_web, <span class="fu">N3Format</span>())</span>
+<span id="cb25-33"><a href="#cb25-33" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Before reasoning: </span><span class="sc">$</span>(<span class="fu">length</span>(g_dl))<span class="st"> triples"</span>)</span>
+<span id="cb25-34"><a href="#cb25-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-35"><a href="#cb25-35" aria-hidden="true" tabindex="-1"></a>g_inferred <span class="op">=</span> <span class="fu">datalog_reason</span>(g_dl)</span>
+<span id="cb25-36"><a href="#cb25-36" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"After reasoning:  </span><span class="sc">$</span>(<span class="fu">length</span>(g_inferred))<span class="st"> triples"</span>)</span>
+<span id="cb25-37"><a href="#cb25-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-38"><a href="#cb25-38" aria-hidden="true" tabindex="-1"></a>dep_count <span class="op">=</span> <span class="fu">length</span>(<span class="fu">collect</span>(<span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">eco</span>(<span class="st">"depends_on"</span>), <span class="cn">nothing</span>))))</span>
+<span id="cb25-39"><a href="#cb25-39" aria-hidden="true" tabindex="-1"></a>feed_count <span class="op">=</span> <span class="fu">length</span>(<span class="fu">collect</span>(<span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">eco</span>(<span class="st">"feeds_on"</span>), <span class="cn">nothing</span>))))</span>
+<span id="cb25-40"><a href="#cb25-40" aria-hidden="true" tabindex="-1"></a>share_count <span class="op">=</span> <span class="fu">length</span>(<span class="fu">collect</span>(<span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">eco</span>(<span class="st">"shares_prey_with"</span>), <span class="cn">nothing</span>))))</span>
+<span id="cb25-41"><a href="#cb25-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-42"><a href="#cb25-42" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">Direct feeding links:       </span><span class="sc">$</span>feed_count<span class="st">"</span>)</span>
+<span id="cb25-43"><a href="#cb25-43" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Transitive dependencies:    </span><span class="sc">$</span>dep_count<span class="st">  (</span><span class="sc">$</span>(dep_count <span class="op">-</span> feed_count)<span class="st"> new)"</span>)</span>
+<span id="cb25-44"><a href="#cb25-44" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Shared-prey relationships:  </span><span class="sc">$</span>share_count<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Before reasoning: 21 triples
+After reasoning:  90 triples
+
+Direct feeding links:       18
+Transitive dependencies:    47  (29 new)
+Shared-prey relationships:  25</code></pre>
+</div>
+</div>
+<section id="what-does-the-orca-transitively-depend-on" class="level3">
+<h3 class="anchored" data-anchor-id="what-does-the-orca-transitively-depend-on">What does the orca transitively depend on?</h3>
+<div id="28" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>orca_deps <span class="op">=</span> [t.object for t <span class="kw">in</span> <span class="fu">triples</span>(g_inferred, (<span class="fu">sp</span>(<span class="st">"orca"</span>), <span class="fu">eco</span>(<span class="st">"depends_on"</span>), <span class="cn">nothing</span>))]</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Orca depends on </span><span class="sc">$</span>(<span class="fu">length</span>(orca_deps))<span class="st"> species (directly or indirectly):"</span>)</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> dep <span class="kw">in</span> <span class="fu">sort</span>(orca_deps; by<span class="op">=</span>x <span class="op">-&gt;</span> <span class="fu">split</span>(<span class="fu">string</span>(x), <span class="ch">'/'</span>)[<span class="kw">end</span>])</span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  • </span><span class="sc">$</span>(<span class="fu">split</span>(<span class="fu">string</span>(dep), <span class="ch">'/'</span>)[<span class="kw">end</span>])<span class="st">"</span>)</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Orca depends on 10 species (directly or indirectly):
+  • atlantic_cod
+  • barnacle
+  • blue_mussel
+  • common_limpet
+  • coralline_algae
+  • grey_seal
+  • herring
+  • phytoplankton
+  • shore_crab
+  • zooplankton</code></pre>
+</div>
+</div>
+</section>
+<section id="which-species-share-prey-potential-competitors" class="level3">
+<h3 class="anchored" data-anchor-id="which-species-share-prey-potential-competitors">Which species share prey (potential competitors)?</h3>
+<div id="30" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>seen <span class="op">=</span> <span class="fu">Set</span><span class="dt">{String}</span>()</span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(g_inferred, (<span class="cn">nothing</span>, <span class="fu">eco</span>(<span class="st">"shares_prey_with"</span>), <span class="cn">nothing</span>))</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>    a <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.subject), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.object), <span class="ch">'/'</span>)[<span class="kw">end</span>]</span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    a <span class="op">==</span> b <span class="op">&amp;&amp;</span> <span class="cf">continue</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    pair <span class="op">=</span> a <span class="op">&lt;</span> b ? <span class="st">"</span><span class="sc">$</span>a<span class="st"> ↔ </span><span class="sc">$</span>b<span class="st">"</span> <span class="op">:</span> <span class="st">"</span><span class="sc">$</span>b<span class="st"> ↔ </span><span class="sc">$</span>a<span class="st">"</span></span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>    pair <span class="kw">in</span> seen <span class="op">&amp;&amp;</span> <span class="cf">continue</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">push!</span>(seen, pair)</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Species pairs sharing prey (</span><span class="sc">$</span>(<span class="fu">length</span>(seen))<span class="st"> pairs):"</span>)</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> pair <span class="kw">in</span> <span class="fu">sort</span>(<span class="fu">collect</span>(seen))</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  • </span><span class="sc">$</span>pair<span class="st">"</span>)</span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Species pairs sharing prey (7 pairs):
+  • atlantic_cod ↔ grey_seal
+  • barnacle ↔ blue_mussel
+  • barnacle ↔ herring
+  • barnacle ↔ zooplankton
+  • blue_mussel ↔ zooplankton
+  • common_limpet ↔ sea_urchin
+  • common_starfish ↔ shore_crab</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="probabilistic-trophic-cascades-with-problog" class="level2">
+<h2 class="anchored" data-anchor-id="probabilistic-trophic-cascades-with-problog">8. Probabilistic Trophic Cascades with ProbLog</h2>
+<p>The classic <strong>sea otter → sea urchin → kelp</strong> trophic cascade: when apex predators are removed, herbivore populations explode and primary producers collapse. We model this probabilistically with ProbLog.</p>
+<div id="32" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>base_program <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="st">    0.3::otters_present.</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::urchins_present.</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.9::kelp_present.</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.7::mussels_present.</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="st">    urchins_controlled :- otters_present.</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a><span class="st">    urchin_barren :- urchins_present, </span><span class="sc">\\</span><span class="st">+urchins_controlled.</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a><span class="st">    kelp_forest :- kelp_present, </span><span class="sc">\\</span><span class="st">+urchin_barren.</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="st">    healthy_reef :- kelp_forest, mussels_present.</span></span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="st">    degraded_reef :- urchin_barren.</span></span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a><span class="st">    query(urchin_barren).</span></span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a><span class="st">    query(kelp_forest).</span></span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a><span class="st">    query(healthy_reef).</span></span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a><span class="st">    query(degraded_reef).</span></span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> <span class="fu">problog_query</span>(base_program)</span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Baseline ecosystem probabilities:"</span>)</span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"urchin_barren"</span>, <span class="st">"kelp_forest"</span>, <span class="st">"healthy_reef"</span>, <span class="st">"degraded_reef"</span>]</span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">haskey</span>(results, key) <span class="op">&amp;&amp;</span> <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">16</span>))<span class="st"> = </span><span class="sc">$</span>(<span class="fu">round</span>(results[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Baseline ecosystem probabilities:
+  urchin_barren    = 0.595
+  kelp_forest      = 0.3645
+  healthy_reef     = 0.2552
+  degraded_reef    = 0.595</code></pre>
+</div>
+</div>
+<section id="scenario-otters-present-conservation-success" class="level3">
+<h3 class="anchored" data-anchor-id="scenario-otters-present-conservation-success">Scenario: Otters present (conservation success)</h3>
+<p>With otters controlling the urchin population, the kelp forest thrives:</p>
+<div id="34" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>with_otters <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="st">    0.3::otters_present.</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::urchins_present.</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.9::kelp_present.</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.7::mussels_present.</span></span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="st">    urchins_controlled :- otters_present.</span></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a><span class="st">    urchin_barren :- urchins_present, </span><span class="sc">\\</span><span class="st">+urchins_controlled.</span></span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a><span class="st">    kelp_forest :- kelp_present, </span><span class="sc">\\</span><span class="st">+urchin_barren.</span></span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a><span class="st">    healthy_reef :- kelp_forest, mussels_present.</span></span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a><span class="st">    degraded_reef :- urchin_barren.</span></span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a><span class="st">    query(urchin_barren).</span></span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a><span class="st">    query(kelp_forest).</span></span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a><span class="st">    query(healthy_reef).</span></span>
+<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a><span class="st">    query(degraded_reef).</span></span>
+<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a><span class="st">    evidence(otters_present, true).</span></span>
+<span id="cb33-19"><a href="#cb33-19" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb33-20"><a href="#cb33-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-21"><a href="#cb33-21" aria-hidden="true" tabindex="-1"></a>r_otters <span class="op">=</span> <span class="fu">problog_query</span>(with_otters)</span>
+<span id="cb33-22"><a href="#cb33-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"With otters present (conservation success):"</span>)</span>
+<span id="cb33-23"><a href="#cb33-23" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"urchin_barren"</span>, <span class="st">"kelp_forest"</span>, <span class="st">"healthy_reef"</span>, <span class="st">"degraded_reef"</span>]</span>
+<span id="cb33-24"><a href="#cb33-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">haskey</span>(r_otters, key) <span class="op">&amp;&amp;</span> <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">16</span>))<span class="st"> = </span><span class="sc">$</span>(<span class="fu">round</span>(r_otters[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb33-25"><a href="#cb33-25" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>With otters present (conservation success):
+  urchin_barren    = 0.0
+  kelp_forest      = 0.9
+  healthy_reef     = 0.63
+  degraded_reef    = 0.0</code></pre>
+</div>
+</div>
+</section>
+<section id="scenario-otters-absent-overhuntingdecline" class="level3">
+<h3 class="anchored" data-anchor-id="scenario-otters-absent-overhuntingdecline">Scenario: Otters absent (overhunting/decline)</h3>
+<p>Without otters, urchins overgraze the kelp — the ecosystem degrades:</p>
+<div id="36" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>without_otters <span class="op">=</span> <span class="st">"""</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="st">    0.3::otters_present.</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="st">    0.85::urchins_present.</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a><span class="st">    0.9::kelp_present.</span></span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a><span class="st">    0.7::mussels_present.</span></span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="st">    urchins_controlled :- otters_present.</span></span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a><span class="st">    urchin_barren :- urchins_present, </span><span class="sc">\\</span><span class="st">+urchins_controlled.</span></span>
+<span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a><span class="st">    kelp_forest :- kelp_present, </span><span class="sc">\\</span><span class="st">+urchin_barren.</span></span>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a><span class="st">    healthy_reef :- kelp_forest, mussels_present.</span></span>
+<span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a><span class="st">    degraded_reef :- urchin_barren.</span></span>
+<span id="cb35-12"><a href="#cb35-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a><span class="st">    query(urchin_barren).</span></span>
+<span id="cb35-14"><a href="#cb35-14" aria-hidden="true" tabindex="-1"></a><span class="st">    query(kelp_forest).</span></span>
+<span id="cb35-15"><a href="#cb35-15" aria-hidden="true" tabindex="-1"></a><span class="st">    query(healthy_reef).</span></span>
+<span id="cb35-16"><a href="#cb35-16" aria-hidden="true" tabindex="-1"></a><span class="st">    query(degraded_reef).</span></span>
+<span id="cb35-17"><a href="#cb35-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-18"><a href="#cb35-18" aria-hidden="true" tabindex="-1"></a><span class="st">    evidence(otters_present, false).</span></span>
+<span id="cb35-19"><a href="#cb35-19" aria-hidden="true" tabindex="-1"></a><span class="st">"""</span></span>
+<span id="cb35-20"><a href="#cb35-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-21"><a href="#cb35-21" aria-hidden="true" tabindex="-1"></a>r_no_otters <span class="op">=</span> <span class="fu">problog_query</span>(without_otters)</span>
+<span id="cb35-22"><a href="#cb35-22" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Without otters (population decline):"</span>)</span>
+<span id="cb35-23"><a href="#cb35-23" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"urchin_barren"</span>, <span class="st">"kelp_forest"</span>, <span class="st">"healthy_reef"</span>, <span class="st">"degraded_reef"</span>]</span>
+<span id="cb35-24"><a href="#cb35-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">haskey</span>(r_no_otters, key) <span class="op">&amp;&amp;</span> <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">16</span>))<span class="st"> = </span><span class="sc">$</span>(<span class="fu">round</span>(r_no_otters[key]; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb35-25"><a href="#cb35-25" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Without otters (population decline):
+  urchin_barren    = 0.85
+  kelp_forest      = 0.135
+  healthy_reef     = 0.0945
+  degraded_reef    = 0.85</code></pre>
+</div>
+</div>
+</section>
+<section id="comparing-scenarios" class="level3">
+<h3 class="anchored" data-anchor-id="comparing-scenarios">Comparing scenarios</h3>
+<div id="38" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Impact of otter conservation on ecosystem health:</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Indicator"</span>, <span class="fl">18</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Otters present"</span>, <span class="fl">16</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="st">"Otters absent"</span>, <span class="fl">16</span>))<span class="st"> Change"</span>)</span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="st">"-"</span><span class="op">^</span><span class="fl">66</span>)<span class="st">"</span>)</span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key <span class="kw">in</span> [<span class="st">"urchin_barren"</span>, <span class="st">"kelp_forest"</span>, <span class="st">"healthy_reef"</span>, <span class="st">"degraded_reef"</span>]</span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a>    p_yes <span class="op">=</span> <span class="fu">get</span>(r_otters, key, <span class="fl">0.0</span>)</span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a>    p_no  <span class="op">=</span> <span class="fu">get</span>(r_no_otters, key, <span class="fl">0.0</span>)</span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>    delta <span class="op">=</span> p_yes <span class="op">-</span> p_no</span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a>    sign <span class="op">=</span> delta <span class="op">&gt;=</span> <span class="fl">0</span> ? <span class="st">"+"</span> <span class="op">:</span> <span class="st">""</span></span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(key, <span class="fl">18</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">round</span>(p_yes; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">16</span>))<span class="st"> </span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">round</span>(p_no; digits<span class="op">=</span><span class="fl">4</span>), <span class="fl">16</span>))<span class="st"> </span><span class="sc">$</span>(sign)<span class="sc">$</span>(<span class="fu">round</span>(delta; digits<span class="op">=</span><span class="fl">4</span>))<span class="st">"</span>)</span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Impact of otter conservation on ecosystem health:
+
+  Indicator          Otters present   Otters absent    Change
+  ------------------------------------------------------------------
+  urchin_barren      0.0              0.85             -0.85
+  kelp_forest        0.9              0.135            +0.765
+  healthy_reef       0.63             0.0945           +0.5355
+  degraded_reef      0.0              0.85             -0.85</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="visualization-and-graph-analytics" class="level2">
+<h2 class="anchored" data-anchor-id="visualization-and-graph-analytics">9. Visualization and Graph Analytics</h2>
+<section id="graph-statistics" class="level3">
+<h3 class="anchored" data-anchor-id="graph-statistics">Graph statistics</h3>
+<div id="40" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>stats <span class="op">=</span> <span class="fu">graph_stats</span>(g)</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Knowledge graph summary:"</span>)</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Total triples:  </span><span class="sc">$</span>(stats.triples)<span class="st">"</span>)</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Unique subjects: </span><span class="sc">$</span>(stats.subjects)<span class="st">"</span>)</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Unique predicates: </span><span class="sc">$</span>(stats.predicates)<span class="st">"</span>)</span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Unique objects:  </span><span class="sc">$</span>(stats.objects)<span class="st">"</span>)</span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  URI references:  </span><span class="sc">$</span>(stats.uri_refs)<span class="st">"</span>)</span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"  Literals:        </span><span class="sc">$</span>(stats.literals)<span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Knowledge graph summary:
+  Total triples:  283
+  Unique subjects: 60
+  Unique predicates: 17
+  Unique objects:  104
+  URI references:  69
+  Literals:        74</code></pre>
+</div>
+</div>
+</section>
+<section id="concise-bounded-description-of-a-species" class="level3">
+<h3 class="anchored" data-anchor-id="concise-bounded-description-of-a-species">Concise Bounded Description of a species</h3>
+<p>The CBD extracts all triples describing a single resource — useful for generating a species profile card.</p>
+<div id="42" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb41"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>cod_desc <span class="op">=</span> <span class="fu">cbd</span>(g, <span class="fu">sp</span>(<span class="st">"atlantic_cod"</span>))</span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"CBD for Atlantic Cod (</span><span class="sc">$</span>(<span class="fu">length</span>(cod_desc))<span class="st"> triples):"</span>)</span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(cod_desc)</span>
+<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>    pred <span class="op">=</span> <span class="fu">split</span>(<span class="fu">string</span>(t.predicate), <span class="st">r"</span><span class="ch">[</span><span class="st">/#</span><span class="ch">]</span><span class="st">"</span>)[<span class="kw">end</span>]</span>
+<span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a>    obj_str <span class="op">=</span> t.object isa Literal ? <span class="st">"</span><span class="sc">\"$</span>(t.object.lexical)<span class="sc">\"</span><span class="st">"</span> <span class="op">:</span> <span class="fu">readable</span>(t.object)</span>
+<span id="cb41-6"><a href="#cb41-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>(<span class="fu">rpad</span>(pred, <span class="fl">22</span>))<span class="st"> </span><span class="sc">$</span>(obj_str)<span class="st">"</span>)</span>
+<span id="cb41-7"><a href="#cb41-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>CBD for Atlantic Cod (9 triples):
+  type                   Species
+  common_name            "Atlantic Cod"
+  has_trophic_level      tertiary_consumer
+  conservation_status    "Vulnerable"
+  typical_size_cm        "120"
+  inhabits               pelagic
+  inhabits               kelp_forest
+  feeds_on               herring
+  feeds_on               shore_crab</code></pre>
+</div>
+</div>
+</section>
+<section id="food-web-visualization" class="level3">
+<h3 class="anchored" data-anchor-id="food-web-visualization">Food web visualization</h3>
+<div id="44" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb43"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract just the feeding subgraph for visualization</span></span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>food_g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(food_g, <span class="st">"sp"</span>, sp)</span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bind!</span>(food_g, <span class="st">"eco"</span>, eco)</span>
+<span id="cb43-5"><a href="#cb43-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> <span class="fu">triples</span>(g, (<span class="cn">nothing</span>, <span class="fu">eco</span>(<span class="st">"feeds_on"</span>), <span class="cn">nothing</span>))</span>
+<span id="cb43-6"><a href="#cb43-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(food_g, t)</span>
+<span id="cb43-7"><a href="#cb43-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb43-8"><a href="#cb43-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-9"><a href="#cb43-9" aria-hidden="true" tabindex="-1"></a>dot_str <span class="op">=</span> <span class="fu">to_dot</span>(food_g; label<span class="op">=</span><span class="st">"Coastal Food Web"</span>)</span>
+<span id="cb43-10"><a href="#cb43-10" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Generated DOT visualization (</span><span class="sc">$</span>(<span class="fu">length</span>(dot_str))<span class="st"> chars)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Generated DOT visualization (1126 chars)</code></pre>
+</div>
+</div>
+<div id="46" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb45"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">GraphViz</span></span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>GraphViz.<span class="fu">load</span>(<span class="fu">IOBuffer</span>(dot_str))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div>
+<figure class="figure">
+<p><img src="ecology_files/figure-html/cell-24-output-1.svg" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="serialization" class="level3">
+<h3 class="anchored" data-anchor-id="serialization">Serialization</h3>
+<p>Export the full knowledge graph in Turtle format:</p>
+<div id="48" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>ttl <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
+<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a>lines <span class="op">=</span> <span class="fu">split</span>(ttl, <span class="ch">'\n'</span>)</span>
+<span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Serialized to Turtle: </span><span class="sc">$</span>(<span class="fu">length</span>(lines))<span class="st"> lines, </span><span class="sc">$</span>(<span class="fu">length</span>(ttl))<span class="st"> bytes"</span>)</span>
+<span id="cb46-4"><a href="#cb46-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">First 15 lines:"</span>)</span>
+<span id="cb46-5"><a href="#cb46-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> line <span class="kw">in</span> <span class="bu">Iterators</span>.<span class="fu">take</span>(lines, <span class="fl">15</span>)</span>
+<span id="cb46-6"><a href="#cb46-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">"  </span><span class="sc">$</span>line<span class="st">"</span>)</span>
+<span id="cb46-7"><a href="#cb46-7" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Serialized to Turtle: 353 lines, 9887 bytes
+
+First 15 lines:
+  @prefix eco: &lt;http://example.org/ecology#&gt; .
+  @prefix hab: &lt;http://example.org/habitat/&gt; .
+  @prefix ns1: &lt;http://example.org/observation/&gt; .
+  @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+  @prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+  @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+  @prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+  @prefix sp: &lt;http://example.org/species/&gt; .
+  @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+  
+  eco:Habitat a owl:Class .
+  
+  eco:Observation a owl:Class .
+  
+  eco:Species a owl:Class .</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<p>This vignette demonstrated how RDFLib.jl integrates multiple semantic web technologies for ecological modeling:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 29%">
+<col style="width: 70%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th>Ecological Application</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>OWL Ontology</strong></td>
+<td>Species, habitats, trophic levels, feeding relationships</td>
+</tr>
+<tr class="even">
+<td><strong>Tabular Mapping</strong></td>
+<td>Field survey data from DataFrames into the knowledge graph</td>
+</tr>
+<tr class="odd">
+<td><strong>SHACL Validation</strong></td>
+<td>Ensuring observation data completeness and correctness</td>
+</tr>
+<tr class="even">
+<td><strong>SPARQL Queries</strong></td>
+<td>Querying species by trophic level, abundance, vulnerability</td>
+</tr>
+<tr class="odd">
+<td><strong>Property Paths</strong></td>
+<td>Tracing transitive food chains without recursion</td>
+</tr>
+<tr class="even">
+<td><strong>Datalog Reasoning</strong></td>
+<td>Inferring indirect trophic dependencies and competition</td>
+</tr>
+<tr class="odd">
+<td><strong>ProbLog</strong></td>
+<td>Modeling the otter–urchin–kelp trophic cascade probabilistically</td>
+</tr>
+<tr class="even">
+<td><strong>Visualization</strong></td>
+<td>Food web DOT graphs and graph statistics</td>
+</tr>
+</tbody>
+</table>
+<p>The probabilistic trophic cascade analysis quantifies a well-known ecological phenomenon: removing apex predators (otters) dramatically shifts ecosystem health probabilities, demonstrating how RDFLib.jl can support both qualitative knowledge representation and quantitative ecological modeling.</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

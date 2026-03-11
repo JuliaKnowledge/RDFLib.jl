@@ -1,5 +1,5 @@
 # Ecological Knowledge Graphs
-
+Simon Frost
 
 ## Introduction
 
@@ -756,14 +756,14 @@ dot_str = to_dot(food_g; label="Coastal Food Web")
 println("Generated DOT visualization ($(length(dot_str)) chars)")
 ```
 
-    Generated DOT visualization (1128 chars)
+    Generated DOT visualization (1126 chars)
 
 ``` julia
 using GraphViz
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](ecology_files/figure-markdown_strict/cell-24-output-1.svg)
+![](ecology_files/figure-commonmark/cell-24-output-1.svg)
 
 ### Serialization
 
@@ -803,53 +803,16 @@ end
 This vignette demonstrated how RDFLib.jl integrates multiple semantic
 web technologies for ecological modeling:
 
-<table>
-<colgroup>
-<col style="width: 29%" />
-<col style="width: 70%" />
-</colgroup>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Ecological Application</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>OWL Ontology</strong></td>
-<td>Species, habitats, trophic levels, feeding relationships</td>
-</tr>
-<tr>
-<td><strong>Tabular Mapping</strong></td>
-<td>Field survey data from DataFrames into the knowledge graph</td>
-</tr>
-<tr>
-<td><strong>SHACL Validation</strong></td>
-<td>Ensuring observation data completeness and correctness</td>
-</tr>
-<tr>
-<td><strong>SPARQL Queries</strong></td>
-<td>Querying species by trophic level, abundance, vulnerability</td>
-</tr>
-<tr>
-<td><strong>Property Paths</strong></td>
-<td>Tracing transitive food chains without recursion</td>
-</tr>
-<tr>
-<td><strong>Datalog Reasoning</strong></td>
-<td>Inferring indirect trophic dependencies and competition</td>
-</tr>
-<tr>
-<td><strong>ProbLog</strong></td>
-<td>Modeling the otter–urchin–kelp trophic cascade
-probabilistically</td>
-</tr>
-<tr>
-<td><strong>Visualization</strong></td>
-<td>Food web DOT graphs and graph statistics</td>
-</tr>
-</tbody>
-</table>
+| Feature | Ecological Application |
+|----|----|
+| **OWL Ontology** | Species, habitats, trophic levels, feeding relationships |
+| **Tabular Mapping** | Field survey data from DataFrames into the knowledge graph |
+| **SHACL Validation** | Ensuring observation data completeness and correctness |
+| **SPARQL Queries** | Querying species by trophic level, abundance, vulnerability |
+| **Property Paths** | Tracing transitive food chains without recursion |
+| **Datalog Reasoning** | Inferring indirect trophic dependencies and competition |
+| **ProbLog** | Modeling the otter–urchin–kelp trophic cascade probabilistically |
+| **Visualization** | Food web DOT graphs and graph statistics |
 
 The probabilistic trophic cascade analysis quantifies a well-known
 ecological phenomenon: removing apex predators (otters) dramatically

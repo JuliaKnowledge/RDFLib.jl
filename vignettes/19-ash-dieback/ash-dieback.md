@@ -1,5 +1,5 @@
 # Ash Dieback in the UK
-
+Simon Frost
 
 ## Introduction
 
@@ -347,8 +347,8 @@ remove!(g, Triple(bad, adb("surveyor"), Literal("Unknown")))
       Conforms: false
       ✗ Expected at least 1 values for http://example.org/ashdieback#observed_at, got 0
       ✗ Expected at least 1 values for http://example.org/ashdieback#has_disease_stage, got 0
-      ✗ Expected at least 1 values for http://example.org/ashdieback#infection_pct, got 0
       ✗ Expected at least 1 values for http://example.org/ashdieback#survey_date, got 0
+      ✗ Expected at least 1 values for http://example.org/ashdieback#infection_pct, got 0
 
     RDFGraph (368 triples)
 
@@ -776,7 +776,7 @@ using GraphViz
 GraphViz.load(IOBuffer(dot_str))
 ```
 
-![](ash-dieback_files/figure-markdown_strict/cell-22-output-1.svg)
+![](ash-dieback_files/figure-commonmark/cell-22-output-1.svg)
 
 ### Graph statistics
 
@@ -839,55 +839,16 @@ end
 
 This vignette modeled the UK ash dieback crisis as a knowledge graph:
 
-<table>
-<colgroup>
-<col style="width: 42%" />
-<col style="width: 57%" />
-</colgroup>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Application</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>OWL Ontology</strong></td>
-<td>Pathogens, host trees, symptoms, disease stages, dependent
-species</td>
-</tr>
-<tr>
-<td><strong>Tabular Mapping</strong></td>
-<td>Forest Research surveillance data from spreadsheets</td>
-</tr>
-<tr>
-<td><strong>SHACL Validation</strong></td>
-<td>Ensuring survey records have required fields</td>
-</tr>
-<tr>
-<td><strong>SPARQL Queries</strong></td>
-<td>Infection severity, obligate species, critical sites</td>
-</tr>
-<tr>
-<td><strong>Property Paths</strong></td>
-<td>Tracing pathogen → host → dependent species impact chains</td>
-</tr>
-<tr>
-<td><strong>Datalog Reasoning</strong></td>
-<td>Inferring extinction risk from host specificity + conservation
-status</td>
-</tr>
-<tr>
-<td><strong>ProbLog</strong></td>
-<td>Probabilistic woodland outcomes: management reduces rapid
-decline</td>
-</tr>
-<tr>
-<td><strong>Visualization</strong></td>
-<td>Disease impact network via GraphViz</td>
-</tr>
-</tbody>
-</table>
+| Feature | Application |
+|----|----|
+| **OWL Ontology** | Pathogens, host trees, symptoms, disease stages, dependent species |
+| **Tabular Mapping** | Forest Research surveillance data from spreadsheets |
+| **SHACL Validation** | Ensuring survey records have required fields |
+| **SPARQL Queries** | Infection severity, obligate species, critical sites |
+| **Property Paths** | Tracing pathogen → host → dependent species impact chains |
+| **Datalog Reasoning** | Inferring extinction risk from host specificity + conservation status |
+| **ProbLog** | Probabilistic woodland outcomes: management reduces rapid decline |
+| **Visualization** | Disease impact network via GraphViz |
 
 Key findings from the probabilistic model: active management
 significantly increases tree survival probability and shifts outcomes

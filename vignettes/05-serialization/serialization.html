@@ -2,13 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.9.28">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
 
 <title>Serialization Formats</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -65,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="serialization_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="serialization_files/libs/quarto-html/anchor.min.js"></script>
 <link href="serialization_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="serialization_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="serialization_files/libs/quarto-html/quarto-syntax-highlighting-49e51e44f424ea8c7044b429bdbbbfe2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="serialization_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="serialization_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="serialization_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="serialization_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../serialization.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="serialization.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -88,6 +93,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div class="quarto-title-meta">
 
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
     
   
     
@@ -102,7 +113,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>RDFLib.jl supports reading and writing RDF data in many formats. This vignette demonstrates each format with the same sample graph.</p>
 <div id="2" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">RDFLib</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Build a sample graph</span></span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">RDFGraph</span>()</span>
@@ -115,7 +126,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">ex</span>(<span class="st">"earth"</span>), <span class="fu">ex</span>(<span class="st">"radius_km"</span>), <span class="fu">Literal</span>(<span class="fl">6371</span>)))</span>
 <span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">ex</span>(<span class="st">"earth"</span>), <span class="fu">ex</span>(<span class="st">"hasMoon"</span>), <span class="fu">ex</span>(<span class="st">"moon"</span>)))</span>
 <span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">ex</span>(<span class="st">"moon"</span>), RDF.<span class="kw">type</span>, <span class="fu">ex</span>(<span class="st">"Moon"</span>)))</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">ex</span>(<span class="st">"moon"</span>), <span class="fu">RDFS</span>(<span class="st">"label"</span>), <span class="fu">Literal</span>(<span class="st">"The Moon"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">add!</span>(g, <span class="fu">Triple</span>(<span class="fu">ex</span>(<span class="st">"moon"</span>), <span class="fu">RDFS</span>(<span class="st">"label"</span>), <span class="fu">Literal</span>(<span class="st">"The Moon"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>RDFGraph (7 triples)</code></pre>
 </div>
@@ -125,8 +136,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="turtle">Turtle</h2>
 <p>Turtle is the most human-readable RDF format. It supports prefixes, abbreviations, and multi-value shorthand.</p>
 <div id="4" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>ttl <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(ttl)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>ttl <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(ttl)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -147,9 +158,9 @@ ex:moon a ex:Moon ;
 </div>
 </div>
 <div id="6" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Round-trip: parse back</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Round-trip: parse back</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>g2 <span class="op">=</span> <span class="fu">parse_rdf</span>(ttl, <span class="fu">TurtleFormat</span>())</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Round-trip: </span><span class="sc">$</span>(<span class="fu">length</span>(g2))<span class="st"> triples (original: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st">)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Round-trip: </span><span class="sc">$</span>(<span class="fu">length</span>(g2))<span class="st"> triples (original: </span><span class="sc">$</span>(<span class="fu">length</span>(g))<span class="st">)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Round-trip: 7 triples (original: 7)</code></pre>
 </div>
@@ -159,8 +170,8 @@ ex:moon a ex:Moon ;
 <h2 class="anchored" data-anchor-id="n-triples">N-Triples</h2>
 <p>N-Triples is the simplest line-based format — one triple per line, fully expanded URIs.</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>nt <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">NTriplesFormat</span>())</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(nt)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>nt <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">NTriplesFormat</span>())</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(nt)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>&lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .
 &lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; "Earth"@en .
@@ -173,8 +184,8 @@ ex:moon a ex:Moon ;
 </div>
 </div>
 <div id="10" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>g3 <span class="op">=</span> <span class="fu">parse_rdf</span>(nt, <span class="fu">NTriplesFormat</span>())</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Parsed: </span><span class="sc">$</span>(<span class="fu">length</span>(g3))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>g3 <span class="op">=</span> <span class="fu">parse_rdf</span>(nt, <span class="fu">NTriplesFormat</span>())</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Parsed: </span><span class="sc">$</span>(<span class="fu">length</span>(g3))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Parsed: 7 triples</code></pre>
 </div>
@@ -184,8 +195,8 @@ ex:moon a ex:Moon ;
 <h2 class="anchored" data-anchor-id="n3-notation3">N3 (Notation3)</h2>
 <p>N3 extends Turtle with formulas (quoted graphs), variables, and implications — the foundation for N3 reasoning.</p>
 <div id="12" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>n3_str <span class="op">=</span> <span class="fu">serialize_n3</span>(g)</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(n3_str)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>n3_str <span class="op">=</span> <span class="fu">serialize_n3</span>(g)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(n3_str)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -209,8 +220,8 @@ ex:moon a ex:Moon ;
 <h2 class="anchored" data-anchor-id="rdfxml">RDF/XML</h2>
 <p>The original RDF serialization format, based on XML.</p>
 <div id="14" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>rdfxml <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">RDFXMLFormat</span>())</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(rdfxml)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>rdfxml <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">RDFXMLFormat</span>())</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(rdfxml)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 &lt;rdf:RDF xmlns:ex="http://example.org/" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:skos="http://www.w3.org/2004/02/skos/core#" xmlns:xsd="http://www.w3.org/2001/XMLSchema#"&gt;
@@ -230,8 +241,8 @@ ex:moon a ex:Moon ;
 </div>
 </div>
 <div id="16" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>g4 <span class="op">=</span> <span class="fu">parse_rdf</span>(rdfxml, <span class="fu">RDFXMLFormat</span>())</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Parsed: </span><span class="sc">$</span>(<span class="fu">length</span>(g4))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>g4 <span class="op">=</span> <span class="fu">parse_rdf</span>(rdfxml, <span class="fu">RDFXMLFormat</span>())</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Parsed: </span><span class="sc">$</span>(<span class="fu">length</span>(g4))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Parsed: 7 triples</code></pre>
 </div>
@@ -241,8 +252,8 @@ ex:moon a ex:Moon ;
 <h2 class="anchored" data-anchor-id="json-ld">JSON-LD</h2>
 <p>JSON-LD embeds RDF in JSON, making it web-developer friendly.</p>
 <div id="18" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>jsonld <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">JSONLDFormat</span>())</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(jsonld)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>jsonld <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">JSONLDFormat</span>())</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(jsonld)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>{
     "@context": {
@@ -282,9 +293,9 @@ ex:moon a ex:Moon ;
 </div>
 </div>
 <div id="20" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parse JSON-LD</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Parse JSON-LD</span></span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>g5 <span class="op">=</span> <span class="fu">parse_rdf</span>(jsonld, <span class="fu">JSONLDFormat</span>())</span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Parsed: </span><span class="sc">$</span>(<span class="fu">length</span>(g5))<span class="st"> triples"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Parsed: </span><span class="sc">$</span>(<span class="fu">length</span>(g5))<span class="st"> triples"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Parsed: 7 triples</code></pre>
 </div>
@@ -292,21 +303,21 @@ ex:moon a ex:Moon ;
 <section id="json-ld-processing" class="level3">
 <h3 class="anchored" data-anchor-id="json-ld-processing">JSON-LD Processing</h3>
 <div id="22" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Expand — remove context, show full URIs</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Expand — remove context, show full URIs</span></span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>expanded <span class="op">=</span> <span class="fu">jsonld_expand</span>(jsonld)</span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Expanded:"</span>)</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(expanded)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(expanded)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Expanded:
 Dict{String, Any}[Dict("@graph" =&gt; Any[Dict{String, Any}("rdfs:label" =&gt; Any[Dict{String, Any}("@language" =&gt; "en", "@value" =&gt; "Earth"), Dict{String, Any}("@language" =&gt; "fr", "@value" =&gt; "Terre")], "@id" =&gt; "http://example.org/earth", "ex:hasMoon" =&gt; Dict{String, Any}("@id" =&gt; "http://example.org/moon"), "ex:radius_km" =&gt; 6371, "@type" =&gt; "http://example.org/Planet"), Dict{String, Any}("rdfs:label" =&gt; "The Moon", "@id" =&gt; "http://example.org/moon", "@type" =&gt; "http://example.org/Moon")])]</code></pre>
 </div>
 </div>
 <div id="24" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compact — apply a context to shorten URIs</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compact — apply a context to shorten URIs</span></span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>context <span class="op">=</span> <span class="fu">Dict</span><span class="dt">{String,Any}</span>(<span class="st">"@context"</span> <span class="op">=&gt;</span> <span class="fu">Dict</span><span class="dt">{String,Any}</span>(<span class="st">"ex"</span> <span class="op">=&gt;</span> <span class="st">"http://example.org/"</span>, <span class="st">"label"</span> <span class="op">=&gt;</span> <span class="st">"http://www.w3.org/2000/01/rdf-schema#label"</span>))</span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>compacted <span class="op">=</span> <span class="fu">jsonld_compact</span>(jsonld, context)</span>
 <span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Compacted:"</span>)</span>
-<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(compacted)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(compacted)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Compacted:
 Dict{String, Any}("@context" =&gt; Dict{String, Any}("@context" =&gt; Dict{String, Any}("label" =&gt; "http://www.w3.org/2000/01/rdf-schema#label", "ex" =&gt; "http://example.org/")), "@graph" =&gt; Any[Dict{String, Any}("rdfs:label" =&gt; Any[Dict{String, Any}("@language" =&gt; "en", "@value" =&gt; "Earth"), Dict{String, Any}("@language" =&gt; "fr", "@value" =&gt; "Terre")], "@id" =&gt; "http://example.org/earth", "ex:hasMoon" =&gt; Dict{String, Any}("@id" =&gt; "http://example.org/moon"), "ex:radius_km" =&gt; 6371, "@type" =&gt; "http://example.org/Planet"), Dict{String, Any}("rdfs:label" =&gt; "The Moon", "@id" =&gt; "http://example.org/moon", "@type" =&gt; "http://example.org/Moon")])</code></pre>
@@ -318,12 +329,12 @@ Dict{String, Any}("@context" =&gt; Dict{String, Any}("@context" =&gt; Dict{Strin
 <h2 class="anchored" data-anchor-id="n-quads">N-Quads</h2>
 <p>N-Quads extend N-Triples with a fourth element for named graphs.</p>
 <div id="26" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>ds <span class="op">=</span> <span class="fu">Dataset</span>()</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>ds <span class="op">=</span> <span class="fu">Dataset</span>()</span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> g</span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">add!</span>(ds, t)</span>
 <span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
 <span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>nq <span class="op">=</span> <span class="fu">serialize_nquads</span>(ds)</span>
-<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(nq)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(nq)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>&lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .
 &lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; "Earth"@en .
@@ -340,8 +351,8 @@ Dict{String, Any}("@context" =&gt; Dict{String, Any}("@context" =&gt; Dict{Strin
 <h2 class="anchored" data-anchor-id="trig">TriG</h2>
 <p>TriG extends Turtle with named graph support.</p>
 <div id="28" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>trig <span class="op">=</span> <span class="fu">serialize_trig</span>(ds)</span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(trig)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>trig <span class="op">=</span> <span class="fu">serialize_trig</span>(ds)</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(trig)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
 @prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
@@ -366,8 +377,8 @@ Dict{String, Any}("@context" =&gt; Dict{String, Any}("@context" =&gt; Dict{Strin
 <h2 class="anchored" data-anchor-id="trix">TriX</h2>
 <p>TriX is an XML-based format for named graphs.</p>
 <div id="30" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>trix <span class="op">=</span> <span class="fu">serialize_trix</span>(g)</span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(trix)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>trix <span class="op">=</span> <span class="fu">serialize_trix</span>(g)</span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(trix)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>&lt;?xml version="1.0" encoding="utf-8"?&gt;
 &lt;TriX xmlns="http://www.w3.org/2004/03/trix/trix-1/"&gt;
@@ -417,8 +428,8 @@ Dict{String, Any}("@context" =&gt; Dict{String, Any}("@context" =&gt; Dict{Strin
 <h2 class="anchored" data-anchor-id="hextuples-hext">HexTuples (HEXT)</h2>
 <p>A line-based JSON format, one array per triple.</p>
 <div id="32" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>hext <span class="op">=</span> <span class="fu">serialize_hextuples</span>(g)</span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(hext)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>hext <span class="op">=</span> <span class="fu">serialize_hextuples</span>(g)</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(hext)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>["http://example.org/earth","http://www.w3.org/1999/02/22-rdf-syntax-ns#type","http://example.org/Planet","globalId","",""]
 ["http://example.org/earth","http://www.w3.org/2000/01/rdf-schema#label","Earth","http://www.w3.org/1999/02/22-rdf-syntax-ns#langString","en",""]
@@ -435,8 +446,8 @@ Dict{String, Any}("@context" =&gt; Dict{String, Any}("@context" =&gt; Dict{Strin
 <h2 class="anchored" data-anchor-id="long-turtle">Long Turtle</h2>
 <p>Verbose Turtle with one triple per line (useful for diffs).</p>
 <div id="34" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>lt <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
-<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(lt)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>lt <span class="op">=</span> <span class="fu">serialize</span>(g, <span class="fu">TurtleFormat</span>())</span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(lt)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>@prefix ex: &lt;http://example.org/&gt; .
 @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
@@ -461,11 +472,11 @@ ex:moon a ex:Moon ;
 <h2 class="anchored" data-anchor-id="rdf-patch">RDF Patch</h2>
 <p>RDF Patch represents changes (additions/deletions) to a graph.</p>
 <div id="36" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="co"># serialize_rdfpatch takes additions and deletions vectors</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="co"># serialize_rdfpatch takes additions and deletions vectors</span></span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>additions <span class="op">=</span> <span class="fu">collect</span>(g)</span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>deletions <span class="op">=</span> Triple[]</span>
 <span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>patch <span class="op">=</span> <span class="fu">serialize_rdfpatch</span>(additions, deletions)</span>
-<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">first</span>(patch, <span class="fl">500</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="fu">first</span>(patch, <span class="fl">500</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>TX .
 A &lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .
@@ -482,35 +493,35 @@ A &lt;http://exa</code></pre>
 <section id="saving-to-files" class="level3">
 <h3 class="anchored" data-anchor-id="saving-to-files">Saving to Files</h3>
 <div id="38" class="cell" data-execution_count="0">
-<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Format is auto-detected from file extension</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Format is auto-detected from file extension</span></span>
 <span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="fu">save_rdf</span>(g, <span class="st">"planets.ttl"</span>)          <span class="co"># Turtle</span></span>
 <span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="fu">save_rdf</span>(g, <span class="st">"planets.nt"</span>)           <span class="co"># N-Triples</span></span>
 <span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="fu">save_rdf</span>(g, <span class="st">"planets.jsonld"</span>)       <span class="co"># JSON-LD</span></span>
 <span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a><span class="fu">save_rdf</span>(g, <span class="st">"planets.rdf"</span>)          <span class="co"># RDF/XML</span></span>
 <span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Or specify format explicitly</span></span>
-<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a><span class="fu">save_rdf</span>(g, <span class="st">"planets.dat"</span>; format<span class="op">=</span><span class="fu">NTriplesFormat</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a><span class="fu">save_rdf</span>(g, <span class="st">"planets.dat"</span>; format<span class="op">=</span><span class="fu">NTriplesFormat</span>())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="loading-from-files" class="level3">
 <h3 class="anchored" data-anchor-id="loading-from-files">Loading from Files</h3>
 <div id="40" class="cell" data-execution_count="0">
-<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Format auto-detected from extension</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Format auto-detected from extension</span></span>
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">load_rdf_file</span>(<span class="st">"planets.ttl"</span>)</span>
 <span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Explicit format</span></span>
-<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">load_rdf_file</span>(<span class="st">"planets.dat"</span>; format<span class="op">=</span><span class="fu">NTriplesFormat</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="fu">load_rdf_file</span>(<span class="st">"planets.dat"</span>; format<span class="op">=</span><span class="fu">NTriplesFormat</span>())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 </section>
 <section id="content-negotiation" class="level2">
 <h2 class="anchored" data-anchor-id="content-negotiation">Content Negotiation</h2>
 <div id="42" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Get MIME types for formats</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Get MIME types for formats</span></span>
 <span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"Turtle:    "</span>, <span class="fu">mime_type</span>(<span class="fu">TurtleFormat</span>()))</span>
 <span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"JSON-LD:   "</span>, <span class="fu">mime_type</span>(<span class="fu">JSONLDFormat</span>()))</span>
 <span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"RDF/XML:   "</span>, <span class="fu">mime_type</span>(<span class="fu">RDFXMLFormat</span>()))</span>
-<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N-Triples: "</span>, <span class="fu">mime_type</span>(<span class="fu">NTriplesFormat</span>()))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">"N-Triples: "</span>, <span class="fu">mime_type</span>(<span class="fu">NTriplesFormat</span>()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Turtle:    text/turtle
 JSON-LD:   application/ld+json
@@ -652,13 +663,14 @@ N-Triples: application/n-triples</code></pre>
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

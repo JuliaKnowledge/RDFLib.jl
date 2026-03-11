@@ -310,4 +310,127 @@
         vertex = parse_wkt("POINT (0 0)")
         @test geo_touches(vertex, poly) == true
     end
+
+    @testset "GeoSPARQL 1.3 - 3D Support" begin
+        @testset "3D Point" begin
+            p = parse_wkt("POINT Z (1 2 3)")
+            @test p isa GeoPoint
+            @test p.x == 1.0
+            @test p.y == 2.0
+            @test p.z == 3.0
+            @test geo_is_3d(p) == true
+            
+            p2 = parse_wkt("POINT (4 5)")
+            @test isnan(p2.z)
+            @test geo_is_3d(p2) == false
+            
+            # WKT roundtrip
+            @test to_wkt(p) == "POINT Z (1.0 2.0 3.0)"
+            @test to_wkt(p2) == "POINT (4.0 5.0)"
+        end
+
+        @testset "3D LineString" begin
+            ls = parse_wkt("LINESTRING Z (0 0 0, 1 1 1, 2 0 2)")
+            @test ls isa GeoLineString
+            @test length(ls.points) == 3
+            @test ls.points[1].z == 0.0
+            @test ls.points[2].z == 1.0
+            @test ls.points[3].z == 2.0
+            @test geo_is_3d(ls) == true
+            @test startswith(to_wkt(ls), "LINESTRING Z")
+        end
+
+        @testset "3D Polygon" begin
+            poly = parse_wkt("POLYGON Z ((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))")
+            @test poly isa GeoPolygon
+            @test length(poly.exterior) == 5
+            @test poly.exterior[1].z == 0.0
+            @test geo_is_3d(poly) == true
+            @test startswith(to_wkt(poly), "POLYGON Z")
+        end
+
+        @testset "3D Distance" begin
+            a = GeoPoint(0.0, 0.0, 0.0)
+            b = GeoPoint(1.0, 0.0, 0.0)
+            @test geo_distance(a, b) == 1.0
+            
+            c = GeoPoint(0.0, 0.0, 1.0)
+            @test geo_distance(a, c) == 1.0
+            
+            d = GeoPoint(1.0, 1.0, 1.0)
+            @test geo_distance(a, d) ≈ sqrt(3.0)
+        end
+
+        @testset "3D Equality" begin
+            a = GeoPoint(1.0, 2.0, 3.0)
+            b = GeoPoint(1.0, 2.0, 3.0)
+            c = GeoPoint(1.0, 2.0, 4.0)
+            d = GeoPoint(1.0, 2.0)  # 2D
+            @test geo_equals(a, b) == true
+            @test geo_equals(a, c) == false
+            @test geo_equals(a, d) == false
+        end
+
+        @testset "GeoJSON 3D" begin
+            p = GeoPoint(1.0, 2.0, 3.0)
+            json = to_geojson(p)
+            @test occursin("[1.0,2.0,3.0]", json)
+            
+            p2 = GeoPoint(1.0, 2.0)
+            json2 = to_geojson(p2)
+            @test occursin("[1.0,2.0]", json2)
+            @test !occursin("NaN", json2)
+        end
+
+        @testset "PolyhedralSurface" begin
+            # Unit cube bottom face
+            wkt = "POLYHEDRALSURFACE Z (((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0)), ((0 0 1, 1 0 1, 1 1 1, 0 1 1, 0 0 1)))"
+            ps = parse_wkt(wkt)
+            @test ps isa GeoPolyhedralSurface
+            @test length(ps.patches) == 2
+            @test geo_is_3d(ps) == true
+            @test geo_geometry_type(ps) == "PolyhedralSurface"
+            @test geo_num_geometries(ps) == 2
+            @test geo_is_empty(ps) == false
+            @test startswith(to_wkt(ps), "POLYHEDRALSURFACE Z")
+        end
+
+        @testset "TIN" begin
+            wkt = "TIN Z (((0 0 0, 1 0 0, 0 1 0, 0 0 0)), ((0 0 0, 0 1 0, 0 0 1, 0 0 0)))"
+            tin = parse_wkt(wkt)
+            @test tin isa GeoTIN
+            @test length(tin.triangles) == 2
+            @test geo_is_3d(tin) == true
+            @test geo_geometry_type(tin) == "TIN"
+            @test geo_num_geometries(tin) == 2
+        end
+
+        @testset "Volume and Surface Area" begin
+            # Tetrahedron: vertices at (0,0,0), (1,0,0), (0,1,0), (0,0,1)
+            # Volume = 1/6
+            faces = [
+                GeoPolygon([GeoPoint(0,0,0), GeoPoint(1,0,0), GeoPoint(0,1,0), GeoPoint(0,0,0)], Vector{GeoPoint}[]),
+                GeoPolygon([GeoPoint(0,0,0), GeoPoint(0,0,1), GeoPoint(1,0,0), GeoPoint(0,0,0)], Vector{GeoPoint}[]),
+                GeoPolygon([GeoPoint(0,0,0), GeoPoint(0,1,0), GeoPoint(0,0,1), GeoPoint(0,0,0)], Vector{GeoPoint}[]),
+                GeoPolygon([GeoPoint(1,0,0), GeoPoint(0,0,1), GeoPoint(0,1,0), GeoPoint(1,0,0)], Vector{GeoPoint}[]),
+            ]
+            ps = GeoPolyhedralSurface(faces)
+            @test geo_volume(ps) ≈ 1/6 atol=0.01
+            @test geo_surface_area(ps) > 0.0
+        end
+
+        @testset "is_measured" begin
+            @test geo_is_measured(GeoPoint(1.0, 2.0)) == false
+            @test geo_is_measured(GeoPoint(1.0, 2.0, 3.0)) == false
+        end
+
+        @testset "ZM parsing" begin
+            # ZM should parse, M value ignored
+            p = parse_wkt("POINT ZM (1 2 3 4)")
+            @test p isa GeoPoint
+            @test p.x == 1.0
+            @test p.y == 2.0
+            @test p.z == 3.0
+        end
+    end
 end

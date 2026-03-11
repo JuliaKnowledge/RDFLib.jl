@@ -37,6 +37,11 @@ n3(u)  # "<http://example.org/resource>"
 """
 struct URIRef <: IdentifiedNode
     value::String
+    _hash::UInt
+    function URIRef(v::AbstractString)
+        s = String(v)
+        new(s, hash(s, hash(:URIRef, zero(UInt))))
+    end
 end
 
 URIRef(u::URIRef) = u
@@ -44,7 +49,7 @@ URIRef(u::URIRef) = u
 Base.string(u::URIRef) = u.value
 Base.show(io::IO, u::URIRef) = print(io, "URIRef(\"", u.value, "\")")
 Base.:(==)(a::URIRef, b::URIRef) = a.value == b.value
-Base.hash(a::URIRef, h::UInt) = hash(a.value, hash(:URIRef, h))
+Base.hash(a::URIRef, h::UInt) = hash(a._hash, h)
 Base.isless(a::URIRef, b::URIRef) = isless(a.value, b.value)
 
 """
@@ -90,20 +95,30 @@ n3(b)  # "_:N<hex>"
 """
 struct BNode <: IdentifiedNode
     id::String
+    _hash::UInt
 
     function BNode(id::AbstractString)
-        new(String(id))
+        s = String(id)
+        new(s, hash(s, hash(:BNode, zero(UInt))))
     end
 end
 
+# Fast BNode ID generation using Random instead of UUID
+const _BNODE_HEX = collect("0123456789abcdef")
 function BNode()
-    BNode("N" * replace(string(uuid4()), "-" => ""))
+    # Generate 32-char hex string directly — avoids uuid4() overhead
+    buf = Vector{UInt8}(undef, 33)
+    buf[1] = UInt8('N')
+    @inbounds for i in 2:33
+        buf[i] = UInt8(_BNODE_HEX[rand(1:16)])
+    end
+    BNode(String(buf))
 end
 
 Base.string(b::BNode) = b.id
 Base.show(io::IO, b::BNode) = print(io, "BNode(\"", b.id, "\")")
 Base.:(==)(a::BNode, b::BNode) = a.id == b.id
-Base.hash(a::BNode, h::UInt) = hash(a.id, hash(:BNode, h))
+Base.hash(a::BNode, h::UInt) = hash(a._hash, h)
 Base.isless(a::BNode, b::BNode) = isless(a.id, b.id)
 
 n3(b::BNode) = string("_:", b.id)
@@ -133,6 +148,7 @@ struct Literal <: Identifier
     lexical::String
     datatype::Union{URIRef, Nothing}
     language::Union{String, Nothing}
+    _hash::UInt
 
     function Literal(lexical::AbstractString;
                      datatype::Union{URIRef, Nothing}=nothing,
@@ -144,7 +160,11 @@ struct Literal <: Identifier
             end
         end
         language = isnothing(lang) ? nothing : lowercase(String(lang))
-        new(String(lexical), datatype, language)
+        lex = String(lexical)
+        h = hash(lex, hash(:Literal, zero(UInt)))
+        h = hash(datatype, h)
+        h = hash(language, h)
+        new(lex, datatype, language, h)
     end
 end
 
@@ -183,9 +203,7 @@ function Base.:(==)(a::Literal, b::Literal)
 end
 
 function Base.hash(a::Literal, h::UInt)
-    h = hash(a.lexical, hash(:Literal, h))
-    h = hash(a.datatype, h)
-    hash(a.language, h)
+    hash(a._hash, h)
 end
 
 """
@@ -261,7 +279,17 @@ function n3(lit::Literal)
 end
 
 function _escape_literal(s::AbstractString)
-    buf = IOBuffer()
+    # Fast path: if no special characters, return as-is
+    needs_escape = false
+    for c in s
+        if c == '\\' || c == '"' || c == '\n' || c == '\r' || c == '\t'
+            needs_escape = true
+            break
+        end
+    end
+    needs_escape || return String(s)
+
+    buf = IOBuffer(sizehint=sizeof(s) + 16)
     for c in s
         if c == '\\'
             write(buf, "\\\\")

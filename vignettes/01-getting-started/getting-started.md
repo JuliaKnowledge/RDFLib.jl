@@ -1,5 +1,5 @@
 # Getting Started with RDFLib.jl
-
+Simon Frost
 
 ## Introduction
 
@@ -16,9 +16,7 @@ your first graph, and performing simple operations.
 
 ``` julia
 using Pkg
-Pkg.develop(path="/path/to/RDFLib.jl")
-# Or from a remote repository:
-# Pkg.add(url="https://github.com/your-org/RDFLib.jl")
+Pkg.add(url="https://github.com/JuliaKnowledge/RDFLib.jl")
 ```
 
 ## Loading the Package
@@ -179,8 +177,8 @@ end
 
     All people:
       URIRef("http://example.org/alice") — Literal("Alice")
-      URIRef("http://example.org/bob") — Literal("Bob")
       URIRef("http://example.org/carol") — Literal("Carol")
+      URIRef("http://example.org/bob") — Literal("Bob")
 
 ## SPARQL Queries
 
@@ -209,24 +207,30 @@ end
 
 This was a quick taste of RDFLib.jl. Subsequent vignettes cover:
 
--   **RDF Terms** — URIs, literals, blank nodes, and data types in depth
--   **Building Graphs** — advanced graph construction patterns
--   **Namespaces** — managing and creating vocabularies
--   **Serialization** — all supported formats (Turtle, JSON-LD, RDF/XML,
-    N3, etc.)
--   **SPARQL** — full query and update support
--   **Collections & Containers** — RDF lists and containers
--   **Datasets** — named graphs and quads
--   **Inference** — RDFS and OWL entailment
--   **N3 Reasoning** — forward/backward chaining with the built-in
-    reasoner
--   **SHACL Validation** — validating graphs against shape constraints
--   **Store Backends** — SQLite, DuckDB, LMDB, and remote SPARQL
-    endpoints
--   **Tabular Mapping** — convert DataFrames/CSV to RDF with OTTR
-    templates
--   **Datalog** — semi-naive bottom-up reasoning
--   **ProbLog** — probabilistic logic programming with exact BDD
-    inference
--   **Property Paths** — navigate graphs with SPARQL path expressions
--   **Graph Utilities** — isomorphism, CBD, VoID, visualization
+- **RDF Terms** — URIs, literals, blank nodes, and data types in depth
+- **Building Graphs** — advanced graph construction patterns
+- **Namespaces** — managing and creating vocabularies
+- **Serialization** — all supported formats (Turtle, JSON-LD, RDF/XML,
+  N3, etc.)
+- **SPARQL** — full query and update support
+- **Collections & Containers** — RDF lists and containers
+- **Datasets** — named graphs and quads
+- **Inference** — RDFS and OWL entailment
+- **N3 Reasoning** — forward/backward chaining with the built-in
+  reasoner
+- **SHACL Validation** — validating graphs against shape constraints
+- **Store Backends** — SQLite, DuckDB, LMDB, and remote SPARQL endpoints
+- **Tabular Mapping** — convert DataFrames/CSV to RDF with OTTR
+  templates
+- **Datalog** — semi-naive bottom-up reasoning
+- **ProbLog** — probabilistic logic programming with exact BDD inference
+- **Property Paths** — navigate graphs with SPARQL path expressions
+- **Graph Utilities** — isomorphism, CBD, VoID, visualization
+- **Ecology Example** — an advanced end-to-end case study modeling a
+  marine food web
+- **Ash Dieback** — modeling UK ash dieback disease spread and
+  ecological impact
+- **Bayesian Belief Networks** — BBN analysis of species interaction
+  networks using bbnet data
+- **Epidemiology** — comprehensive infectious disease surveillance and
+  outbreak analysis

@@ -1,5 +1,5 @@
 # Graph Utilities
-
+Simon Frost
 
 ## Overview
 
@@ -152,9 +152,9 @@ end
 
     CBD of alice: 4 triples
       URIRef("http://example.org/alice") URIRef("http://xmlns.com/foaf/0.1/name") Literal("Alice")
-      URIRef("http://example.org/alice") URIRef("http://example.org/address") BNode("N6ab79d06af43482391610d8c03f7ba5d")
-      BNode("N6ab79d06af43482391610d8c03f7ba5d") URIRef("http://example.org/street") Literal("123 Main St")
-      BNode("N6ab79d06af43482391610d8c03f7ba5d") URIRef("http://example.org/city") Literal("Springfield")
+      URIRef("http://example.org/alice") URIRef("http://example.org/address") BNode("Ndc6808dc74dfe284659b30f235ade94d")
+      BNode("Ndc6808dc74dfe284659b30f235ade94d") URIRef("http://example.org/street") Literal("123 Main St")
+      BNode("Ndc6808dc74dfe284659b30f235ade94d") URIRef("http://example.org/city") Literal("Springfield")
 
 ## Subjects, Predicates, Objects
 
@@ -209,10 +209,10 @@ end
 ```
 
     Ancestors of a (transitive):
+      URIRef("http://example.org/c")
+      URIRef("http://example.org/a")
       URIRef("http://example.org/b")
       URIRef("http://example.org/d")
-      URIRef("http://example.org/a")
-      URIRef("http://example.org/c")
 
 You can also traverse backwards with `transitive_subjects`:
 
@@ -225,10 +225,10 @@ end
 ```
 
     Descendants of d (inverse transitive):
+      URIRef("http://example.org/c")
+      URIRef("http://example.org/a")
       URIRef("http://example.org/b")
       URIRef("http://example.org/d")
-      URIRef("http://example.org/a")
-      URIRef("http://example.org/c")
 
 ## Skolemization
 
@@ -248,8 +248,8 @@ end
 ```
 
     Skolemized graph:
-      URIRef("http://example.org/s") URIRef("http://example.org/p") URIRef("https://rdflib.github.io/.well-known/genid/N65ecd423bcd84025a1b2f1a73c2d6f95")
-      URIRef("https://rdflib.github.io/.well-known/genid/N65ecd423bcd84025a1b2f1a73c2d6f95") URIRef("http://example.org/q") Literal("hello")
+      URIRef("http://example.org/s") URIRef("http://example.org/p") URIRef("https://rdflib.github.io/.well-known/genid/N38086dce0d57c36235bf78b5eb50cd4d")
+      URIRef("https://rdflib.github.io/.well-known/genid/N38086dce0d57c36235bf78b5eb50cd4d") URIRef("http://example.org/q") Literal("hello")
 
 ## Visualization
 
@@ -269,14 +269,14 @@ println(dot)
       rankdir=LR;
       label="Friendship Graph";
 
-      n1 [shape=box, label="Bob"];
+      n1 [shape=box, label="Alice"];
       n2 [label="ns1:alice"];
-      n3 [shape=box, label="Alice"];
+      n3 [shape=box, label="Bob"];
       n4 [label="ns1:bob"];
 
-      n2 -> n3 [label="ns2:name"];
+      n2 -> n1 [label="ns2:name"];
       n2 -> n4 [label="ns2:knows"];
-      n4 -> n1 [label="ns2:name"];
+      n4 -> n3 [label="ns2:name"];
     }
 
 To render this as an image, pipe the output to Graphviz:
@@ -319,21 +319,21 @@ println(serialize(void_graph, TurtleFormat()))
         void:distinctObjects 6 ;
         void:distinctSubjects 2 ;
         void:properties 4 ;
-        void:propertyPartition [ void:property rdf:type ;
+        void:propertyPartition [ void:property ns2:age ;
             void:triples 2 ],
-            [ void:property ns2:age ;
+            [ void:property rdf:type ;
+            void:triples 2 ],
+            [ void:property ns2:name ;
             void:triples 2 ],
             [ void:property ns2:knows ;
-            void:triples 1 ],
-            [ void:property ns2:name ;
-            void:triples 2 ] ;
+            void:triples 1 ] ;
         void:triples 7 .
 
 ## What’s Next?
 
--   **SPARQL Queries** — query graphs with the full SPARQL 1.1 language
-    ([vignette 06](../06-sparql-queries/sparql-queries.qmd))
--   **Property Paths** — navigate graphs with `/`, `*`, `+`, `^`
-    ([vignette 16](../16-property-paths/property-paths.qmd))
--   **SHACL Validation** — validate graph structure against shapes
-    ([vignette 11](../11-shacl-validation/shacl-validation.qmd))
+- **SPARQL Queries** — query graphs with the full SPARQL 1.1 language
+  ([vignette 06](../06-sparql-queries/sparql-queries.qmd))
+- **Property Paths** — navigate graphs with `/`, `*`, `+`, `^`
+  ([vignette 16](../16-property-paths/property-paths.qmd))
+- **SHACL Validation** — validate graph structure against shapes
+  ([vignette 11](../11-shacl-validation/shacl-validation.qmd))

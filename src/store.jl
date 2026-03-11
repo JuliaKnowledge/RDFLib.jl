@@ -24,6 +24,9 @@ mutable struct MemoryStore <: AbstractStore
     spo::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     pos::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
     osp::Dict{Identifier, Dict{Identifier, Set{Identifier}}}
+    # Flat indices for fast single-key queries (S?? and ?P?)
+    pred_flat::Dict{Identifier, Vector{Triple}}
+    subj_flat::Dict{Identifier, Vector{Triple}}
     count::Int
     insertion_order::Vector{Triple}  # Preserve insertion order for deterministic iteration
     indexed::Bool  # Whether SPO index is built
@@ -34,10 +37,12 @@ MemoryStore() = MemoryStore(
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
     Dict{Identifier, Dict{Identifier, Set{Identifier}}}(),
+    Dict{Identifier, Vector{Triple}}(),
+    Dict{Identifier, Vector{Triple}}(),
     0,
     Triple[],
     true,
-    true
+    false  # secondary indices built lazily on first pattern query
 )
 
 # Build SPO index from insertion_order (lazy build after bulk insert)
@@ -66,12 +71,16 @@ function _build_secondary_indices!(store::MemoryStore)
     store.secondary_indexed && return
     empty!(store.pos)
     empty!(store.osp)
+    empty!(store.pred_flat)
+    empty!(store.subj_flat)
     for t in store.insertion_order
         s, p, o = t.subject, t.predicate, t.object
         po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
         push!(get!(Set{Identifier}, po, o), s)
         os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
         push!(get!(Set{Identifier}, os, s), p)
+        push!(get!(Vector{Triple}, store.pred_flat, p), t)
+        push!(get!(Vector{Triple}, store.subj_flat, s), t)
     end
     store.secondary_indexed = true
 end
@@ -102,12 +111,14 @@ function _add_unchecked!(store::MemoryStore, t::Triple)
     sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
     push!(get!(Set{Identifier}, sp, p), o)
 
-    # POS/OSP indices (only if already built)
+    # POS/OSP/flat indices (only if already built)
     if store.secondary_indexed
         po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
         push!(get!(Set{Identifier}, po, o), s)
         os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
         push!(get!(Set{Identifier}, os, s), p)
+        push!(get!(Vector{Triple}, store.pred_flat, p), t)
+        push!(get!(Vector{Triple}, store.subj_flat, s), t)
     end
 
     push!(store.insertion_order, t)
@@ -129,6 +140,8 @@ function _defer_indexing!(store::MemoryStore)
     empty!(store.spo)
     empty!(store.pos)
     empty!(store.osp)
+    empty!(store.pred_flat)
+    empty!(store.subj_flat)
     nothing
 end
 
@@ -155,6 +168,8 @@ function _rebuild_indices!(store::MemoryStore; skip_dedup::Bool=false)
     empty!(store.spo)
     empty!(store.pos)
     empty!(store.osp)
+    empty!(store.pred_flat)
+    empty!(store.subj_flat)
     nothing
 end
 
@@ -201,6 +216,14 @@ function _remove_from_indices!(store::MemoryStore, t::Triple)
             isempty(store.osp[o][s]) && delete!(store.osp[o], s)
             isempty(store.osp[o]) && delete!(store.osp, o)
         end
+
+        # Flat indices: remove from pred_flat and subj_flat
+        if haskey(store.pred_flat, p)
+            filter!(x -> x !== t, store.pred_flat[p])
+        end
+        if haskey(store.subj_flat, s)
+            filter!(x -> x !== t, store.subj_flat[s])
+        end
     end
 
     store.count -= 1
@@ -214,59 +237,62 @@ Iterate all triples matching the given pattern. `nothing` in any position is a w
 function triples(store::MemoryStore, pattern::TriplePattern)
     _ensure_all_indexed!(store)
     s, p, o = pattern
-    Channel{Triple}() do ch
-        _triples_inner(store, s, p, o, ch)
-    end
+    _collect_triples(store, s, p, o)
 end
 
-function _triples_inner(store::MemoryStore, s, p, o, ch::Channel{Triple})
+function _collect_triples(store::MemoryStore, s, p, o)::Vector{Triple}
+    result = Triple[]
     if !isnothing(s) && !isnothing(p) && !isnothing(o)
         # Fully bound — just check existence via index
         if haskey(store.spo, s) && haskey(store.spo[s], p) && o in store.spo[s][p]
-            put!(ch, Triple(s, p, o))
+            push!(result, Triple(s, p, o))
         end
     elseif !isnothing(s) && !isnothing(p)
-        # S P ? — check index exists, then iterate in insertion order
+        # S P ? — iterate objects from SPO index
         if haskey(store.spo, s) && haskey(store.spo[s], p)
-            for t in store.insertion_order
-                t.subject == s && t.predicate == p && put!(ch, t)
+            for obj in store.spo[s][p]
+                push!(result, Triple(s, p, obj))
             end
         end
     elseif !isnothing(s) && !isnothing(o)
+        # S ? O — iterate predicates from OSP index
         if haskey(store.osp, o) && haskey(store.osp[o], s)
-            for t in store.insertion_order
-                t.subject == s && t.object == o && put!(ch, t)
+            for pred in store.osp[o][s]
+                push!(result, Triple(s, pred, o))
             end
         end
     elseif !isnothing(p) && !isnothing(o)
+        # ? P O — iterate subjects from POS index
         if haskey(store.pos, p) && haskey(store.pos[p], o)
-            for t in store.insertion_order
-                t.predicate == p && t.object == o && put!(ch, t)
+            for subj in store.pos[p][o]
+                push!(result, Triple(subj, p, o))
             end
         end
     elseif !isnothing(s)
-        if haskey(store.spo, s)
-            for t in store.insertion_order
-                t.subject == s && put!(ch, t)
-            end
+        # S ? ? — use flat subject index
+        if haskey(store.subj_flat, s)
+            return copy(store.subj_flat[s])
         end
     elseif !isnothing(p)
-        if haskey(store.pos, p)
-            for t in store.insertion_order
-                t.predicate == p && put!(ch, t)
-            end
+        # ? P ? — use flat predicate index
+        if haskey(store.pred_flat, p)
+            return copy(store.pred_flat[p])
         end
     elseif !isnothing(o)
+        # ? ? O — iterate subjects then predicates from OSP
         if haskey(store.osp, o)
-            for t in store.insertion_order
-                t.object == o && put!(ch, t)
+            for (subj, preds) in store.osp[o]
+                for pred in preds
+                    push!(result, Triple(subj, pred, o))
+                end
             end
         end
     else
         for t in store.insertion_order
-            put!(ch, t)
+            push!(result, t)
         end
     end
+    return result
 end
 
 Base.length(store::MemoryStore) = store.count
@@ -277,6 +303,8 @@ function add_bulk!(store::MemoryStore, triples_vec::Vector{Triple})
     sizehint!(store.spo, n ÷ 4)
     sizehint!(store.pos, 16)
     sizehint!(store.osp, n ÷ 2)
+    empty!(store.pred_flat)
+    empty!(store.subj_flat)
     for t in triples_vec
         s, p, o = t.subject, t.predicate, t.object
         # SPO index
@@ -291,8 +319,13 @@ function add_bulk!(store::MemoryStore, triples_vec::Vector{Triple})
         os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
         preds = get!(Set{Identifier}, os, s)
         push!(preds, p)
+        # Flat indices
+        push!(get!(Vector{Triple}, store.pred_flat, p), t)
+        push!(get!(Vector{Triple}, store.subj_flat, s), t)
     end
     store.insertion_order = copy(triples_vec)
     store.count = n
+    store.indexed = true
+    store.secondary_indexed = true
     store
 end

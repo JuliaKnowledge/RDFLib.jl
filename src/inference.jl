@@ -94,7 +94,7 @@ function _fixed_point!(g::RDFGraph, apply_fn!)
 end
 
 function _collect_triples(g::RDFGraph, pattern::TriplePattern)
-    collect(triples(g, pattern))
+    triples(g, pattern)
 end
 
 # ─── RDFS Rules ─────────────────────────────────────────────────────

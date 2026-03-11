@@ -1,5 +1,5 @@
 # Probabilistic Logic Programming
-
+Simon Frost
 
 ## Overview
 
@@ -214,9 +214,9 @@ end
 
 ## What’s Next?
 
--   The ProbLog module matches Python ProbLog’s exact inference results
--   It uses BDD-based weighted model counting for precise probabilities
--   For non-probabilistic logic, see the [Datalog
-    vignette](../14-datalog/datalog.qmd)
--   For N3 rule-based reasoning, see the [N3 Reasoning
-    vignette](../10-n3-reasoning/n3-reasoning.qmd)
+- The ProbLog module matches Python ProbLog’s exact inference results
+- It uses BDD-based weighted model counting for precise probabilities
+- For non-probabilistic logic, see the [Datalog
+  vignette](../14-datalog/datalog.qmd)
+- For N3 rule-based reasoning, see the [N3 Reasoning
+  vignette](../10-n3-reasoning/n3-reasoning.qmd)
