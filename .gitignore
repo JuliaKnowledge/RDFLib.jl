@@ -13,6 +13,9 @@ deps/build.log
 # Benchmarks output
 benchmarks/*.json
 
+# Documenter.jl build output
+docs/build/
+
 # Temporary files
 *.tmp
 *.bak
