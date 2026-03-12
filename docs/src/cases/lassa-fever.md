@@ -38,26 +38,7 @@ al. (2021)](https://www.nature.com/articles/s41467-021-25910-y).
 
 ### Analysis pipeline
 
-``` mermaid
-flowchart LR
-    A["📊 NCDC\nSurveillance\nData"] --> B["🔗 Tabular\nMapping"]
-    B --> C["🧠 Knowledge\nGraph"]
-    D["🌍 Spatial\nAdjacency"] --> B
-    E["📖 OWL\nOntology"] --> C
-    C --> F["🔍 SPARQL\nQueries"]
-    C --> G["📐 GeoSPARQL\nSpatial"]
-    C --> H["✅ SHACL\nValidation"]
-    C --> I["⚙️ N3/Datalog\nReasoning"]
-    C --> J["🎲 ProbLog\nProbabilistic"]
-    F --> K["📈 Epi\nInsights"]
-    G --> K
-    I --> K
-    J --> K
-
-    style A fill:#e1f5fe
-    style C fill:#fff3e0
-    style K fill:#e8f5e9
-```
+![Analysis Pipeline](mermaid/pipeline.svg)
 
 ## Setup
 
@@ -105,54 +86,7 @@ bind!(g, "skos", SKOS)
 
 The ontology models key entities in the Lassa fever surveillance domain:
 
-``` mermaid
-classDiagram
-    direction TB
-
-    class State {
-        adminCode : string
-        population : integer
-        hasGeometry()
-    }
-    class GeopoliticalZone {
-        label : string
-    }
-    class Observation {
-        cases : integer
-        epiWeek : integer
-        year : integer
-        date : date
-        caseRate : double
-    }
-    class EnvironmentalCondition {
-        evi : double
-        temperature : double
-        precipitation : double
-    }
-    class Pathogen {
-        family : string
-        caseFatalityRate : double
-    }
-    class ReservoirHost {
-        scientificName : string
-    }
-    class RiskLevel {
-        prefLabel : string
-        riskRank : integer
-    }
-
-    State --> GeopoliticalZone : inZone
-    State --> State : adjacentTo
-    Observation --> State : observedIn
-    Observation --> EnvironmentalCondition : hasCondition
-    Pathogen --> ReservoirHost : hasReservoir
-    State --> RiskLevel : hasRiskLevel
-
-    style State fill:#bbdefb
-    style Observation fill:#c8e6c9
-    style Pathogen fill:#ffccbc
-    style RiskLevel fill:#fff9c4
-```
+![Ontology](mermaid/ontology.svg)
 
 ``` julia
 # Top-level classes
@@ -275,31 +209,7 @@ println("Ontology triples: ", length(g))
 The resulting knowledge graph encodes the domain model as an
 interconnected set of RDF triples:
 
-``` mermaid
-graph LR
-    LV["🦠 lassa:LassaVirus"]
-    MN["🐀 lassa:MastomysNatalensis"]
-    Edo["📍 lassa:state_Edo"]
-    Obs["📋 lassa:obs_Edo_2020_w5"]
-    High["🔴 lassa:risk_high"]
-    SZ["🗺️ lassa:zone_South_South"]
-
-    LV -- "hasReservoir" --> MN
-    LV -- "rdf:type" --> Pat["lassa:Pathogen"]
-    MN -- "scientificName" --> SN["'Mastomys natalensis'"]
-    Edo -- "rdf:type" --> St["lassa:State"]
-    Edo -- "inZone" --> SZ
-    Edo -- "hasRiskLevel" --> High
-    Obs -- "observedIn" --> Edo
-    Obs -- "cases" --> C["42"]
-    Obs -- "epiWeek" --> W["5"]
-
-    style LV fill:#ffccbc
-    style MN fill:#d7ccc8
-    style Edo fill:#bbdefb
-    style Obs fill:#c8e6c9
-    style High fill:#ffcdd2
-```
+![Graph Structure](mermaid/graph-structure.svg)
 
 ## Part 2: Loading Surveillance Data via Tabular Mapping
 
@@ -982,23 +892,7 @@ disease (reservoir: *Mastomys natalensis*), adjacency to high-burden
 states suggests shared ecological conditions that favor the rodent host,
 rather than inter-state disease transmission.
 
-``` mermaid
-flowchart TD
-    S["State with\ncumulative cases"] --> C1{"cases > 100?"}
-    C1 -- Yes --> H["🔴 High Risk\n(Endemic)"]
-    C1 -- No --> C2{"cases > 10?"}
-    C2 -- Yes --> M["🟠 Moderate Risk\n(Sporadic)"]
-    C2 -- No --> L["🟢 Low Risk\n(Rare)"]
-    L --> C3{"Adjacent to\nhigh-risk state?"}
-    C3 -- Yes --> P["⚠️ Elevated\nProximity Risk"]
-    C3 -- No --> Safe["✅ Low\nBaseline Risk"]
-
-    style H fill:#ffcdd2
-    style M fill:#ffe0b2
-    style L fill:#c8e6c9
-    style P fill:#fff9c4
-    style Safe fill:#e8f5e9
-```
+![Risk Classification](mermaid/risk-classification.svg)
 
 ### Risk classification rules
 
@@ -1216,41 +1110,7 @@ bounded by administrative borders, states connected to endemic areas
 through chains of neighbors may share contiguous rodent habitat and thus
 elevated zoonotic risk.
 
-``` mermaid
-graph LR
-    Edo["🔴 Edo\n(endemic)"] --- Delta["Delta"]
-    Edo --- Kogi["Kogi"]
-    Edo --- Anambra["Anambra"]
-    Delta --- Bayelsa["Bayelsa"]
-    Kogi --- Kwara["Kwara"]
-    Kogi --- Niger["Niger"]
-    Anambra --- Enugu["Enugu"]
-    Niger --- Kaduna["Kaduna"]
-
-    Ondo["🔴 Ondo\n(endemic)"] --- Ekiti["Ekiti"]
-    Ondo --- Ogun["Ogun"]
-    Ondo --- Osun["Osun"]
-
-    Ebonyi["🔴 Ebonyi\n(endemic)"] --- Benue["Benue"]
-    Ebonyi --- CrossRiver["Cross River"]
-
-    style Edo fill:#ffcdd2
-    style Ondo fill:#ffcdd2
-    style Ebonyi fill:#ffcdd2
-    style Delta fill:#ffe0b2
-    style Kogi fill:#ffe0b2
-    style Anambra fill:#ffe0b2
-    style Ekiti fill:#ffe0b2
-    style Ogun fill:#ffe0b2
-    style Osun fill:#ffe0b2
-    style Benue fill:#ffe0b2
-    style CrossRiver fill:#ffe0b2
-    style Enugu fill:#ffe0b2
-    style Bayelsa fill:#fff9c4
-    style Kwara fill:#fff9c4
-    style Niger fill:#fff9c4
-    style Kaduna fill:#fff9c4
-```
+![Risk Network](mermaid/risk-network.svg)
 
 Red = endemic (high risk), orange = 1 step from endemic, yellow = 2
 steps. Datalog’s recursive rules compute the full transitive closure.
