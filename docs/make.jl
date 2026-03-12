@@ -60,5 +60,5 @@ makedocs(
 
 deploydocs(
     repo = "github.com/JuliaKnowledge/RDFLib.jl.git",
-    devbranch = "master",
+    devbranch = "main",
 )
