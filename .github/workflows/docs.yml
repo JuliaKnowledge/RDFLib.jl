@@ -18,10 +18,16 @@ jobs:
       statuses: write
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       - uses: julia-actions/cache@v2
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       - name: Install dependencies
         run: |
           julia --project=docs -e '
