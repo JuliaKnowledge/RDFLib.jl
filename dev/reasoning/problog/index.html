@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>ProbLog · RDFLib.jl</title><meta name="title" content="ProbLog · RDFLib.jl"/><meta property="og:title" content="ProbLog · RDFLib.jl"/><meta property="twitter:title" content="ProbLog · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/problog/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/problog/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/problog/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../datalog/">Datalog</a></li><li class="is-active"><a class="tocitem" href>ProbLog</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Probabilistic-Facts"><span>Probabilistic Facts</span></a></li><li><a class="tocitem" href="#Coin-Flip-Example"><span>Coin Flip Example</span></a></li><li><a class="tocitem" href="#Probabilistic-Graphs"><span>Probabilistic Graphs</span></a></li><li><a class="tocitem" href="#Non-ground-Queries"><span>Non-ground Queries</span></a></li><li><a class="tocitem" href="#Evidence-and-Conditioning"><span>Evidence and Conditioning</span></a></li><li><a class="tocitem" href="#Negation-as-Failure"><span>Negation-as-Failure</span></a></li><li><a class="tocitem" href="#Bayesian-Network-Example"><span>Bayesian Network Example</span></a></li><li><a class="tocitem" href="#Lower-level-API"><span>Lower-level API</span></a></li><li><a class="tocitem" href="#What’s-Next?"><span>What’s Next?</span></a></li></ul></li><li><a class="tocitem" href="../shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Reasoning &amp; Inference</a></li><li class="is-active"><a href>ProbLog</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>ProbLog</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/reasoning/problog.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Probabilistic-Logic-Programming"><a class="docs-heading-anchor" href="#Probabilistic-Logic-Programming">Probabilistic Logic Programming</a><a id="Probabilistic-Logic-Programming-1"></a><a class="docs-heading-anchor-permalink" href="#Probabilistic-Logic-Programming" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>RDFLib.jl includes a ProbLog module for probabilistic logic programming with exact inference. ProbLog extends Prolog-style logic programming by allowing facts to have associated probabilities. The implementation uses BDD-based (Binary Decision Diagram) weighted model counting — the same algorithm as <a href="https://dtai.cs.kuleuven.be/problog/">ProbLog2</a> — to compute exact probabilities.</p><pre><code class="language-julia hljs">using RDFLib</code></pre><h2 id="Probabilistic-Facts"><a class="docs-heading-anchor" href="#Probabilistic-Facts">Probabilistic Facts</a><a id="Probabilistic-Facts-1"></a><a class="docs-heading-anchor-permalink" href="#Probabilistic-Facts" title="Permalink"></a></h2><p>In ProbLog, a fact can be annotated with a probability. The notation <code>0.5::heads.</code> means “heads is true with probability 0.5”.</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.5::heads.
+    query(heads).
+&quot;&quot;&quot;)
+println(&quot;P(heads) = $(result[&quot;heads&quot;])&quot;)</code></pre><pre><code class="nohighlight hljs">P(heads) = 0.5</code></pre><h2 id="Coin-Flip-Example"><a class="docs-heading-anchor" href="#Coin-Flip-Example">Coin Flip Example</a><a id="Coin-Flip-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Coin-Flip-Example" title="Permalink"></a></h2><p>With two independent coins, we can compute the probability of at least one showing heads:</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.5::heads1.
+    0.6::heads2.
+    someHeads :- heads1.
+    someHeads :- heads2.
+    query(someHeads).
+&quot;&quot;&quot;)
+# P(someHeads) = 1 - P(¬heads1) × P(¬heads2) = 1 - 0.5 × 0.4 = 0.8
+println(&quot;P(someHeads) = $(result[&quot;someHeads&quot;])&quot;)</code></pre><pre><code class="nohighlight hljs">P(someHeads) = 0.8</code></pre><h2 id="Probabilistic-Graphs"><a class="docs-heading-anchor" href="#Probabilistic-Graphs">Probabilistic Graphs</a><a id="Probabilistic-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Probabilistic-Graphs" title="Permalink"></a></h2><p>A classic ProbLog example: computing reachability in a graph where edges exist probabilistically.</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.9::edge(a,b).
+    0.8::edge(b,c).
+    0.7::edge(a,c).
+
+    path(X,Y) :- edge(X,Y).
+    path(X,Y) :- edge(X,Z), path(Z,Y).
+
+    query(path(a,c)).
+&quot;&quot;&quot;)
+# Two paths: direct (0.7) and via b (0.9 × 0.8 = 0.72)
+# P = 1 - (1-0.7)(1-0.72) = 1 - 0.3 × 0.28 = 0.916
+println(&quot;P(path(a,c)) = $(round(result[&quot;path(a,c)&quot;], digits=4))&quot;)</code></pre><pre><code class="nohighlight hljs">P(path(a,c)) = 0.916</code></pre><h2 id="Non-ground-Queries"><a class="docs-heading-anchor" href="#Non-ground-Queries">Non-ground Queries</a><a id="Non-ground-Queries-1"></a><a class="docs-heading-anchor-permalink" href="#Non-ground-Queries" title="Permalink"></a></h2><p>Queries can contain variables — they are automatically expanded to all matching ground atoms:</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.9::edge(a,b).
+    0.8::edge(b,c).
+    0.5::edge(c,d).
+
+    path(X,Y) :- edge(X,Y).
+    path(X,Y) :- edge(X,Z), path(Z,Y).
+
+    query(path(a,X)).
+&quot;&quot;&quot;)
+for (q, p) in sort(collect(result))
+    println(&quot;  P($q) = $(round(p, digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">  P(path(a,b)) = 0.9
+  P(path(a,c)) = 0.72
+  P(path(a,d)) = 0.36</code></pre><h2 id="Evidence-and-Conditioning"><a class="docs-heading-anchor" href="#Evidence-and-Conditioning">Evidence and Conditioning</a><a id="Evidence-and-Conditioning-1"></a><a class="docs-heading-anchor-permalink" href="#Evidence-and-Conditioning" title="Permalink"></a></h2><p>Evidence allows you to condition on observed facts, computing posterior probabilities:</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.3::rain.
+    0.5::sprinkler.
+    0.9::wet :- rain.
+    0.8::wet :- sprinkler.
+
+    evidence(wet, true).
+    query(rain).
+    query(sprinkler).
+&quot;&quot;&quot;)
+println(&quot;P(rain | wet) = $(round(result[&quot;rain&quot;], digits=4))&quot;)
+println(&quot;P(sprinkler | wet) = $(round(result[&quot;sprinkler&quot;], digits=4))&quot;)</code></pre><pre><code class="nohighlight hljs">P(rain | wet) = 0.5018
+P(sprinkler | wet) = 0.7598</code></pre><p>Negative evidence works too:</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.3::rain.
+    0.5::sprinkler.
+    0.9::wet :- rain.
+    0.8::wet :- sprinkler.
+
+    evidence(wet, false).
+    query(rain).
+    query(sprinkler).
+&quot;&quot;&quot;)
+println(&quot;P(rain | ¬wet) = $(round(result[&quot;rain&quot;], digits=4))&quot;)
+println(&quot;P(sprinkler | ¬wet) = $(round(result[&quot;sprinkler&quot;], digits=4))&quot;)</code></pre><pre><code class="nohighlight hljs">P(rain | ¬wet) = 0.0411
+P(sprinkler | ¬wet) = 0.1667</code></pre><h2 id="Negation-as-Failure"><a class="docs-heading-anchor" href="#Negation-as-Failure">Negation-as-Failure</a><a id="Negation-as-Failure-1"></a><a class="docs-heading-anchor-permalink" href="#Negation-as-Failure" title="Permalink"></a></h2><p>The <code>\+</code> operator represents negation-as-failure:</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.4::p.
+    q :- \\+p.
+    query(q).
+&quot;&quot;&quot;)
+# q is true when p is false: P(q) = 1 - P(p) = 0.6
+println(&quot;P(q) = $(result[&quot;q&quot;])&quot;)</code></pre><pre><code class="nohighlight hljs">P(q) = 0.6</code></pre><h2 id="Bayesian-Network-Example"><a class="docs-heading-anchor" href="#Bayesian-Network-Example">Bayesian Network Example</a><a id="Bayesian-Network-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Bayesian-Network-Example" title="Permalink"></a></h2><p>A classic alarm network modeled in ProbLog:</p><pre><code class="language-julia hljs">result = problog_query(&quot;&quot;&quot;
+    0.1::burglary.
+    0.2::earthquake.
+
+    0.9::alarm :- burglary, earthquake.
+    0.8::alarm :- burglary, \\+earthquake.
+    0.1::alarm :- \\+burglary, earthquake.
+
+    0.8::calls(mary) :- alarm.
+    0.1::calls(mary) :- \\+alarm.
+    0.7::calls(john) :- alarm.
+    0.05::calls(john) :- \\+alarm.
+
+    evidence(calls(mary), true).
+    evidence(calls(john), true).
+    query(burglary).
+    query(earthquake).
+&quot;&quot;&quot;)
+println(&quot;P(burglary | both call) = $(round(result[&quot;burglary&quot;], digits=4))&quot;)
+println(&quot;P(earthquake | both call) = $(round(result[&quot;earthquake&quot;], digits=4))&quot;)</code></pre><pre><code class="nohighlight hljs">P(burglary | both call) = 0.7605
+P(earthquake | both call) = 0.3468</code></pre><h2 id="Lower-level-API"><a class="docs-heading-anchor" href="#Lower-level-API">Lower-level API</a><a id="Lower-level-API-1"></a><a class="docs-heading-anchor-permalink" href="#Lower-level-API" title="Permalink"></a></h2><p>For more control, use <code>parse_problog</code> and <code>problog_infer</code> separately:</p><pre><code class="language-julia hljs">prog = parse_problog(&quot;&quot;&quot;
+    0.5::coin(1).
+    0.5::coin(2).
+    win :- coin(1), coin(2).
+    query(win).
+&quot;&quot;&quot;)
+
+println(&quot;Clauses: &quot;, length(prog.clauses))
+println(&quot;Queries: &quot;, length(prog.queries))
+
+results = problog_infer(prog)
+for (atom, prob) in results
+    println(&quot;P($(atom.predicate)) = $prob&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Clauses: 3
+Queries: 1
+P(coin) = 0.5
+P(coin) = 0.5
+P(win) = 0.25</code></pre><h2 id="What’s-Next?"><a class="docs-heading-anchor" href="#What’s-Next?">What’s Next?</a><a id="What’s-Next?-1"></a><a class="docs-heading-anchor-permalink" href="#What’s-Next?" title="Permalink"></a></h2><ul><li>The ProbLog module matches Python ProbLog’s exact inference results</li><li>It uses BDD-based weighted model counting for precise probabilities</li><li>For non-probabilistic logic, see the Datalog vignette</li><li>For N3 rule-based reasoning, see the N3 Reasoning vignette</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../datalog/">« Datalog</a><a class="docs-footer-nextpage" href="../shacl-validation/">SHACL Validation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

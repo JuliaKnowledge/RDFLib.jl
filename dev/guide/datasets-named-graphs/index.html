@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Datasets &amp; Named Graphs · RDFLib.jl</title><meta name="title" content="Datasets &amp; Named Graphs · RDFLib.jl"/><meta property="og:title" content="Datasets &amp; Named Graphs · RDFLib.jl"/><meta property="twitter:title" content="Datasets &amp; Named Graphs · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/datasets-named-graphs/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/datasets-named-graphs/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/datasets-named-graphs/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../collections-containers/">Collections &amp; Containers</a></li><li class="is-active"><a class="tocitem" href>Datasets &amp; Named Graphs</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Creating-a-Dataset"><span>Creating a Dataset</span></a></li><li><a class="tocitem" href="#Accessing-Named-Graphs"><span>Accessing Named Graphs</span></a></li><li><a class="tocitem" href="#Quads"><span>Quads</span></a></li><li><a class="tocitem" href="#Serializing-Datasets"><span>Serializing Datasets</span></a></li><li><a class="tocitem" href="#Conjunctive-Graphs"><span>Conjunctive Graphs</span></a></li><li><a class="tocitem" href="#Read-Only-Aggregate"><span>Read-Only Aggregate</span></a></li><li><a class="tocitem" href="#Use-Case:-Provenance-Tracking"><span>Use Case: Provenance Tracking</span></a></li></ul></li><li><a class="tocitem" href="../store-backends/">Store Backends</a></li><li><a class="tocitem" href="../tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../property-paths/">Property Paths</a></li><li><a class="tocitem" href="../graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Guide</a></li><li class="is-active"><a href>Datasets &amp; Named Graphs</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Datasets &amp; Named Graphs</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/guide/datasets-named-graphs.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Datasets-and-Named-Graphs"><a class="docs-heading-anchor" href="#Datasets-and-Named-Graphs">Datasets and Named Graphs</a><a id="Datasets-and-Named-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Datasets-and-Named-Graphs" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>While an RDF Graph is a set of triples, real-world applications often need multiple graphs with different provenance. An RDF <strong>Dataset</strong> holds a default graph plus named graphs, each identified by a URI.</p><pre><code class="language-julia hljs">using RDFLib
+ex = Namespace(&quot;http://example.org/&quot;)</code></pre><pre><code class="nohighlight hljs">Namespace(&quot;http://example.org/&quot;)</code></pre><h2 id="Creating-a-Dataset"><a class="docs-heading-anchor" href="#Creating-a-Dataset">Creating a Dataset</a><a id="Creating-a-Dataset-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-a-Dataset" title="Permalink"></a></h2><pre><code class="language-julia hljs">ds = Dataset()
+
+# Add triples to named graphs
+add!(ds, Triple(ex(&quot;alice&quot;), RDF.type, FOAF(&quot;Person&quot;)), ex(&quot;graph/alice&quot;))
+add!(ds, Triple(ex(&quot;alice&quot;), FOAF(&quot;name&quot;), Literal(&quot;Alice&quot;)), ex(&quot;graph/alice&quot;))
+add!(ds, Triple(ex(&quot;alice&quot;), FOAF(&quot;mbox&quot;), URIRef(&quot;mailto:alice@example.org&quot;)), ex(&quot;graph/alice&quot;))
+
+add!(ds, Triple(ex(&quot;bob&quot;), RDF.type, FOAF(&quot;Person&quot;)), ex(&quot;graph/bob&quot;))
+add!(ds, Triple(ex(&quot;bob&quot;), FOAF(&quot;name&quot;), Literal(&quot;Bob&quot;)), ex(&quot;graph/bob&quot;))
+
+# Add to the default graph
+add!(ds, Triple(ex(&quot;graph/alice&quot;), DCTERMS(&quot;creator&quot;), Literal(&quot;System A&quot;)))
+add!(ds, Triple(ex(&quot;graph/bob&quot;), DCTERMS(&quot;creator&quot;), Literal(&quot;System B&quot;)))
+
+println(&quot;Dataset has $(length(collect(graphs(ds)))) graphs (including default)&quot;)</code></pre><pre><code class="nohighlight hljs">Dataset has 3 graphs (including default)</code></pre><h2 id="Accessing-Named-Graphs"><a class="docs-heading-anchor" href="#Accessing-Named-Graphs">Accessing Named Graphs</a><a id="Accessing-Named-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Accessing-Named-Graphs" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Retrieve a specific named graph
+alice_g = get_graph(ds, ex(&quot;graph/alice&quot;))
+println(&quot;Alice&#39;s graph: $(length(alice_g)) triples&quot;)
+for t in alice_g
+    println(&quot;  &quot;, t)
+end</code></pre><pre><code class="nohighlight hljs">Alice&#39;s graph: 3 triples
+  (URIRef(&quot;http://example.org/alice&quot;), URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;), URIRef(&quot;http://xmlns.com/foaf/0.1/Person&quot;))
+  (URIRef(&quot;http://example.org/alice&quot;), URIRef(&quot;http://xmlns.com/foaf/0.1/name&quot;), Literal(&quot;Alice&quot;))
+  (URIRef(&quot;http://example.org/alice&quot;), URIRef(&quot;http://xmlns.com/foaf/0.1/mbox&quot;), URIRef(&quot;mailto:alice@example.org&quot;))</code></pre><h2 id="Quads"><a class="docs-heading-anchor" href="#Quads">Quads</a><a id="Quads-1"></a><a class="docs-heading-anchor-permalink" href="#Quads" title="Permalink"></a></h2><p>In a dataset, triples carry a fourth component — the graph name (context):</p><pre><code class="language-julia hljs">println(&quot;All quads:&quot;)
+for q in quads(ds)
+    ctx = q.graph === nothing ? &quot;default&quot; : string(q.graph)
+    println(&quot;  [$(ctx)] $(q.subject) $(q.predicate) $(q.object)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">All quads:
+  [default] URIRef(&quot;http://example.org/graph/alice&quot;) URIRef(&quot;http://purl.org/dc/terms/creator&quot;) Literal(&quot;System A&quot;)
+  [default] URIRef(&quot;http://example.org/graph/bob&quot;) URIRef(&quot;http://purl.org/dc/terms/creator&quot;) Literal(&quot;System B&quot;)
+  [http://example.org/graph/alice] URIRef(&quot;http://example.org/alice&quot;) URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;) URIRef(&quot;http://xmlns.com/foaf/0.1/Person&quot;)
+  [http://example.org/graph/alice] URIRef(&quot;http://example.org/alice&quot;) URIRef(&quot;http://xmlns.com/foaf/0.1/name&quot;) Literal(&quot;Alice&quot;)
+  [http://example.org/graph/alice] URIRef(&quot;http://example.org/alice&quot;) URIRef(&quot;http://xmlns.com/foaf/0.1/mbox&quot;) URIRef(&quot;mailto:alice@example.org&quot;)
+  [http://example.org/graph/bob] URIRef(&quot;http://example.org/bob&quot;) URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;) URIRef(&quot;http://xmlns.com/foaf/0.1/Person&quot;)
+  [http://example.org/graph/bob] URIRef(&quot;http://example.org/bob&quot;) URIRef(&quot;http://xmlns.com/foaf/0.1/name&quot;) Literal(&quot;Bob&quot;)</code></pre><h2 id="Serializing-Datasets"><a class="docs-heading-anchor" href="#Serializing-Datasets">Serializing Datasets</a><a id="Serializing-Datasets-1"></a><a class="docs-heading-anchor-permalink" href="#Serializing-Datasets" title="Permalink"></a></h2><h3 id="TriG-Format"><a class="docs-heading-anchor" href="#TriG-Format">TriG Format</a><a id="TriG-Format-1"></a><a class="docs-heading-anchor-permalink" href="#TriG-Format" title="Permalink"></a></h3><p>TriG extends Turtle with named graph blocks:</p><pre><code class="language-julia hljs">trig = serialize_trig(ds)
+println(trig)</code></pre><pre><code class="nohighlight hljs">@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+{
+    ns1:alice ns2:creator &quot;System A&quot; .
+
+    ns1:bob ns2:creator &quot;System B&quot; .
+}
+
+ns1:alice {
+    ns3:alice a ns4:Person ;
+        ns4:mbox &lt;mailto:alice@example.org&gt; ;
+        ns4:name &quot;Alice&quot; .
+}
+
+ns1:bob {
+    ns3:bob a ns4:Person ;
+        ns4:name &quot;Bob&quot; .
+}</code></pre><h3 id="N-Quads-Format"><a class="docs-heading-anchor" href="#N-Quads-Format">N-Quads Format</a><a id="N-Quads-Format-1"></a><a class="docs-heading-anchor-permalink" href="#N-Quads-Format" title="Permalink"></a></h3><p>One quad per line:</p><pre><code class="language-julia hljs">nq = serialize_nquads(ds)
+println(nq)</code></pre><pre><code class="nohighlight hljs">&lt;http://example.org/graph/alice&gt; &lt;http://purl.org/dc/terms/creator&gt; &quot;System A&quot; .
+&lt;http://example.org/graph/bob&gt; &lt;http://purl.org/dc/terms/creator&gt; &quot;System B&quot; .
+&lt;http://example.org/alice&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://xmlns.com/foaf/0.1/Person&gt; &lt;http://example.org/graph/alice&gt; .
+&lt;http://example.org/alice&gt; &lt;http://xmlns.com/foaf/0.1/name&gt; &quot;Alice&quot; &lt;http://example.org/graph/alice&gt; .
+&lt;http://example.org/alice&gt; &lt;http://xmlns.com/foaf/0.1/mbox&gt; &lt;mailto:alice@example.org&gt; &lt;http://example.org/graph/alice&gt; .
+&lt;http://example.org/bob&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://xmlns.com/foaf/0.1/Person&gt; &lt;http://example.org/graph/bob&gt; .
+&lt;http://example.org/bob&gt; &lt;http://xmlns.com/foaf/0.1/name&gt; &quot;Bob&quot; &lt;http://example.org/graph/bob&gt; .</code></pre><h2 id="Conjunctive-Graphs"><a class="docs-heading-anchor" href="#Conjunctive-Graphs">Conjunctive Graphs</a><a id="Conjunctive-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Conjunctive-Graphs" title="Permalink"></a></h2><p>A <code>ConjunctiveGraph</code> provides a unified view over all graphs in a dataset:</p><pre><code class="language-julia hljs">cg = ConjunctiveGraph()
+
+# Add triples to different contexts
+ctx1 = ex(&quot;context/weather&quot;)
+ctx2 = ex(&quot;context/geography&quot;)
+
+add!(cg, Triple(ex(&quot;london&quot;), ex(&quot;temp&quot;), Literal(15)), ctx1)
+add!(cg, Triple(ex(&quot;paris&quot;), ex(&quot;temp&quot;), Literal(18)), ctx1)
+add!(cg, Triple(ex(&quot;london&quot;), RDF.type, ex(&quot;City&quot;)), ctx2)
+add!(cg, Triple(ex(&quot;paris&quot;), RDF.type, ex(&quot;City&quot;)), ctx2)
+
+# Query across all contexts
+println(&quot;All triples across contexts:&quot;)
+for t in cg
+    println(&quot;  &quot;, t)
+end</code></pre><pre><code class="nohighlight hljs">All triples across contexts:
+  (URIRef(&quot;http://example.org/london&quot;), URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;), URIRef(&quot;http://example.org/City&quot;))
+  (URIRef(&quot;http://example.org/paris&quot;), URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;), URIRef(&quot;http://example.org/City&quot;))
+  (URIRef(&quot;http://example.org/london&quot;), URIRef(&quot;http://example.org/temp&quot;), Literal(&quot;15&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))
+  (URIRef(&quot;http://example.org/paris&quot;), URIRef(&quot;http://example.org/temp&quot;), Literal(&quot;18&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))</code></pre><pre><code class="language-julia hljs"># Get a specific context
+weather = get_context(cg, ctx1)
+println(&quot;\nWeather context:&quot;)
+for t in weather
+    println(&quot;  &quot;, t)
+end</code></pre><pre><code class="nohighlight hljs">Weather context:
+  (URIRef(&quot;http://example.org/london&quot;), URIRef(&quot;http://example.org/temp&quot;), Literal(&quot;15&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))
+  (URIRef(&quot;http://example.org/paris&quot;), URIRef(&quot;http://example.org/temp&quot;), Literal(&quot;18&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))</code></pre><h2 id="Read-Only-Aggregate"><a class="docs-heading-anchor" href="#Read-Only-Aggregate">Read-Only Aggregate</a><a id="Read-Only-Aggregate-1"></a><a class="docs-heading-anchor-permalink" href="#Read-Only-Aggregate" title="Permalink"></a></h2><p>Combine multiple graphs into a single read-only view:</p><pre><code class="language-julia hljs">g1 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:a ex:p &quot;1&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+g2 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:b ex:q &quot;2&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+agg = ReadOnlyGraphAggregate([g1, g2])
+println(&quot;Aggregate has $(length(agg)) triples:&quot;)
+for t in agg
+    println(&quot;  &quot;, t)
+end</code></pre><pre><code class="nohighlight hljs">Aggregate has 2 triples:
+  (URIRef(&quot;http://example.org/a&quot;), URIRef(&quot;http://example.org/p&quot;), Literal(&quot;1&quot;))
+  (URIRef(&quot;http://example.org/b&quot;), URIRef(&quot;http://example.org/q&quot;), Literal(&quot;2&quot;))</code></pre><h2 id="Use-Case:-Provenance-Tracking"><a class="docs-heading-anchor" href="#Use-Case:-Provenance-Tracking">Use Case: Provenance Tracking</a><a id="Use-Case:-Provenance-Tracking-1"></a><a class="docs-heading-anchor-permalink" href="#Use-Case:-Provenance-Tracking" title="Permalink"></a></h2><p>Named graphs are commonly used to track where data came from:</p><pre><code class="language-julia hljs">ds2 = Dataset()
+prov = Namespace(&quot;http://www.w3.org/ns/prov#&quot;)
+
+# Data from a sensor
+sensor_g = add_graph(ds2, ex(&quot;graph/sensor&quot;))
+add!(sensor_g, Triple(ex(&quot;reading1&quot;), ex(&quot;temperature&quot;), Literal(22.5)))
+add!(sensor_g, Triple(ex(&quot;reading1&quot;), ex(&quot;humidity&quot;), Literal(65)))
+
+# Record provenance in the default graph
+add!(ds2.default_graph, Triple(ex(&quot;graph/sensor&quot;), RDF.type, prov(&quot;Entity&quot;)))
+add!(ds2.default_graph, Triple(ex(&quot;graph/sensor&quot;), prov(&quot;wasGeneratedBy&quot;), ex(&quot;sensorProcess&quot;)))
+add!(ds2.default_graph, Triple(ex(&quot;graph/sensor&quot;), prov(&quot;generatedAtTime&quot;),
+    Literal(&quot;2025-01-15T10:30:00&quot;; datatype=XSD.dateTime)))
+
+println(&quot;Dataset with provenance:&quot;)
+for t in ds2.default_graph
+    println(&quot;  &quot;, t)
+end</code></pre><pre><code class="nohighlight hljs">Dataset with provenance:
+  (URIRef(&quot;http://example.org/graph/sensor&quot;), URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;), URIRef(&quot;http://www.w3.org/ns/prov#Entity&quot;))
+  (URIRef(&quot;http://example.org/graph/sensor&quot;), URIRef(&quot;http://www.w3.org/ns/prov#wasGeneratedBy&quot;), URIRef(&quot;http://example.org/sensorProcess&quot;))
+  (URIRef(&quot;http://example.org/graph/sensor&quot;), URIRef(&quot;http://www.w3.org/ns/prov#generatedAtTime&quot;), Literal(&quot;2025-01-15T10:30:00&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#dateTime&quot;)))</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collections-containers/">« Collections &amp; Containers</a><a class="docs-footer-nextpage" href="../store-backends/">Store Backends »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

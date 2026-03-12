@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Property Paths · RDFLib.jl</title><meta name="title" content="Property Paths · RDFLib.jl"/><meta property="og:title" content="Property Paths · RDFLib.jl"/><meta property="twitter:title" content="Property Paths · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/property-paths/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/property-paths/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/property-paths/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../store-backends/">Store Backends</a></li><li><a class="tocitem" href="../tabular-mapping/">Tabular Mapping</a></li><li class="is-active"><a class="tocitem" href>Property Paths</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Sequence-Path-(/)"><span>Sequence Path (<code>/</code>)</span></a></li><li><a class="tocitem" href="#Alternative-Path-()"><span>Alternative Path (<code>|</code>)</span></a></li><li><a class="tocitem" href="#Transitive-Closure-(-and-*)"><span>Transitive Closure (<code>+</code> and <code>*</code>)</span></a></li><li><a class="tocitem" href="#Optional-Path-(?)"><span>Optional Path (<code>?</code>)</span></a></li><li><a class="tocitem" href="#Inverse-Path-()"><span>Inverse Path (<code>^</code>)</span></a></li><li><a class="tocitem" href="#Class-Hierarchy-Traversal"><span>Class Hierarchy Traversal</span></a></li><li><a class="tocitem" href="#Negated-Property-Set-(!)"><span>Negated Property Set (<code>!</code>)</span></a></li><li><a class="tocitem" href="#Combining-Operators"><span>Combining Operators</span></a></li><li><a class="tocitem" href="#Summary-of-Path-Operators"><span>Summary of Path Operators</span></a></li></ul></li><li><a class="tocitem" href="../graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Guide</a></li><li class="is-active"><a href>Property Paths</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Property Paths</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/guide/property-paths.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SPARQL-Property-Paths"><a class="docs-heading-anchor" href="#SPARQL-Property-Paths">SPARQL Property Paths</a><a id="SPARQL-Property-Paths-1"></a><a class="docs-heading-anchor-permalink" href="#SPARQL-Property-Paths" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>SPARQL property paths let you navigate RDF graphs by following chains of predicates without writing multiple triple patterns. RDFLib.jl supports the full SPARQL 1.1 property path syntax.</p><pre><code class="language-julia hljs">using RDFLib
+
+# Build an example graph: a small social network and class hierarchy
+g = RDFGraph()
+ex = Namespace(&quot;http://example.org/&quot;)
+
+# People and friendships (a chain)
+add!(g, Triple(ex(&quot;alice&quot;), ex(&quot;knows&quot;), ex(&quot;bob&quot;)))
+add!(g, Triple(ex(&quot;bob&quot;), ex(&quot;knows&quot;), ex(&quot;carol&quot;)))
+add!(g, Triple(ex(&quot;carol&quot;), ex(&quot;knows&quot;), ex(&quot;dave&quot;)))
+add!(g, Triple(ex(&quot;dave&quot;), ex(&quot;knows&quot;), ex(&quot;eve&quot;)))
+
+# Type hierarchy
+add!(g, Triple(ex(&quot;Student&quot;), RDFS.subClassOf, ex(&quot;Person&quot;)))
+add!(g, Triple(ex(&quot;GradStudent&quot;), RDFS.subClassOf, ex(&quot;Student&quot;)))
+add!(g, Triple(ex(&quot;alice&quot;), RDF.type, ex(&quot;GradStudent&quot;)))
+
+# Additional properties
+add!(g, Triple(ex(&quot;alice&quot;), ex(&quot;email&quot;), Literal(&quot;alice@example.org&quot;)))
+add!(g, Triple(ex(&quot;alice&quot;), FOAF(&quot;name&quot;), Literal(&quot;Alice&quot;)))
+add!(g, Triple(ex(&quot;bob&quot;), FOAF(&quot;name&quot;), Literal(&quot;Bob&quot;)))
+add!(g, Triple(ex(&quot;carol&quot;), FOAF(&quot;name&quot;), Literal(&quot;Carol&quot;)))
+add!(g, Triple(ex(&quot;dave&quot;), FOAF(&quot;name&quot;), Literal(&quot;Dave&quot;)))
+add!(g, Triple(ex(&quot;eve&quot;), FOAF(&quot;name&quot;), Literal(&quot;Eve&quot;)))
+println(&quot;Graph has $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Graph has 13 triples</code></pre><h2 id="Sequence-Path-(/)"><a class="docs-heading-anchor" href="#Sequence-Path-(/)">Sequence Path (<code>/</code>)</a><a id="Sequence-Path-(/)-1"></a><a class="docs-heading-anchor-permalink" href="#Sequence-Path-(/)" title="Permalink"></a></h2><p>The <code>/</code> operator chains predicates. <code>ex:knows/ex:knows</code> matches two hops:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:alice ex:knows/ex:knows ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;Alice knows-of-knows:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Alice knows-of-knows:
+  URIRef(&quot;http://example.org/carol&quot;)</code></pre><p>Three-hop chain:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:alice ex:knows/ex:knows/ex:knows ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;Three hops from Alice:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Three hops from Alice:
+  URIRef(&quot;http://example.org/dave&quot;)</code></pre><h2 id="Alternative-Path-()"><a class="docs-heading-anchor" href="#Alternative-Path-()">Alternative Path (<code>|</code>)</a><a id="Alternative-Path-()-1"></a><a class="docs-heading-anchor-permalink" href="#Alternative-Path-()" title="Permalink"></a></h2><p>The <code>|</code> operator matches either predicate:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    SELECT ?s ?info WHERE {
+        ?s ex:email|foaf:name ?info .
+    }
+&quot;&quot;&quot;)
+println(&quot;Email or name:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;s&quot;]) → $(row[&quot;info&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Email or name:
+  URIRef(&quot;http://example.org/alice&quot;) → Literal(&quot;alice@example.org&quot;)
+  URIRef(&quot;http://example.org/alice&quot;) → Literal(&quot;Alice&quot;)
+  URIRef(&quot;http://example.org/bob&quot;) → Literal(&quot;Bob&quot;)
+  URIRef(&quot;http://example.org/carol&quot;) → Literal(&quot;Carol&quot;)
+  URIRef(&quot;http://example.org/dave&quot;) → Literal(&quot;Dave&quot;)
+  URIRef(&quot;http://example.org/eve&quot;) → Literal(&quot;Eve&quot;)</code></pre><h2 id="Transitive-Closure-(-and-*)"><a class="docs-heading-anchor" href="#Transitive-Closure-(-and-*)">Transitive Closure (<code>+</code> and <code>*</code>)</a><a id="Transitive-Closure-(-and-*)-1"></a><a class="docs-heading-anchor-permalink" href="#Transitive-Closure-(-and-*)" title="Permalink"></a></h2><p><code>+</code> matches one or more hops (transitive closure):</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:alice ex:knows+ ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;All people Alice can reach (1+ hops):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">All people Alice can reach (1+ hops):
+  URIRef(&quot;http://example.org/bob&quot;)
+  URIRef(&quot;http://example.org/carol&quot;)
+  URIRef(&quot;http://example.org/dave&quot;)
+  URIRef(&quot;http://example.org/eve&quot;)</code></pre><p><code>*</code> matches zero or more hops (includes the start node):</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:alice ex:knows* ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;All people reachable from Alice (0+ hops, includes self):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">All people reachable from Alice (0+ hops, includes self):
+  URIRef(&quot;http://example.org/alice&quot;)
+  URIRef(&quot;http://example.org/bob&quot;)
+  URIRef(&quot;http://example.org/carol&quot;)
+  URIRef(&quot;http://example.org/dave&quot;)
+  URIRef(&quot;http://example.org/eve&quot;)</code></pre><h2 id="Optional-Path-(?)"><a class="docs-heading-anchor" href="#Optional-Path-(?)">Optional Path (<code>?</code>)</a><a id="Optional-Path-(?)-1"></a><a class="docs-heading-anchor-permalink" href="#Optional-Path-(?)" title="Permalink"></a></h2><p><code>?</code> matches zero or one hops:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:alice ex:knows? ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;Alice and direct friends (0 or 1 hop):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Alice and direct friends (0 or 1 hop):
+  URIRef(&quot;http://example.org/bob&quot;)
+  URIRef(&quot;http://example.org/alice&quot;)</code></pre><h2 id="Inverse-Path-()"><a class="docs-heading-anchor" href="#Inverse-Path-()">Inverse Path (<code>^</code>)</a><a id="Inverse-Path-()-1"></a><a class="docs-heading-anchor-permalink" href="#Inverse-Path-()" title="Permalink"></a></h2><p><code>^</code> reverses the direction — find who knows someone:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:carol ^ex:knows ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;Who knows Carol (inverse):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Who knows Carol (inverse):
+  URIRef(&quot;http://example.org/bob&quot;)</code></pre><p>Combine inverse with transitive to find all people upstream:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?person WHERE {
+        ex:eve ^ex:knows+ ?person .
+    }
+&quot;&quot;&quot;)
+println(&quot;Who can reach Eve (inverse transitive):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;person&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Who can reach Eve (inverse transitive):
+  URIRef(&quot;http://example.org/dave&quot;)
+  URIRef(&quot;http://example.org/carol&quot;)
+  URIRef(&quot;http://example.org/bob&quot;)
+  URIRef(&quot;http://example.org/alice&quot;)</code></pre><h2 id="Class-Hierarchy-Traversal"><a class="docs-heading-anchor" href="#Class-Hierarchy-Traversal">Class Hierarchy Traversal</a><a id="Class-Hierarchy-Traversal-1"></a><a class="docs-heading-anchor-permalink" href="#Class-Hierarchy-Traversal" title="Permalink"></a></h2><p>Property paths are particularly useful for navigating class hierarchies:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    PREFIX rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?class WHERE {
+        ex:GradStudent rdfs:subClassOf* ?class .
+    }
+&quot;&quot;&quot;)
+println(&quot;GradStudent is a (transitive):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;class&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">GradStudent is a (transitive):
+  URIRef(&quot;http://example.org/GradStudent&quot;)
+  URIRef(&quot;http://example.org/Student&quot;)
+  URIRef(&quot;http://example.org/Person&quot;)</code></pre><p>Find all instances of a class or its subclasses:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    PREFIX rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?instance WHERE {
+        ?instance rdf:type/rdfs:subClassOf* ex:Person .
+    }
+&quot;&quot;&quot;)
+println(&quot;All instances of Person (including subclasses):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;instance&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">All instances of Person (including subclasses):
+  URIRef(&quot;http://example.org/alice&quot;)</code></pre><h2 id="Negated-Property-Set-(!)"><a class="docs-heading-anchor" href="#Negated-Property-Set-(!)">Negated Property Set (<code>!</code>)</a><a id="Negated-Property-Set-(!)-1"></a><a class="docs-heading-anchor-permalink" href="#Negated-Property-Set-(!)" title="Permalink"></a></h2><p><code>!</code> matches any predicate except the listed ones:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    PREFIX rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    SELECT ?s ?p ?o WHERE {
+        ex:alice !(rdf:type|ex:knows) ?o .
+    }
+&quot;&quot;&quot;)
+println(&quot;Alice&#39;s properties (excluding rdf:type and ex:knows):&quot;)
+for row in results
+    println(&quot;  $(row[&quot;o&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Alice&#39;s properties (excluding rdf:type and ex:knows):
+  Literal(&quot;alice@example.org&quot;)
+  Literal(&quot;Alice&quot;)</code></pre><h2 id="Combining-Operators"><a class="docs-heading-anchor" href="#Combining-Operators">Combining Operators</a><a id="Combining-Operators-1"></a><a class="docs-heading-anchor-permalink" href="#Combining-Operators" title="Permalink"></a></h2><p>Property path operators can be combined freely:</p><pre><code class="language-julia hljs"># Find names of everyone reachable from Alice
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    SELECT ?name WHERE {
+        ex:alice ex:knows+ / foaf:name ?name .
+    }
+&quot;&quot;&quot;)
+println(&quot;Names of people Alice can reach:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;name&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Names of people Alice can reach:
+  Literal(&quot;Bob&quot;)
+  Literal(&quot;Carol&quot;)
+  Literal(&quot;Dave&quot;)
+  Literal(&quot;Eve&quot;)</code></pre><h2 id="Summary-of-Path-Operators"><a class="docs-heading-anchor" href="#Summary-of-Path-Operators">Summary of Path Operators</a><a id="Summary-of-Path-Operators-1"></a><a class="docs-heading-anchor-permalink" href="#Summary-of-Path-Operators" title="Permalink"></a></h2><table><tr><th style="text-align: right">Operator</th><th style="text-align: right">Syntax</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right">Sequence</td><td style="text-align: right"><code>p/q</code></td><td style="text-align: right">Follow p then q</td></tr><tr><td style="text-align: right">Alternative</td><td style="text-align: right"><code>p|q</code></td><td style="text-align: right">Follow p or q</td></tr><tr><td style="text-align: right">One or more</td><td style="text-align: right"><code>p+</code></td><td style="text-align: right">Transitive closure (1+ hops)</td></tr><tr><td style="text-align: right">Zero or more</td><td style="text-align: right"><code>p*</code></td><td style="text-align: right">Reflexive transitive closure</td></tr><tr><td style="text-align: right">Zero or one</td><td style="text-align: right"><code>p?</code></td><td style="text-align: right">Optional step</td></tr><tr><td style="text-align: right">Inverse</td><td style="text-align: right"><code>^p</code></td><td style="text-align: right">Reverse direction</td></tr><tr><td style="text-align: right">Negated set</td><td style="text-align: right"><code>!(p|q)</code></td><td style="text-align: right">Any predicate except p and q</td></tr></table></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tabular-mapping/">« Tabular Mapping</a><a class="docs-footer-nextpage" href="../graph-utilities/">Graph Utilities »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

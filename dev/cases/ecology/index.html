@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Ecology · RDFLib.jl</title><meta name="title" content="Ecology · RDFLib.jl"/><meta property="og:title" content="Ecology · RDFLib.jl"/><meta property="twitter:title" content="Ecology · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/ecology/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/ecology/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/ecology/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li class="is-active"><a class="tocitem" href>Ecology</a><ul class="internal"><li><a class="tocitem" href="#Introduction"><span>Introduction</span></a></li><li><a class="tocitem" href="#1.-Defining-the-Ecosystem-Ontology"><span>1. Defining the Ecosystem Ontology</span></a></li><li><a class="tocitem" href="#2.-Populating-the-Food-Web"><span>2. Populating the Food Web</span></a></li><li><a class="tocitem" href="#3.-Importing-Field-Survey-Data"><span>3. Importing Field Survey Data</span></a></li><li><a class="tocitem" href="#4.-Validating-Data-Quality-with-SHACL"><span>4. Validating Data Quality with SHACL</span></a></li><li><a class="tocitem" href="#5.-Querying-the-Ecosystem-with-SPARQL"><span>5. Querying the Ecosystem with SPARQL</span></a></li><li><a class="tocitem" href="#6.-Food-Chain-Analysis-with-Property-Paths"><span>6. Food Chain Analysis with Property Paths</span></a></li><li><a class="tocitem" href="#7.-Deriving-Ecological-Relationships-with-Datalog"><span>7. Deriving Ecological Relationships with Datalog</span></a></li><li><a class="tocitem" href="#8.-Probabilistic-Trophic-Cascades-with-ProbLog"><span>8. Probabilistic Trophic Cascades with ProbLog</span></a></li><li><a class="tocitem" href="#9.-Visualization-and-Graph-Analytics"><span>9. Visualization and Graph Analytics</span></a></li><li><a class="tocitem" href="#Summary"><span>Summary</span></a></li></ul></li><li><a class="tocitem" href="../ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Case Studies</a></li><li class="is-active"><a href>Ecology</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Ecology</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/cases/ecology.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Ecological-Knowledge-Graphs"><a class="docs-heading-anchor" href="#Ecological-Knowledge-Graphs">Ecological Knowledge Graphs</a><a id="Ecological-Knowledge-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Ecological-Knowledge-Graphs" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Introduction"><a class="docs-heading-anchor" href="#Introduction">Introduction</a><a id="Introduction-1"></a><a class="docs-heading-anchor-permalink" href="#Introduction" title="Permalink"></a></h2><p>This vignette demonstrates how RDFLib.jl’s features work together in a realistic scientific scenario: modeling a <strong>northeastern Atlantic coastal ecosystem</strong> as a knowledge graph. We build a food web ontology, import field survey data from tabular sources, validate data quality, query trophic relationships, reason about indirect ecological interactions, and model probabilistic trophic cascades.</p><p><strong>Features demonstrated:</strong> OWL ontology design, tabular data import, SHACL validation, SPARQL queries, property paths, Datalog reasoning, probabilistic logic (ProbLog), visualization, and graph analytics.</p><pre><code class="language-julia hljs">using RDFLib
+
+# Helper to extract readable string from SPARQL result values
+readable(x::Literal) = x.lexical
+readable(x::URIRef) = split(x.value, r&quot;[/#]&quot;)[end]
+readable(x) = string(x)</code></pre><pre><code class="nohighlight hljs">readable (generic function with 3 methods)</code></pre><h2 id="1.-Defining-the-Ecosystem-Ontology"><a class="docs-heading-anchor" href="#1.-Defining-the-Ecosystem-Ontology">1. Defining the Ecosystem Ontology</a><a id="1.-Defining-the-Ecosystem-Ontology-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Defining-the-Ecosystem-Ontology" title="Permalink"></a></h2><p>We define a lightweight ecology ontology with classes for species, habitats, and observations, plus properties for feeding relationships, habitat associations, and conservation metadata.</p><pre><code class="language-julia hljs">g = RDFGraph()
+
+# Namespaces
+eco = Namespace(&quot;http://example.org/ecology#&quot;)
+sp  = Namespace(&quot;http://example.org/species/&quot;)
+hab = Namespace(&quot;http://example.org/habitat/&quot;)
+
+bind!(g, &quot;eco&quot;, eco)
+bind!(g, &quot;sp&quot;, sp)
+bind!(g, &quot;hab&quot;, hab)
+
+# OWL classes
+for cls in [&quot;Species&quot;, &quot;Habitat&quot;, &quot;Observation&quot;, &quot;TrophicLevel&quot;]
+    add!(g, Triple(eco(cls), RDF.type, OWL.Class))
+end
+
+# Object properties
+for (prop, dom, rng) in [
+    (&quot;feeds_on&quot;,          &quot;Species&quot;, &quot;Species&quot;),
+    (&quot;inhabits&quot;,          &quot;Species&quot;, &quot;Habitat&quot;),
+    (&quot;has_trophic_level&quot;, &quot;Species&quot;, &quot;TrophicLevel&quot;),
+    (&quot;competes_with&quot;,     &quot;Species&quot;, &quot;Species&quot;),
+    (&quot;observed_species&quot;,  &quot;Observation&quot;, &quot;Species&quot;),
+]
+    p = eco(prop)
+    add!(g, Triple(p, RDF.type, OWL.ObjectProperty))
+    add!(g, Triple(p, RDFS.domain, eco(dom)))
+    add!(g, Triple(p, RDFS.range, eco(rng)))
+end
+
+# competes_with is symmetric
+add!(g, Triple(eco(&quot;competes_with&quot;), RDF.type, OWL.SymmetricProperty))
+
+# Datatype properties
+for prop in [&quot;common_name&quot;, &quot;conservation_status&quot;, &quot;typical_size_cm&quot;,
+             &quot;site&quot;, &quot;count&quot;, &quot;method&quot;, &quot;date&quot;]
+    add!(g, Triple(eco(prop), RDF.type, OWL.DatatypeProperty))
+end
+
+println(&quot;Ontology schema: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Ontology schema: 27 triples</code></pre><h2 id="2.-Populating-the-Food-Web"><a class="docs-heading-anchor" href="#2.-Populating-the-Food-Web">2. Populating the Food Web</a><a id="2.-Populating-the-Food-Web-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Populating-the-Food-Web" title="Permalink"></a></h2><p>We populate the graph with 14 species spanning five trophic levels, five coastal habitat types, and a realistic feeding network.</p><pre><code class="language-julia hljs"># Trophic levels
+for tl in [&quot;producer&quot;, &quot;primary_consumer&quot;, &quot;secondary_consumer&quot;,
+           &quot;tertiary_consumer&quot;, &quot;apex_predator&quot;]
+    add!(g, Triple(eco(tl), RDF.type, eco(&quot;TrophicLevel&quot;)))
+    add!(g, Triple(eco(tl), RDFS.label, Literal(replace(tl, &#39;_&#39; =&gt; &#39; &#39;))))
+end
+
+# Habitats
+habitats = [
+    (&quot;pelagic&quot;,          &quot;Open water column&quot;),
+    (&quot;rocky_intertidal&quot;, &quot;Rocky shore between tides&quot;),
+    (&quot;subtidal_reef&quot;,    &quot;Submerged rocky reef&quot;),
+    (&quot;kelp_forest&quot;,      &quot;Dense kelp canopy and understory&quot;),
+    (&quot;sandy_bottom&quot;,     &quot;Soft sediment seafloor&quot;),
+]
+for (id, desc) in habitats
+    add!(g, Triple(hab(id), RDF.type, eco(&quot;Habitat&quot;)))
+    add!(g, Triple(hab(id), RDFS.label, Literal(id)))
+    add!(g, Triple(hab(id), RDFS.comment, Literal(desc)))
+end
+
+# Species: (id, name, trophic_level, status, size_cm, habitats)
+species_data = [
+    (&quot;orca&quot;,            &quot;Killer Whale&quot;,      &quot;apex_predator&quot;,      &quot;Data Deficient&quot;,  700, [&quot;pelagic&quot;]),
+    (&quot;grey_seal&quot;,       &quot;Grey Seal&quot;,         &quot;tertiary_consumer&quot;,  &quot;Least Concern&quot;,   230, [&quot;pelagic&quot;, &quot;rocky_intertidal&quot;]),
+    (&quot;atlantic_cod&quot;,    &quot;Atlantic Cod&quot;,      &quot;tertiary_consumer&quot;,  &quot;Vulnerable&quot;,      120, [&quot;pelagic&quot;, &quot;kelp_forest&quot;]),
+    (&quot;herring&quot;,         &quot;Atlantic Herring&quot;,  &quot;secondary_consumer&quot;, &quot;Least Concern&quot;,    35, [&quot;pelagic&quot;]),
+    (&quot;shore_crab&quot;,      &quot;Shore Crab&quot;,        &quot;secondary_consumer&quot;, &quot;Least Concern&quot;,     8, [&quot;rocky_intertidal&quot;, &quot;subtidal_reef&quot;]),
+    (&quot;common_starfish&quot;, &quot;Common Starfish&quot;,   &quot;secondary_consumer&quot;, &quot;Least Concern&quot;,    30, [&quot;subtidal_reef&quot;, &quot;rocky_intertidal&quot;]),
+    (&quot;blue_mussel&quot;,     &quot;Blue Mussel&quot;,       &quot;primary_consumer&quot;,   &quot;Least Concern&quot;,    10, [&quot;rocky_intertidal&quot;]),
+    (&quot;common_limpet&quot;,   &quot;Common Limpet&quot;,     &quot;primary_consumer&quot;,   &quot;Least Concern&quot;,     6, [&quot;rocky_intertidal&quot;]),
+    (&quot;sea_urchin&quot;,      &quot;Sea Urchin&quot;,        &quot;primary_consumer&quot;,   &quot;Least Concern&quot;,     8, [&quot;subtidal_reef&quot;, &quot;kelp_forest&quot;]),
+    (&quot;barnacle&quot;,        &quot;Acorn Barnacle&quot;,    &quot;primary_consumer&quot;,   &quot;Least Concern&quot;,     2, [&quot;rocky_intertidal&quot;]),
+    (&quot;zooplankton&quot;,     &quot;Zooplankton&quot;,       &quot;primary_consumer&quot;,   &quot;Not Evaluated&quot;,   0.1, [&quot;pelagic&quot;]),
+    (&quot;kelp&quot;,            &quot;Oarweed Kelp&quot;,      &quot;producer&quot;,           &quot;Least Concern&quot;,   150, [&quot;subtidal_reef&quot;, &quot;kelp_forest&quot;]),
+    (&quot;phytoplankton&quot;,   &quot;Phytoplankton&quot;,     &quot;producer&quot;,           &quot;Not Evaluated&quot;,  0.01, [&quot;pelagic&quot;]),
+    (&quot;coralline_algae&quot;, &quot;Coralline Algae&quot;,   &quot;producer&quot;,           &quot;Least Concern&quot;,     5, [&quot;rocky_intertidal&quot;, &quot;subtidal_reef&quot;]),
+]
+
+for (id, name, tl, status, size, habs) in species_data
+    s = sp(id)
+    add!(g, Triple(s, RDF.type, eco(&quot;Species&quot;)))
+    add!(g, Triple(s, eco(&quot;common_name&quot;), Literal(name)))
+    add!(g, Triple(s, eco(&quot;has_trophic_level&quot;), eco(tl)))
+    add!(g, Triple(s, eco(&quot;conservation_status&quot;), Literal(status)))
+    add!(g, Triple(s, eco(&quot;typical_size_cm&quot;), Literal(size)))
+    for h in habs
+        add!(g, Triple(s, eco(&quot;inhabits&quot;), hab(h)))
+    end
+end
+
+# Feeding relationships (predator → prey)
+food_web = [
+    &quot;orca&quot;            =&gt; &quot;grey_seal&quot;,
+    &quot;grey_seal&quot;       =&gt; &quot;atlantic_cod&quot;,
+    &quot;grey_seal&quot;       =&gt; &quot;herring&quot;,
+    &quot;atlantic_cod&quot;    =&gt; &quot;herring&quot;,
+    &quot;atlantic_cod&quot;    =&gt; &quot;shore_crab&quot;,
+    &quot;herring&quot;         =&gt; &quot;zooplankton&quot;,
+    &quot;shore_crab&quot;      =&gt; &quot;blue_mussel&quot;,
+    &quot;shore_crab&quot;      =&gt; &quot;barnacle&quot;,
+    &quot;shore_crab&quot;      =&gt; &quot;common_limpet&quot;,
+    &quot;common_starfish&quot; =&gt; &quot;blue_mussel&quot;,
+    &quot;common_starfish&quot; =&gt; &quot;sea_urchin&quot;,
+    &quot;sea_urchin&quot;      =&gt; &quot;kelp&quot;,
+    &quot;sea_urchin&quot;      =&gt; &quot;coralline_algae&quot;,
+    &quot;blue_mussel&quot;     =&gt; &quot;phytoplankton&quot;,
+    &quot;barnacle&quot;        =&gt; &quot;phytoplankton&quot;,
+    &quot;barnacle&quot;        =&gt; &quot;zooplankton&quot;,
+    &quot;zooplankton&quot;     =&gt; &quot;phytoplankton&quot;,
+    &quot;common_limpet&quot;   =&gt; &quot;coralline_algae&quot;,
+]
+
+for (predator, prey) in food_web
+    add!(g, Triple(sp(predator), eco(&quot;feeds_on&quot;), sp(prey)))
+end
+
+# Competition
+add!(g, Triple(sp(&quot;blue_mussel&quot;), eco(&quot;competes_with&quot;), sp(&quot;barnacle&quot;)))
+add!(g, Triple(sp(&quot;sea_urchin&quot;), eco(&quot;competes_with&quot;), sp(&quot;common_limpet&quot;)))
+
+println(&quot;Ecosystem: $(length(g)) triples — &quot; *
+        &quot;$(length(species_data)) species, $(length(food_web)) feeding links&quot;)</code></pre><pre><code class="nohighlight hljs">Ecosystem: 163 triples — 14 species, 18 feeding links</code></pre><h2 id="3.-Importing-Field-Survey-Data"><a class="docs-heading-anchor" href="#3.-Importing-Field-Survey-Data">3. Importing Field Survey Data</a><a id="3.-Importing-Field-Survey-Data-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Importing-Field-Survey-Data" title="Permalink"></a></h2><p>Field ecologists collect survey data in spreadsheets. We use <strong>tabular mapping</strong> to import a <code>DataFrame</code> of species observations directly into the knowledge graph.</p><pre><code class="language-julia hljs">surveys = [
+    (id=1,  species=&quot;blue_mussel&quot;,     site=&quot;St Andrews&quot;, count=342,  method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=2,  species=&quot;barnacle&quot;,        site=&quot;St Andrews&quot;, count=891,  method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=3,  species=&quot;common_limpet&quot;,   site=&quot;St Andrews&quot;, count=156,  method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=4,  species=&quot;shore_crab&quot;,      site=&quot;St Andrews&quot;, count=23,   method=&quot;visual&quot;,  date=&quot;2024-06-15&quot;),
+    (id=5,  species=&quot;common_starfish&quot;, site=&quot;St Andrews&quot;, count=7,    method=&quot;visual&quot;,  date=&quot;2024-06-15&quot;),
+    (id=6,  species=&quot;blue_mussel&quot;,     site=&quot;Arbroath&quot;,   count=567,  method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=7,  species=&quot;barnacle&quot;,        site=&quot;Arbroath&quot;,   count=1204, method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=8,  species=&quot;sea_urchin&quot;,      site=&quot;Arbroath&quot;,   count=45,   method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=9,  species=&quot;kelp&quot;,            site=&quot;Arbroath&quot;,   count=12,   method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=10, species=&quot;coralline_algae&quot;, site=&quot;Arbroath&quot;,   count=89,   method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=11, species=&quot;herring&quot;,         site=&quot;Bell Rock&quot;,  count=250,  method=&quot;trawl&quot;,   date=&quot;2024-06-15&quot;),
+    (id=12, species=&quot;atlantic_cod&quot;,    site=&quot;Bell Rock&quot;,  count=18,   method=&quot;trawl&quot;,   date=&quot;2024-06-15&quot;),
+    (id=13, species=&quot;grey_seal&quot;,       site=&quot;Bell Rock&quot;,  count=3,    method=&quot;visual&quot;,  date=&quot;2024-06-15&quot;),
+    (id=14, species=&quot;phytoplankton&quot;,   site=&quot;Bell Rock&quot;,  count=1500, method=&quot;sample&quot;,  date=&quot;2024-06-15&quot;),
+    (id=15, species=&quot;zooplankton&quot;,     site=&quot;Bell Rock&quot;,  count=800,  method=&quot;sample&quot;,  date=&quot;2024-06-15&quot;),
+    (id=16, species=&quot;blue_mussel&quot;,     site=&quot;Crail&quot;,      count=423,  method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=17, species=&quot;shore_crab&quot;,      site=&quot;Crail&quot;,      count=31,   method=&quot;visual&quot;,  date=&quot;2024-06-15&quot;),
+    (id=18, species=&quot;common_starfish&quot;, site=&quot;Crail&quot;,      count=5,    method=&quot;visual&quot;,  date=&quot;2024-06-15&quot;),
+    (id=19, species=&quot;sea_urchin&quot;,      site=&quot;Crail&quot;,      count=38,   method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+    (id=20, species=&quot;barnacle&quot;,        site=&quot;Crail&quot;,      count=756,  method=&quot;quadrat&quot;, date=&quot;2024-06-15&quot;),
+]
+
+# Add species URI column for linking to species nodes
+surveys_with_uri = [(; r..., species_uri=&quot;http://example.org/species/&quot; * r.species) for r in surveys]
+
+m = RDFMapping(graph=g)
+
+tpl = RDFTemplate(
+    subject = :id,
+    subject_prefix = &quot;http://example.org/observation/&quot;,
+    properties = [
+        (eco(&quot;observed_species&quot;), :species_uri, IRIColumn()),
+        (eco(&quot;site&quot;),   :site,   AutoColumn()),
+        (eco(&quot;count&quot;),  :count,  LiteralColumn(XSD.integer)),
+        (eco(&quot;method&quot;), :method, AutoColumn()),
+        (eco(&quot;date&quot;),   :date,   LiteralColumn(XSD.date)),
+    ],
+    types = [eco(&quot;Observation&quot;)]
+)
+
+before = length(g)
+rdf_map!(m, surveys_with_uri, tpl)
+println(&quot;Imported $(length(g) - before) observation triples from $(length(surveys)) records&quot;)
+println(&quot;Total knowledge graph: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Imported 120 observation triples from 20 records
+Total knowledge graph: 283 triples</code></pre><h2 id="4.-Validating-Data-Quality-with-SHACL"><a class="docs-heading-anchor" href="#4.-Validating-Data-Quality-with-SHACL">4. Validating Data Quality with SHACL</a><a id="4.-Validating-Data-Quality-with-SHACL-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Validating-Data-Quality-with-SHACL" title="Permalink"></a></h2><p>Before analysis, we validate that observations conform to a SHACL shapes schema — every observation must have a linked species, a non-negative integer count, and a date.</p><pre><code class="language-julia hljs">shapes_ttl = &quot;&quot;&quot;
+    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix eco: &lt;http://example.org/ecology#&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    eco:ObservationShape a sh:NodeShape ;
+        sh:targetClass eco:Observation ;
+        sh:property [
+            sh:path eco:observed_species ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+            sh:nodeKind sh:IRI ;
+        ] ;
+        sh:property [
+            sh:path eco:count ;
+            sh:minCount 1 ;
+            sh:datatype xsd:integer ;
+        ] ;
+        sh:property [
+            sh:path eco:date ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;
+
+report = rdf_validate(m, shapes_ttl)
+println(&quot;Valid survey data — conforms: $(report.conforms)&quot;)</code></pre><pre><code class="nohighlight hljs">Valid survey data — conforms: true</code></pre><p>Now add an <strong>incomplete observation</strong> and see SHACL catch the errors:</p><pre><code class="language-julia hljs">bad = URIRef(&quot;http://example.org/observation/incomplete&quot;)
+add!(g, Triple(bad, RDF.type, eco(&quot;Observation&quot;)))
+add!(g, Triple(bad, eco(&quot;site&quot;), Literal(&quot;Unknown Site&quot;)))
+
+report2 = rdf_validate(m, shapes_ttl)
+println(&quot;After adding incomplete observation:&quot;)
+println(&quot;  Conforms: $(report2.conforms)&quot;)
+println(&quot;  Violations: $(length(report2.results))&quot;)
+for r in report2.results
+    println(&quot;  ✗ $(r.message)&quot;)
+end
+
+# Clean up
+remove!(g, Triple(bad, RDF.type, eco(&quot;Observation&quot;)))
+remove!(g, Triple(bad, eco(&quot;site&quot;), Literal(&quot;Unknown Site&quot;)))</code></pre><pre><code class="nohighlight hljs">After adding incomplete observation:
+  Conforms: false
+  Violations: 3
+  ✗ Expected at least 1 values for http://example.org/ecology#observed_species, got 0
+  ✗ Expected at least 1 values for http://example.org/ecology#count, got 0
+  ✗ Expected at least 1 values for http://example.org/ecology#date, got 0
+
+RDFGraph (283 triples)</code></pre><h2 id="5.-Querying-the-Ecosystem-with-SPARQL"><a class="docs-heading-anchor" href="#5.-Querying-the-Ecosystem-with-SPARQL">5. Querying the Ecosystem with SPARQL</a><a id="5.-Querying-the-Ecosystem-with-SPARQL-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Querying-the-Ecosystem-with-SPARQL" title="Permalink"></a></h2><h3 id="Species-by-trophic-level"><a class="docs-heading-anchor" href="#Species-by-trophic-level">Species by trophic level</a><a id="Species-by-trophic-level-1"></a><a class="docs-heading-anchor-permalink" href="#Species-by-trophic-level" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX eco: &lt;http://example.org/ecology#&gt;
+    SELECT ?name ?level WHERE {
+        ?s a eco:Species .
+        ?s eco:common_name ?name .
+        ?s eco:has_trophic_level ?tl .
+        ?tl rdfs:label ?level .
+    }
+    ORDER BY ?level ?name
+&quot;&quot;&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;name&quot;]), 20)) $(readable(row[&quot;level&quot;]))&quot;)
+end</code></pre><h3 id="Most-observed-species"><a class="docs-heading-anchor" href="#Most-observed-species">Most observed species</a><a id="Most-observed-species-1"></a><a class="docs-heading-anchor-permalink" href="#Most-observed-species" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX eco: &lt;http://example.org/ecology#&gt;
+    SELECT ?name ?site ?count WHERE {
+        ?obs a eco:Observation .
+        ?obs eco:observed_species ?species .
+        ?species eco:common_name ?name .
+        ?obs eco:site ?site .
+        ?obs eco:count ?count .
+    }
+    ORDER BY DESC(?count)
+&quot;&quot;&quot;)
+println(&quot;Top 5 observations by abundance:&quot;)
+for row in Iterators.take(results, 5)
+    println(&quot;  $(rpad(readable(row[&quot;name&quot;]), 18)) at $(rpad(readable(row[&quot;site&quot;]), 12))  n=$(readable(row[&quot;count&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Top 5 observations by abundance:
+  Phytoplankton      at Bell Rock     n=1500
+  Acorn Barnacle     at Arbroath      n=1204
+  Acorn Barnacle     at St Andrews    n=891
+  Zooplankton        at Bell Rock     n=800
+  Acorn Barnacle     at Crail         n=756</code></pre><h3 id="Vulnerable-species-and-their-predators"><a class="docs-heading-anchor" href="#Vulnerable-species-and-their-predators">Vulnerable species and their predators</a><a id="Vulnerable-species-and-their-predators-1"></a><a class="docs-heading-anchor-permalink" href="#Vulnerable-species-and-their-predators" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX eco: &lt;http://example.org/ecology#&gt;
+    SELECT ?vulnerable ?predator_name WHERE {
+        ?s eco:conservation_status &quot;Vulnerable&quot; .
+        ?s eco:common_name ?vulnerable .
+        ?pred eco:feeds_on ?s .
+        ?pred eco:common_name ?predator_name .
+    }
+&quot;&quot;&quot;)
+println(&quot;Predators of vulnerable species:&quot;)
+for row in results
+    println(&quot;  $(readable(row[&quot;predator_name&quot;]))  →  $(readable(row[&quot;vulnerable&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Predators of vulnerable species:
+  Grey Seal  →  Atlantic Cod</code></pre><h2 id="6.-Food-Chain-Analysis-with-Property-Paths"><a class="docs-heading-anchor" href="#6.-Food-Chain-Analysis-with-Property-Paths">6. Food Chain Analysis with Property Paths</a><a id="6.-Food-Chain-Analysis-with-Property-Paths-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Food-Chain-Analysis-with-Property-Paths" title="Permalink"></a></h2><p>Property paths trace multi-step feeding relationships without recursive queries.</p><h3 id="All-species-in-the-orca’s-transitive-food-chain"><a class="docs-heading-anchor" href="#All-species-in-the-orca’s-transitive-food-chain">All species in the orca’s transitive food chain</a><a id="All-species-in-the-orca’s-transitive-food-chain-1"></a><a class="docs-heading-anchor-permalink" href="#All-species-in-the-orca’s-transitive-food-chain" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX eco: &lt;http://example.org/ecology#&gt;
+    PREFIX sp:  &lt;http://example.org/species/&gt;
+    SELECT ?prey_name WHERE {
+        sp:orca eco:feeds_on+ ?prey .
+        ?prey eco:common_name ?prey_name .
+    }
+    ORDER BY ?prey_name
+&quot;&quot;&quot;)
+println(&quot;The orca&#39;s transitive food chain ($(length(results)) species):&quot;)
+for row in results
+    println(&quot;  • $(readable(row[&quot;prey_name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">The orca&#39;s transitive food chain (10 species):
+  • Acorn Barnacle
+  • Atlantic Cod
+  • Atlantic Herring
+  • Blue Mussel
+  • Common Limpet
+  • Coralline Algae
+  • Grey Seal
+  • Phytoplankton
+  • Shore Crab
+  • Zooplankton</code></pre><h3 id="Which-species-ultimately-depend-on-phytoplankton?"><a class="docs-heading-anchor" href="#Which-species-ultimately-depend-on-phytoplankton?">Which species ultimately depend on phytoplankton?</a><a id="Which-species-ultimately-depend-on-phytoplankton?-1"></a><a class="docs-heading-anchor-permalink" href="#Which-species-ultimately-depend-on-phytoplankton?" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX eco: &lt;http://example.org/ecology#&gt;
+    PREFIX sp:  &lt;http://example.org/species/&gt;
+    SELECT ?name WHERE {
+        ?s eco:feeds_on+ sp:phytoplankton .
+        ?s eco:common_name ?name .
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+println(&quot;Species with transitive dependency on phytoplankton ($(length(results))):&quot;)
+for row in results
+    println(&quot;  • $(readable(row[&quot;name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Species with transitive dependency on phytoplankton (9):
+  • Acorn Barnacle
+  • Atlantic Cod
+  • Atlantic Herring
+  • Blue Mussel
+  • Common Starfish
+  • Grey Seal
+  • Killer Whale
+  • Shore Crab
+  • Zooplankton</code></pre><h3 id="All-consumers-of-kelp-(direct-and-indirect)"><a class="docs-heading-anchor" href="#All-consumers-of-kelp-(direct-and-indirect)">All consumers of kelp (direct and indirect)</a><a id="All-consumers-of-kelp-(direct-and-indirect)-1"></a><a class="docs-heading-anchor-permalink" href="#All-consumers-of-kelp-(direct-and-indirect)" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX eco: &lt;http://example.org/ecology#&gt;
+    PREFIX sp:  &lt;http://example.org/species/&gt;
+    SELECT ?name WHERE {
+        ?s eco:feeds_on+ sp:kelp .
+        ?s eco:common_name ?name .
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+println(&quot;Direct and indirect consumers of kelp:&quot;)
+for row in results
+    println(&quot;  • $(readable(row[&quot;name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Direct and indirect consumers of kelp:
+  • Common Starfish
+  • Sea Urchin</code></pre><h2 id="7.-Deriving-Ecological-Relationships-with-Datalog"><a class="docs-heading-anchor" href="#7.-Deriving-Ecological-Relationships-with-Datalog">7. Deriving Ecological Relationships with Datalog</a><a id="7.-Deriving-Ecological-Relationships-with-Datalog-1"></a><a class="docs-heading-anchor-permalink" href="#7.-Deriving-Ecological-Relationships-with-Datalog" title="Permalink"></a></h2><p>We use <strong>Datalog reasoning</strong> to compute derived relationships: transitive trophic dependency and shared-prey competition.</p><pre><code class="language-julia hljs">n3_food_web = &quot;&quot;&quot;
+    @prefix eco: &lt;http://example.org/ecology#&gt; .
+    @prefix sp:  &lt;http://example.org/species/&gt; .
+
+    sp:orca            eco:feeds_on sp:grey_seal .
+    sp:grey_seal       eco:feeds_on sp:atlantic_cod .
+    sp:grey_seal       eco:feeds_on sp:herring .
+    sp:atlantic_cod    eco:feeds_on sp:herring .
+    sp:atlantic_cod    eco:feeds_on sp:shore_crab .
+    sp:herring         eco:feeds_on sp:zooplankton .
+    sp:shore_crab      eco:feeds_on sp:blue_mussel .
+    sp:shore_crab      eco:feeds_on sp:barnacle .
+    sp:shore_crab      eco:feeds_on sp:common_limpet .
+    sp:common_starfish eco:feeds_on sp:blue_mussel .
+    sp:common_starfish eco:feeds_on sp:sea_urchin .
+    sp:sea_urchin      eco:feeds_on sp:kelp .
+    sp:sea_urchin      eco:feeds_on sp:coralline_algae .
+    sp:blue_mussel     eco:feeds_on sp:phytoplankton .
+    sp:barnacle        eco:feeds_on sp:phytoplankton .
+    sp:barnacle        eco:feeds_on sp:zooplankton .
+    sp:zooplankton     eco:feeds_on sp:phytoplankton .
+    sp:common_limpet   eco:feeds_on sp:coralline_algae .
+
+    # Transitive trophic dependency
+    { ?x eco:feeds_on ?y } =&gt; { ?x eco:depends_on ?y } .
+    { ?x eco:depends_on ?y . ?y eco:depends_on ?z } =&gt; { ?x eco:depends_on ?z } .
+
+    # Shared-prey relationship (potential competitors)
+    { ?x eco:feeds_on ?z . ?y eco:feeds_on ?z } =&gt; { ?x eco:shares_prey_with ?y } .
+&quot;&quot;&quot;
+
+g_dl = parse_rdf(n3_food_web, N3Format())
+println(&quot;Before reasoning: $(length(g_dl)) triples&quot;)
+
+g_inferred = datalog_reason(g_dl)
+println(&quot;After reasoning:  $(length(g_inferred)) triples&quot;)
+
+dep_count = length(collect(triples(g_inferred, (nothing, eco(&quot;depends_on&quot;), nothing))))
+feed_count = length(collect(triples(g_inferred, (nothing, eco(&quot;feeds_on&quot;), nothing))))
+share_count = length(collect(triples(g_inferred, (nothing, eco(&quot;shares_prey_with&quot;), nothing))))
+
+println(&quot;\nDirect feeding links:       $feed_count&quot;)
+println(&quot;Transitive dependencies:    $dep_count  ($(dep_count - feed_count) new)&quot;)
+println(&quot;Shared-prey relationships:  $share_count&quot;)</code></pre><pre><code class="nohighlight hljs">Before reasoning: 21 triples
+After reasoning:  90 triples
+
+Direct feeding links:       18
+Transitive dependencies:    47  (29 new)
+Shared-prey relationships:  25</code></pre><h3 id="What-does-the-orca-transitively-depend-on?"><a class="docs-heading-anchor" href="#What-does-the-orca-transitively-depend-on?">What does the orca transitively depend on?</a><a id="What-does-the-orca-transitively-depend-on?-1"></a><a class="docs-heading-anchor-permalink" href="#What-does-the-orca-transitively-depend-on?" title="Permalink"></a></h3><pre><code class="language-julia hljs">orca_deps = [t.object for t in triples(g_inferred, (sp(&quot;orca&quot;), eco(&quot;depends_on&quot;), nothing))]
+println(&quot;Orca depends on $(length(orca_deps)) species (directly or indirectly):&quot;)
+for dep in sort(orca_deps; by=x -&gt; split(string(x), &#39;/&#39;)[end])
+    println(&quot;  • $(split(string(dep), &#39;/&#39;)[end])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Orca depends on 10 species (directly or indirectly):
+  • atlantic_cod
+  • barnacle
+  • blue_mussel
+  • common_limpet
+  • coralline_algae
+  • grey_seal
+  • herring
+  • phytoplankton
+  • shore_crab
+  • zooplankton</code></pre><h3 id="Which-species-share-prey-(potential-competitors)?"><a class="docs-heading-anchor" href="#Which-species-share-prey-(potential-competitors)?">Which species share prey (potential competitors)?</a><a id="Which-species-share-prey-(potential-competitors)?-1"></a><a class="docs-heading-anchor-permalink" href="#Which-species-share-prey-(potential-competitors)?" title="Permalink"></a></h3><pre><code class="language-julia hljs">seen = Set{String}()
+for t in triples(g_inferred, (nothing, eco(&quot;shares_prey_with&quot;), nothing))
+    a = split(string(t.subject), &#39;/&#39;)[end]
+    b = split(string(t.object), &#39;/&#39;)[end]
+    a == b &amp;&amp; continue
+    pair = a &lt; b ? &quot;$a ↔ $b&quot; : &quot;$b ↔ $a&quot;
+    pair in seen &amp;&amp; continue
+    push!(seen, pair)
+end
+println(&quot;Species pairs sharing prey ($(length(seen)) pairs):&quot;)
+for pair in sort(collect(seen))
+    println(&quot;  • $pair&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Species pairs sharing prey (7 pairs):
+  • atlantic_cod ↔ grey_seal
+  • barnacle ↔ blue_mussel
+  • barnacle ↔ herring
+  • barnacle ↔ zooplankton
+  • blue_mussel ↔ zooplankton
+  • common_limpet ↔ sea_urchin
+  • common_starfish ↔ shore_crab</code></pre><h2 id="8.-Probabilistic-Trophic-Cascades-with-ProbLog"><a class="docs-heading-anchor" href="#8.-Probabilistic-Trophic-Cascades-with-ProbLog">8. Probabilistic Trophic Cascades with ProbLog</a><a id="8.-Probabilistic-Trophic-Cascades-with-ProbLog-1"></a><a class="docs-heading-anchor-permalink" href="#8.-Probabilistic-Trophic-Cascades-with-ProbLog" title="Permalink"></a></h2><p>The classic <strong>sea otter → sea urchin → kelp</strong> trophic cascade: when apex predators are removed, herbivore populations explode and primary producers collapse. We model this probabilistically with ProbLog.</p><pre><code class="language-julia hljs">base_program = &quot;&quot;&quot;
+    0.3::otters_present.
+    0.85::urchins_present.
+    0.9::kelp_present.
+    0.7::mussels_present.
+
+    urchins_controlled :- otters_present.
+    urchin_barren :- urchins_present, \\+urchins_controlled.
+    kelp_forest :- kelp_present, \\+urchin_barren.
+    healthy_reef :- kelp_forest, mussels_present.
+    degraded_reef :- urchin_barren.
+
+    query(urchin_barren).
+    query(kelp_forest).
+    query(healthy_reef).
+    query(degraded_reef).
+&quot;&quot;&quot;
+
+results = problog_query(base_program)
+println(&quot;Baseline ecosystem probabilities:&quot;)
+for key in [&quot;urchin_barren&quot;, &quot;kelp_forest&quot;, &quot;healthy_reef&quot;, &quot;degraded_reef&quot;]
+    haskey(results, key) &amp;&amp; println(&quot;  $(rpad(key, 16)) = $(round(results[key]; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Baseline ecosystem probabilities:
+  urchin_barren    = 0.595
+  kelp_forest      = 0.3645
+  healthy_reef     = 0.2552
+  degraded_reef    = 0.595</code></pre><h3 id="Scenario:-Otters-present-(conservation-success)"><a class="docs-heading-anchor" href="#Scenario:-Otters-present-(conservation-success)">Scenario: Otters present (conservation success)</a><a id="Scenario:-Otters-present-(conservation-success)-1"></a><a class="docs-heading-anchor-permalink" href="#Scenario:-Otters-present-(conservation-success)" title="Permalink"></a></h3><p>With otters controlling the urchin population, the kelp forest thrives:</p><pre><code class="language-julia hljs">with_otters = &quot;&quot;&quot;
+    0.3::otters_present.
+    0.85::urchins_present.
+    0.9::kelp_present.
+    0.7::mussels_present.
+
+    urchins_controlled :- otters_present.
+    urchin_barren :- urchins_present, \\+urchins_controlled.
+    kelp_forest :- kelp_present, \\+urchin_barren.
+    healthy_reef :- kelp_forest, mussels_present.
+    degraded_reef :- urchin_barren.
+
+    query(urchin_barren).
+    query(kelp_forest).
+    query(healthy_reef).
+    query(degraded_reef).
+
+    evidence(otters_present, true).
+&quot;&quot;&quot;
+
+r_otters = problog_query(with_otters)
+println(&quot;With otters present (conservation success):&quot;)
+for key in [&quot;urchin_barren&quot;, &quot;kelp_forest&quot;, &quot;healthy_reef&quot;, &quot;degraded_reef&quot;]
+    haskey(r_otters, key) &amp;&amp; println(&quot;  $(rpad(key, 16)) = $(round(r_otters[key]; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">With otters present (conservation success):
+  urchin_barren    = 0.0
+  kelp_forest      = 0.9
+  healthy_reef     = 0.63
+  degraded_reef    = 0.0</code></pre><h3 id="Scenario:-Otters-absent-(overhunting/decline)"><a class="docs-heading-anchor" href="#Scenario:-Otters-absent-(overhunting/decline)">Scenario: Otters absent (overhunting/decline)</a><a id="Scenario:-Otters-absent-(overhunting/decline)-1"></a><a class="docs-heading-anchor-permalink" href="#Scenario:-Otters-absent-(overhunting/decline)" title="Permalink"></a></h3><p>Without otters, urchins overgraze the kelp — the ecosystem degrades:</p><pre><code class="language-julia hljs">without_otters = &quot;&quot;&quot;
+    0.3::otters_present.
+    0.85::urchins_present.
+    0.9::kelp_present.
+    0.7::mussels_present.
+
+    urchins_controlled :- otters_present.
+    urchin_barren :- urchins_present, \\+urchins_controlled.
+    kelp_forest :- kelp_present, \\+urchin_barren.
+    healthy_reef :- kelp_forest, mussels_present.
+    degraded_reef :- urchin_barren.
+
+    query(urchin_barren).
+    query(kelp_forest).
+    query(healthy_reef).
+    query(degraded_reef).
+
+    evidence(otters_present, false).
+&quot;&quot;&quot;
+
+r_no_otters = problog_query(without_otters)
+println(&quot;Without otters (population decline):&quot;)
+for key in [&quot;urchin_barren&quot;, &quot;kelp_forest&quot;, &quot;healthy_reef&quot;, &quot;degraded_reef&quot;]
+    haskey(r_no_otters, key) &amp;&amp; println(&quot;  $(rpad(key, 16)) = $(round(r_no_otters[key]; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Without otters (population decline):
+  urchin_barren    = 0.85
+  kelp_forest      = 0.135
+  healthy_reef     = 0.0945
+  degraded_reef    = 0.85</code></pre><h3 id="Comparing-scenarios"><a class="docs-heading-anchor" href="#Comparing-scenarios">Comparing scenarios</a><a id="Comparing-scenarios-1"></a><a class="docs-heading-anchor-permalink" href="#Comparing-scenarios" title="Permalink"></a></h3><pre><code class="language-julia hljs">println(&quot;Impact of otter conservation on ecosystem health:\n&quot;)
+println(&quot;  $(rpad(&quot;Indicator&quot;, 18)) $(rpad(&quot;Otters present&quot;, 16)) $(rpad(&quot;Otters absent&quot;, 16)) Change&quot;)
+println(&quot;  $(&quot;-&quot;^66)&quot;)
+for key in [&quot;urchin_barren&quot;, &quot;kelp_forest&quot;, &quot;healthy_reef&quot;, &quot;degraded_reef&quot;]
+    p_yes = get(r_otters, key, 0.0)
+    p_no  = get(r_no_otters, key, 0.0)
+    delta = p_yes - p_no
+    sign = delta &gt;= 0 ? &quot;+&quot; : &quot;&quot;
+    println(&quot;  $(rpad(key, 18)) $(rpad(round(p_yes; digits=4), 16)) $(rpad(round(p_no; digits=4), 16)) $(sign)$(round(delta; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Impact of otter conservation on ecosystem health:
+
+  Indicator          Otters present   Otters absent    Change
+  ------------------------------------------------------------------
+  urchin_barren      0.0              0.85             -0.85
+  kelp_forest        0.9              0.135            +0.765
+  healthy_reef       0.63             0.0945           +0.5355
+  degraded_reef      0.0              0.85             -0.85</code></pre><h2 id="9.-Visualization-and-Graph-Analytics"><a class="docs-heading-anchor" href="#9.-Visualization-and-Graph-Analytics">9. Visualization and Graph Analytics</a><a id="9.-Visualization-and-Graph-Analytics-1"></a><a class="docs-heading-anchor-permalink" href="#9.-Visualization-and-Graph-Analytics" title="Permalink"></a></h2><h3 id="Graph-statistics"><a class="docs-heading-anchor" href="#Graph-statistics">Graph statistics</a><a id="Graph-statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-statistics" title="Permalink"></a></h3><pre><code class="language-julia hljs">stats = graph_stats(g)
+println(&quot;Knowledge graph summary:&quot;)
+println(&quot;  Total triples:  $(stats.triples)&quot;)
+println(&quot;  Unique subjects: $(stats.subjects)&quot;)
+println(&quot;  Unique predicates: $(stats.predicates)&quot;)
+println(&quot;  Unique objects:  $(stats.objects)&quot;)
+println(&quot;  URI references:  $(stats.uri_refs)&quot;)
+println(&quot;  Literals:        $(stats.literals)&quot;)</code></pre><pre><code class="nohighlight hljs">Knowledge graph summary:
+  Total triples:  283
+  Unique subjects: 60
+  Unique predicates: 17
+  Unique objects:  104
+  URI references:  69
+  Literals:        74</code></pre><h3 id="Concise-Bounded-Description-of-a-species"><a class="docs-heading-anchor" href="#Concise-Bounded-Description-of-a-species">Concise Bounded Description of a species</a><a id="Concise-Bounded-Description-of-a-species-1"></a><a class="docs-heading-anchor-permalink" href="#Concise-Bounded-Description-of-a-species" title="Permalink"></a></h3><p>The CBD extracts all triples describing a single resource — useful for generating a species profile card.</p><pre><code class="language-julia hljs">cod_desc = cbd(g, sp(&quot;atlantic_cod&quot;))
+println(&quot;CBD for Atlantic Cod ($(length(cod_desc)) triples):&quot;)
+for t in triples(cod_desc)
+    pred = split(string(t.predicate), r&quot;[/#]&quot;)[end]
+    obj_str = t.object isa Literal ? &quot;\&quot;$(t.object.lexical)\&quot;&quot; : readable(t.object)
+    println(&quot;  $(rpad(pred, 22)) $(obj_str)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">CBD for Atlantic Cod (9 triples):
+  type                   Species
+  common_name            &quot;Atlantic Cod&quot;
+  has_trophic_level      tertiary_consumer
+  conservation_status    &quot;Vulnerable&quot;
+  typical_size_cm        &quot;120&quot;
+  inhabits               pelagic
+  inhabits               kelp_forest
+  feeds_on               herring
+  feeds_on               shore_crab</code></pre><h3 id="Food-web-visualization"><a class="docs-heading-anchor" href="#Food-web-visualization">Food web visualization</a><a id="Food-web-visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Food-web-visualization" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Extract just the feeding subgraph for visualization
+food_g = RDFGraph()
+bind!(food_g, &quot;sp&quot;, sp)
+bind!(food_g, &quot;eco&quot;, eco)
+for t in triples(g, (nothing, eco(&quot;feeds_on&quot;), nothing))
+    add!(food_g, t)
+end
+
+dot_str = to_dot(food_g; label=&quot;Coastal Food Web&quot;)
+println(&quot;Generated DOT visualization ($(length(dot_str)) chars)&quot;)</code></pre><pre><code class="nohighlight hljs">Generated DOT visualization (1126 chars)</code></pre><pre><code class="language-julia hljs">using GraphViz
+GraphViz.load(IOBuffer(dot_str))</code></pre><p><img src="../ecology_files/figure-commonmark/cell-24-output-1.svg" alt/></p><h3 id="Serialization"><a class="docs-heading-anchor" href="#Serialization">Serialization</a><a id="Serialization-1"></a><a class="docs-heading-anchor-permalink" href="#Serialization" title="Permalink"></a></h3><p>Export the full knowledge graph in Turtle format:</p><pre><code class="language-julia hljs">ttl = serialize(g, TurtleFormat())
+lines = split(ttl, &#39;\n&#39;)
+println(&quot;Serialized to Turtle: $(length(lines)) lines, $(length(ttl)) bytes&quot;)
+println(&quot;\nFirst 15 lines:&quot;)
+for line in Iterators.take(lines, 15)
+    println(&quot;  $line&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Serialized to Turtle: 353 lines, 9887 bytes
+
+First 15 lines:
+  @prefix eco: &lt;http://example.org/ecology#&gt; .
+  @prefix hab: &lt;http://example.org/habitat/&gt; .
+  @prefix ns1: &lt;http://example.org/observation/&gt; .
+  @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+  @prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+  @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+  @prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+  @prefix sp: &lt;http://example.org/species/&gt; .
+  @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+  
+  eco:Habitat a owl:Class .
+  
+  eco:Observation a owl:Class .
+  
+  eco:Species a owl:Class .</code></pre><h2 id="Summary"><a class="docs-heading-anchor" href="#Summary">Summary</a><a id="Summary-1"></a><a class="docs-heading-anchor-permalink" href="#Summary" title="Permalink"></a></h2><p>This vignette demonstrated how RDFLib.jl integrates multiple semantic web technologies for ecological modeling:</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right">Ecological Application</th></tr><tr><td style="text-align: right"><strong>OWL Ontology</strong></td><td style="text-align: right">Species, habitats, trophic levels, feeding relationships</td></tr><tr><td style="text-align: right"><strong>Tabular Mapping</strong></td><td style="text-align: right">Field survey data from DataFrames into the knowledge graph</td></tr><tr><td style="text-align: right"><strong>SHACL Validation</strong></td><td style="text-align: right">Ensuring observation data completeness and correctness</td></tr><tr><td style="text-align: right"><strong>SPARQL Queries</strong></td><td style="text-align: right">Querying species by trophic level, abundance, vulnerability</td></tr><tr><td style="text-align: right"><strong>Property Paths</strong></td><td style="text-align: right">Tracing transitive food chains without recursion</td></tr><tr><td style="text-align: right"><strong>Datalog Reasoning</strong></td><td style="text-align: right">Inferring indirect trophic dependencies and competition</td></tr><tr><td style="text-align: right"><strong>ProbLog</strong></td><td style="text-align: right">Modeling the otter–urchin–kelp trophic cascade probabilistically</td></tr><tr><td style="text-align: right"><strong>Visualization</strong></td><td style="text-align: right">Food web DOT graphs and graph statistics</td></tr></table><p>The probabilistic trophic cascade analysis quantifies a well-known ecological phenomenon: removing apex predators (otters) dramatically shifts ecosystem health probabilities, demonstrating how RDFLib.jl can support both qualitative knowledge representation and quantitative ecological modeling.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../reasoning/shacl-validation/">« SHACL Validation</a><a class="docs-footer-nextpage" href="../ash-dieback/">Ash Dieback »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

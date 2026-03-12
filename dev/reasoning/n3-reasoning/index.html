@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>N3 Reasoning · RDFLib.jl</title><meta name="title" content="N3 Reasoning · RDFLib.jl"/><meta property="og:title" content="N3 Reasoning · RDFLib.jl"/><meta property="twitter:title" content="N3 Reasoning · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/n3-reasoning/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/n3-reasoning/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/n3-reasoning/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../inference-rdfs-owl/">RDFS/OWL Inference</a></li><li class="is-active"><a class="tocitem" href>N3 Reasoning</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Basic-Forward-Chaining"><span>Basic Forward Chaining</span></a></li><li><a class="tocitem" href="#Chained-Rules"><span>Chained Rules</span></a></li><li><a class="tocitem" href="#Backward-Chaining"><span>Backward Chaining</span></a></li><li><a class="tocitem" href="#Math-Builtins"><span>Math Builtins</span></a></li><li><a class="tocitem" href="#String-Builtins"><span>String Builtins</span></a></li><li><a class="tocitem" href="#List-Builtins"><span>List Builtins</span></a></li><li><a class="tocitem" href="#Cryptographic-Builtins"><span>Cryptographic Builtins</span></a></li><li><a class="tocitem" href="#Log-Builtins"><span>Log Builtins</span></a></li><li><a class="tocitem" href="#Meta-Reasoning:-log:conclusion"><span>Meta-Reasoning: log:conclusion</span></a></li><li><a class="tocitem" href="#A-Practical-Example:-Family-Relationships"><span>A Practical Example: Family Relationships</span></a></li></ul></li><li><a class="tocitem" href="../datalog/">Datalog</a></li><li><a class="tocitem" href="../problog/">ProbLog</a></li><li><a class="tocitem" href="../shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Reasoning &amp; Inference</a></li><li class="is-active"><a href>N3 Reasoning</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>N3 Reasoning</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/reasoning/n3-reasoning.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="N3-Reasoning"><a class="docs-heading-anchor" href="#N3-Reasoning">N3 Reasoning</a><a id="N3-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#N3-Reasoning" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>Notation3 (N3) extends RDF with formulas (quoted graphs), variables, and implication rules. RDFLib.jl includes a full N3 reasoner based on the Euler Abstract Machine (EAM) with support for 100+ built-in predicates covering math, string, list, logic, cryptography, and time operations.</p><pre><code class="language-julia hljs">using RDFLib</code></pre><h2 id="Basic-Forward-Chaining"><a class="docs-heading-anchor" href="#Basic-Forward-Chaining">Basic Forward Chaining</a><a id="Basic-Forward-Chaining-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Forward-Chaining" title="Permalink"></a></h2><p>Rules in N3 use <code>=&gt;</code> (log:implies) to express “if antecedent then consequent”:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+
+:Socrates a :Human .
+:Plato a :Human .
+:Fido a :Dog .
+
+{ ?X a :Human } =&gt; { ?X a :Mortal } .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+println(&quot;Mortals:&quot;)
+for t in triples(result, (nothing, RDF.type, URIRef(&quot;urn:example:Mortal&quot;)))
+    println(&quot;  &quot;, t.subject)
+end</code></pre><pre><code class="nohighlight hljs">Mortals:
+  URIRef(&quot;urn:example:Socrates&quot;)
+  URIRef(&quot;urn:example:Plato&quot;)</code></pre><h2 id="Chained-Rules"><a class="docs-heading-anchor" href="#Chained-Rules">Chained Rules</a><a id="Chained-Rules-1"></a><a class="docs-heading-anchor-permalink" href="#Chained-Rules" title="Permalink"></a></h2><p>Rules can chain — the conclusion of one rule feeds the antecedent of another:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+:Cat rdfs:subClassOf :Feline .
+:Feline rdfs:subClassOf :Mammal .
+:Mammal rdfs:subClassOf :Animal .
+:whiskers a :Cat .
+
+{ ?X a ?A . ?A rdfs:subClassOf ?B } =&gt; { ?X a ?B } .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+println(&quot;Whiskers is a:&quot;)
+for t in triples(result, (URIRef(&quot;urn:example:whiskers&quot;), RDF.type, nothing))
+    println(&quot;  &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">Whiskers is a:
+  URIRef(&quot;urn:example:Animal&quot;)
+  URIRef(&quot;urn:example:Feline&quot;)
+  URIRef(&quot;urn:example:Mammal&quot;)
+  URIRef(&quot;urn:example:Cat&quot;)</code></pre><h2 id="Backward-Chaining"><a class="docs-heading-anchor" href="#Backward-Chaining">Backward Chaining</a><a id="Backward-Chaining-1"></a><a class="docs-heading-anchor-permalink" href="#Backward-Chaining" title="Permalink"></a></h2><p>Rules using <code>&lt;=</code> fire backward (goal-directed):</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .
+
+:alice :age 25 .
+:bob :age 17 .
+:carol :age 30 .
+
+{ ?X :isAdult true } &lt;= { ?X :age ?A . ?A math:notLessThan 18 } .
+
+:alice :isAdult ?R1 .
+:bob :isAdult ?R2 .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+for t in triples(result, (nothing, URIRef(&quot;urn:example:isAdult&quot;), nothing))
+    println(&quot;$(t.subject) isAdult $(t.object)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">URIRef(&quot;urn:example:alice&quot;) isAdult Variable(&quot;R1&quot;)
+URIRef(&quot;urn:example:bob&quot;) isAdult Variable(&quot;R2&quot;)</code></pre><h2 id="Math-Builtins"><a class="docs-heading-anchor" href="#Math-Builtins">Math Builtins</a><a id="Math-Builtins-1"></a><a class="docs-heading-anchor-permalink" href="#Math-Builtins" title="Permalink"></a></h2><p>N3 provides built-in predicates for arithmetic:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .
+
+:Let :values (10 3) .
+
+{
+    :Let :values (?A ?B) .
+    (?A ?B) math:sum ?sum .
+    (?A ?B) math:difference ?diff .
+    (?A ?B) math:product ?prod .
+    (?A ?B) math:quotient ?quot .
+    ?A math:absoluteValue ?abs .
+}
+=&gt;
+{
+    :result :sum ?sum ;
+            :difference ?diff ;
+            :product ?prod ;
+            :quotient ?quot ;
+            :absoluteValue ?abs .
+} .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+ex = Namespace(&quot;urn:example:&quot;)
+for (prop, label) in [(&quot;sum&quot;,&quot;Sum&quot;), (&quot;difference&quot;,&quot;Diff&quot;), (&quot;product&quot;,&quot;Prod&quot;),
+                       (&quot;quotient&quot;,&quot;Quot&quot;), (&quot;absoluteValue&quot;,&quot;Abs&quot;)]
+    for t in triples(result, (ex(&quot;result&quot;), ex(prop), nothing))
+        println(&quot;$label: &quot;, t.object)
+    end
+end</code></pre><pre><code class="nohighlight hljs">Sum: Literal(&quot;13&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+Diff: Literal(&quot;7&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+Prod: Literal(&quot;30&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+Quot: Literal(&quot;3.3333333333333335&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#decimal&quot;))
+Abs: Literal(&quot;10&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))</code></pre><h2 id="String-Builtins"><a class="docs-heading-anchor" href="#String-Builtins">String Builtins</a><a id="String-Builtins-1"></a><a class="docs-heading-anchor-permalink" href="#String-Builtins" title="Permalink"></a></h2><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix string: &lt;http://www.w3.org/2000/10/swap/string#&gt; .
+
+:input :text &quot;Hello, World!&quot; .
+
+{
+    :input :text ?T .
+    ?T string:length ?len .
+    ?T string:upperCase ?upper .
+    ?T string:lowerCase ?lower .
+    (&quot;Hello&quot; &quot;Goodbye&quot;) string:concatenation ?replaced .
+}
+=&gt;
+{
+    :result :length ?len ;
+            :upper ?upper ;
+            :lower ?lower ;
+            :replaced ?replaced .
+} .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+ex = Namespace(&quot;urn:example:&quot;)
+for prop in [&quot;length&quot;, &quot;upper&quot;, &quot;lower&quot;, &quot;replaced&quot;]
+    for t in triples(result, (ex(&quot;result&quot;), ex(prop), nothing))
+        println(&quot;$prop: &quot;, t.object)
+    end
+end</code></pre><pre><code class="nohighlight hljs">length: Literal(&quot;13&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+upper: Literal(&quot;HELLO, WORLD!&quot;)
+lower: Literal(&quot;hello, world!&quot;)
+replaced: Literal(&quot;HelloGoodbye&quot;)</code></pre><h2 id="List-Builtins"><a class="docs-heading-anchor" href="#List-Builtins">List Builtins</a><a id="List-Builtins-1"></a><a class="docs-heading-anchor-permalink" href="#List-Builtins" title="Permalink"></a></h2><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix list: &lt;http://www.w3.org/2000/10/swap/list#&gt; .
+
+:data :items (5 3 1 4 2) .
+
+{
+    :data :items ?L .
+    ?L list:length ?len .
+    ?L list:sort ?sorted .
+    ?L list:first ?first .
+    ?L list:last ?last .
+    (10 20 30) list:append ?appended .
+}
+=&gt;
+{
+    :result :length ?len ;
+            :sorted ?sorted ;
+            :first ?first ;
+            :last ?last ;
+            :appended ?appended .
+} .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+ex = Namespace(&quot;urn:example:&quot;)
+for prop in [&quot;length&quot;, &quot;first&quot;, &quot;last&quot;]
+    for t in triples(result, (ex(&quot;result&quot;), ex(prop), nothing))
+        println(&quot;$prop: &quot;, t.object)
+    end
+end</code></pre><pre><code class="nohighlight hljs">length: Literal(&quot;5&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+first: Literal(&quot;5&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+last: Literal(&quot;2&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))</code></pre><h2 id="Cryptographic-Builtins"><a class="docs-heading-anchor" href="#Cryptographic-Builtins">Cryptographic Builtins</a><a id="Cryptographic-Builtins-1"></a><a class="docs-heading-anchor-permalink" href="#Cryptographic-Builtins" title="Permalink"></a></h2><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix crypto: &lt;http://www.w3.org/2000/10/swap/crypto#&gt; .
+
+{
+    &quot;hello world&quot; crypto:md5 ?md5 .
+    &quot;hello world&quot; crypto:sha ?sha .
+}
+=&gt;
+{
+    :result :md5 ?md5 ;
+            :sha ?sha .
+} .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+ex = Namespace(&quot;urn:example:&quot;)
+for prop in [&quot;md5&quot;, &quot;sha&quot;]
+    for t in triples(result, (ex(&quot;result&quot;), ex(prop), nothing))
+        println(&quot;$prop: &quot;, t.object)
+    end
+end</code></pre><pre><code class="nohighlight hljs">md5: Literal(&quot;5eb63bbbe01eeed093cb22bb8f5acdc3&quot;)
+sha: Literal(&quot;2aae6c35c94fcfb415dbe95f408b9ce91ee846ed&quot;)</code></pre><h2 id="Log-Builtins"><a class="docs-heading-anchor" href="#Log-Builtins">Log Builtins</a><a id="Log-Builtins-1"></a><a class="docs-heading-anchor-permalink" href="#Log-Builtins" title="Permalink"></a></h2><pre><code class="language-julia hljs"># log:equalTo — structural equality
+n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+
+:a :val (1 2 3) .
+:b :val (1 2 3) .
+
+{
+    :a :val ?X .
+    :b :val ?Y .
+    ?X log:equalTo ?Y .
+}
+=&gt;
+{
+    :result :listsEqual true .
+} .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+ex = Namespace(&quot;urn:example:&quot;)
+eq = any(t -&gt; t.subject == ex(&quot;result&quot;), result)
+println(&quot;Lists are equal: $eq&quot;)</code></pre><pre><code class="nohighlight hljs">Lists are equal: true</code></pre><h2 id="Meta-Reasoning:-log:conclusion"><a class="docs-heading-anchor" href="#Meta-Reasoning:-log:conclusion">Meta-Reasoning: log:conclusion</a><a id="Meta-Reasoning:-log:conclusion-1"></a><a class="docs-heading-anchor-permalink" href="#Meta-Reasoning:-log:conclusion" title="Permalink"></a></h2><p>The <code>log:conclusion</code> builtin runs the reasoner on a formula — enabling meta-reasoning:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:example:&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+
+:theory rdf:value {
+    :Cat rdfs:subClassOf :Animal .
+    :whiskers a :Cat .
+    { ?X a ?A . ?A rdfs:subClassOf ?B } =&gt; { ?X a ?B } .
+} .
+
+{
+    :theory rdf:value ?T .
+    ?T log:conclusion ?C .
+    ?C log:includes { :whiskers a :Animal } .
+}
+=&gt;
+{
+    :test :proved true .
+} .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+ex = Namespace(&quot;urn:example:&quot;)
+proved = any(t -&gt; t.subject == ex(&quot;test&quot;) &amp;&amp; t.object == Literal(true), result)
+println(&quot;Meta-reasoning proved whiskers is an Animal: $proved&quot;)</code></pre><pre><code class="nohighlight hljs">Meta-reasoning proved whiskers is an Animal: true</code></pre><h2 id="A-Practical-Example:-Family-Relationships"><a class="docs-heading-anchor" href="#A-Practical-Example:-Family-Relationships">A Practical Example: Family Relationships</a><a id="A-Practical-Example:-Family-Relationships-1"></a><a class="docs-heading-anchor-permalink" href="#A-Practical-Example:-Family-Relationships" title="Permalink"></a></h2><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;urn:family:&gt; .
+@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+
+:alice :hasChild :bob .
+:alice :hasChild :carol .
+:bob :hasChild :dave .
+:bob :hasChild :eve .
+:carol :hasChild :frank .
+
+:alice :gender &quot;female&quot; .
+:bob :gender &quot;male&quot; .
+:carol :gender &quot;female&quot; .
+:dave :gender &quot;male&quot; .
+:eve :gender &quot;female&quot; .
+:frank :gender &quot;male&quot; .
+
+# Grandparent rule
+{ ?X :hasChild ?Y . ?Y :hasChild ?Z } =&gt; { ?X :hasGrandchild ?Z } .
+
+# Sibling rule
+{ ?P :hasChild ?X . ?P :hasChild ?Y . ?X log:notEqualTo ?Y }
+    =&gt; { ?X :sibling ?Y } .
+
+# Uncle/Aunt rule
+{ ?P :hasChild ?U . ?P :hasChild ?Parent .
+  ?U log:notEqualTo ?Parent .
+  ?Parent :hasChild ?Child .
+  ?U :gender &quot;male&quot; }
+    =&gt; { ?U :uncleOf ?Child } .
+
+{ ?P :hasChild ?A . ?P :hasChild ?Parent .
+  ?A log:notEqualTo ?Parent .
+  ?Parent :hasChild ?Child .
+  ?A :gender &quot;female&quot; }
+    =&gt; { ?A :auntOf ?Child } .
+&quot;&quot;&quot;
+
+g = parse_n3(n3)
+result = reason(g)
+
+fam = Namespace(&quot;urn:family:&quot;)
+println(&quot;Grandchildren of Alice:&quot;)
+for t in triples(result, (fam(&quot;alice&quot;), fam(&quot;hasGrandchild&quot;), nothing))
+    println(&quot;  &quot;, t.object)
+end
+
+println(&quot;\nSiblings:&quot;)
+seen = Set()
+for t in triples(result, (nothing, fam(&quot;sibling&quot;), nothing))
+    pair = (min(string(t.subject), string(t.object)), max(string(t.subject), string(t.object)))
+    if pair ∉ seen
+        push!(seen, pair)
+        println(&quot;  $(t.subject) ↔ $(t.object)&quot;)
+    end
+end
+
+println(&quot;\nUncle/Aunt relationships:&quot;)
+for t in triples(result, (nothing, fam(&quot;uncleOf&quot;), nothing))
+    println(&quot;  $(t.subject) is uncle of $(t.object)&quot;)
+end
+for t in triples(result, (nothing, fam(&quot;auntOf&quot;), nothing))
+    println(&quot;  $(t.subject) is aunt of $(t.object)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Grandchildren of Alice:
+  URIRef(&quot;urn:family:dave&quot;)
+  URIRef(&quot;urn:family:eve&quot;)
+  URIRef(&quot;urn:family:frank&quot;)
+
+Siblings:
+  URIRef(&quot;urn:family:dave&quot;) ↔ URIRef(&quot;urn:family:eve&quot;)
+  URIRef(&quot;urn:family:carol&quot;) ↔ URIRef(&quot;urn:family:bob&quot;)
+
+Uncle/Aunt relationships:
+  URIRef(&quot;urn:family:bob&quot;) is uncle of URIRef(&quot;urn:family:frank&quot;)
+  URIRef(&quot;urn:family:carol&quot;) is aunt of URIRef(&quot;urn:family:dave&quot;)
+  URIRef(&quot;urn:family:carol&quot;) is aunt of URIRef(&quot;urn:family:eve&quot;)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../inference-rdfs-owl/">« RDFS/OWL Inference</a><a class="docs-footer-nextpage" href="../datalog/">Datalog »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

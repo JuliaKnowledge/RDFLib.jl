@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Graph Utilities · RDFLib.jl</title><meta name="title" content="Graph Utilities · RDFLib.jl"/><meta property="og:title" content="Graph Utilities · RDFLib.jl"/><meta property="twitter:title" content="Graph Utilities · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/graph-utilities/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/graph-utilities/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/graph-utilities/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../store-backends/">Store Backends</a></li><li><a class="tocitem" href="../tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../property-paths/">Property Paths</a></li><li class="is-active"><a class="tocitem" href>Graph Utilities</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Graph-Statistics"><span>Graph Statistics</span></a></li><li><a class="tocitem" href="#Graph-Comparison"><span>Graph Comparison</span></a></li><li><a class="tocitem" href="#Graph-Isomorphism"><span>Graph Isomorphism</span></a></li><li><a class="tocitem" href="#Concise-Bounded-Description-(CBD)"><span>Concise Bounded Description (CBD)</span></a></li><li><a class="tocitem" href="#Subjects,-Predicates,-Objects"><span>Subjects, Predicates, Objects</span></a></li><li><a class="tocitem" href="#Transitive-Traversal"><span>Transitive Traversal</span></a></li><li><a class="tocitem" href="#Skolemization"><span>Skolemization</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#VoID-Descriptions"><span>VoID Descriptions</span></a></li><li><a class="tocitem" href="#What’s-Next?"><span>What’s Next?</span></a></li></ul></li><li><a class="tocitem" href="../geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Guide</a></li><li class="is-active"><a href>Graph Utilities</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Graph Utilities</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/guide/graph-utilities.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Graph-Utilities"><a class="docs-heading-anchor" href="#Graph-Utilities">Graph Utilities</a><a id="Graph-Utilities-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-Utilities" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>RDFLib.jl provides a collection of utility functions for analyzing, comparing, and transforming RDF graphs. This vignette covers graph statistics, isomorphism testing, set operations, concise bounded descriptions, and visualization.</p><pre><code class="language-julia hljs">using RDFLib
+
+# Build a sample graph
+g = RDFGraph()
+ex = Namespace(&quot;http://example.org/&quot;)
+
+add!(g, Triple(ex(&quot;alice&quot;), RDF.type, FOAF(&quot;Person&quot;)))
+add!(g, Triple(ex(&quot;alice&quot;), FOAF(&quot;name&quot;), Literal(&quot;Alice&quot;)))
+add!(g, Triple(ex(&quot;alice&quot;), FOAF(&quot;age&quot;), Literal(30)))
+add!(g, Triple(ex(&quot;alice&quot;), FOAF(&quot;knows&quot;), ex(&quot;bob&quot;)))
+add!(g, Triple(ex(&quot;bob&quot;), RDF.type, FOAF(&quot;Person&quot;)))
+add!(g, Triple(ex(&quot;bob&quot;), FOAF(&quot;name&quot;), Literal(&quot;Bob&quot;)))
+add!(g, Triple(ex(&quot;bob&quot;), FOAF(&quot;age&quot;), Literal(25)))
+println(&quot;Graph has $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Graph has 7 triples</code></pre><h2 id="Graph-Statistics"><a class="docs-heading-anchor" href="#Graph-Statistics">Graph Statistics</a><a id="Graph-Statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-Statistics" title="Permalink"></a></h2><p>The <code>graph_stats</code> function provides a summary of graph contents:</p><pre><code class="language-julia hljs">stats = graph_stats(g)
+println(&quot;Triples:    $(stats.triples)&quot;)
+println(&quot;Subjects:   $(stats.subjects)&quot;)
+println(&quot;Predicates: $(stats.predicates)&quot;)
+println(&quot;Objects:    $(stats.objects)&quot;)
+println(&quot;URIRefs:    $(stats.uri_refs)&quot;)
+println(&quot;BNodes:     $(stats.blank_nodes)&quot;)
+println(&quot;Literals:   $(stats.literals)&quot;)</code></pre><pre><code class="nohighlight hljs">Triples:    7
+Subjects:   2
+Predicates: 4
+Objects:    6
+URIRefs:    7
+BNodes:     0
+Literals:   4</code></pre><h2 id="Graph-Comparison"><a class="docs-heading-anchor" href="#Graph-Comparison">Graph Comparison</a><a id="Graph-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-Comparison" title="Permalink"></a></h2><h3 id="Set-Operations"><a class="docs-heading-anchor" href="#Set-Operations">Set Operations</a><a id="Set-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Set-Operations" title="Permalink"></a></h3><p>Graphs support standard set operations:</p><pre><code class="language-julia hljs">g1 = RDFGraph()
+add!(g1, Triple(ex(&quot;a&quot;), ex(&quot;p&quot;), Literal(&quot;1&quot;)))
+add!(g1, Triple(ex(&quot;a&quot;), ex(&quot;p&quot;), Literal(&quot;2&quot;)))
+add!(g1, Triple(ex(&quot;b&quot;), ex(&quot;p&quot;), Literal(&quot;3&quot;)))
+
+g2 = RDFGraph()
+add!(g2, Triple(ex(&quot;a&quot;), ex(&quot;p&quot;), Literal(&quot;2&quot;)))
+add!(g2, Triple(ex(&quot;c&quot;), ex(&quot;p&quot;), Literal(&quot;4&quot;)))
+
+# Union
+merged = g1 + g2
+println(&quot;Union: $(length(merged)) triples&quot;)
+
+# Intersection
+common = intersect(g1, g2)
+println(&quot;Intersection: $(length(common)) triples&quot;)
+
+# Difference
+diff = setdiff(g1, g2)
+println(&quot;In g1 but not g2: $(length(diff)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Union: 4 triples
+Intersection: 1 triples
+In g1 but not g2: 2 triples</code></pre><h3 id="Graph-Diff"><a class="docs-heading-anchor" href="#Graph-Diff">Graph Diff</a><a id="Graph-Diff-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-Diff" title="Permalink"></a></h3><p><code>graph_diff</code> returns triples in both, only-in-first, and only-in-second:</p><pre><code class="language-julia hljs">both, only1, only2 = graph_diff(g1, g2)
+println(&quot;In both:    $(length(both)) triples&quot;)
+println(&quot;Only in g1: $(length(only1)) triples&quot;)
+println(&quot;Only in g2: $(length(only2)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">In both:    1 triples
+Only in g1: 2 triples
+Only in g2: 1 triples</code></pre><h2 id="Graph-Isomorphism"><a class="docs-heading-anchor" href="#Graph-Isomorphism">Graph Isomorphism</a><a id="Graph-Isomorphism-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-Isomorphism" title="Permalink"></a></h2><p>Two graphs are isomorphic if they are identical up to blank node relabeling:</p><pre><code class="language-julia hljs">ga = RDFGraph()
+add!(ga, Triple(ex(&quot;s&quot;), ex(&quot;p&quot;), BNode(&quot;x1&quot;)))
+add!(ga, Triple(BNode(&quot;x1&quot;), ex(&quot;q&quot;), Literal(&quot;v&quot;)))
+
+gb = RDFGraph()
+add!(gb, Triple(ex(&quot;s&quot;), ex(&quot;p&quot;), BNode(&quot;z9&quot;)))
+add!(gb, Triple(BNode(&quot;z9&quot;), ex(&quot;q&quot;), Literal(&quot;v&quot;)))
+
+println(&quot;Isomorphic: &quot;, isomorphic(ga, gb))</code></pre><pre><code class="nohighlight hljs">Isomorphic: true</code></pre><p>Non-isomorphic graphs:</p><pre><code class="language-julia hljs">gc = RDFGraph()
+add!(gc, Triple(ex(&quot;s&quot;), ex(&quot;p&quot;), BNode(&quot;a&quot;)))
+add!(gc, Triple(BNode(&quot;a&quot;), ex(&quot;q&quot;), Literal(&quot;different&quot;)))
+
+println(&quot;Isomorphic: &quot;, isomorphic(ga, gc))</code></pre><pre><code class="nohighlight hljs">Isomorphic: false</code></pre><h2 id="Concise-Bounded-Description-(CBD)"><a class="docs-heading-anchor" href="#Concise-Bounded-Description-(CBD)">Concise Bounded Description (CBD)</a><a id="Concise-Bounded-Description-(CBD)-1"></a><a class="docs-heading-anchor-permalink" href="#Concise-Bounded-Description-(CBD)" title="Permalink"></a></h2><p>CBD extracts all triples about a resource, recursively following blank nodes:</p><pre><code class="language-julia hljs">g_cbd = RDFGraph()
+b = BNode()
+add!(g_cbd, Triple(ex(&quot;alice&quot;), FOAF(&quot;name&quot;), Literal(&quot;Alice&quot;)))
+add!(g_cbd, Triple(ex(&quot;alice&quot;), ex(&quot;address&quot;), b))
+add!(g_cbd, Triple(b, ex(&quot;street&quot;), Literal(&quot;123 Main St&quot;)))
+add!(g_cbd, Triple(b, ex(&quot;city&quot;), Literal(&quot;Springfield&quot;)))
+add!(g_cbd, Triple(ex(&quot;bob&quot;), FOAF(&quot;name&quot;), Literal(&quot;Bob&quot;)))
+
+desc = cbd(g_cbd, ex(&quot;alice&quot;))
+println(&quot;CBD of alice: $(length(desc)) triples&quot;)
+for t in triples(desc, (nothing, nothing, nothing))
+    println(&quot;  $(t.subject) $(t.predicate) $(t.object)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">CBD of alice: 4 triples
+  URIRef(&quot;http://example.org/alice&quot;) URIRef(&quot;http://xmlns.com/foaf/0.1/name&quot;) Literal(&quot;Alice&quot;)
+  URIRef(&quot;http://example.org/alice&quot;) URIRef(&quot;http://example.org/address&quot;) BNode(&quot;Ndc6808dc74dfe284659b30f235ade94d&quot;)
+  BNode(&quot;Ndc6808dc74dfe284659b30f235ade94d&quot;) URIRef(&quot;http://example.org/street&quot;) Literal(&quot;123 Main St&quot;)
+  BNode(&quot;Ndc6808dc74dfe284659b30f235ade94d&quot;) URIRef(&quot;http://example.org/city&quot;) Literal(&quot;Springfield&quot;)</code></pre><h2 id="Subjects,-Predicates,-Objects"><a class="docs-heading-anchor" href="#Subjects,-Predicates,-Objects">Subjects, Predicates, Objects</a><a id="Subjects,-Predicates,-Objects-1"></a><a class="docs-heading-anchor-permalink" href="#Subjects,-Predicates,-Objects" title="Permalink"></a></h2><p>Convenience accessors for graph components:</p><pre><code class="language-julia hljs">println(&quot;Subjects:&quot;)
+for s in subjects(g, RDF.type, FOAF(&quot;Person&quot;))
+    println(&quot;  $s&quot;)
+end
+
+println(&quot;\nPredicates for alice:&quot;)
+for p in predicates(g, ex(&quot;alice&quot;), nothing)
+    println(&quot;  $p&quot;)
+end
+
+println(&quot;\nObjects — ages:&quot;)
+for o in objects(g, nothing, FOAF(&quot;age&quot;))
+    println(&quot;  $o&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Subjects:
+  URIRef(&quot;http://example.org/alice&quot;)
+  URIRef(&quot;http://example.org/bob&quot;)
+
+Predicates for alice:
+  URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;)
+  URIRef(&quot;http://xmlns.com/foaf/0.1/name&quot;)
+  URIRef(&quot;http://xmlns.com/foaf/0.1/age&quot;)
+  URIRef(&quot;http://xmlns.com/foaf/0.1/knows&quot;)
+
+Objects — ages:
+  Literal(&quot;30&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+  Literal(&quot;25&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))</code></pre><h2 id="Transitive-Traversal"><a class="docs-heading-anchor" href="#Transitive-Traversal">Transitive Traversal</a><a id="Transitive-Traversal-1"></a><a class="docs-heading-anchor-permalink" href="#Transitive-Traversal" title="Permalink"></a></h2><p>Follow a property transitively to find all reachable objects:</p><pre><code class="language-julia hljs">g_trans = RDFGraph()
+add!(g_trans, Triple(ex(&quot;a&quot;), ex(&quot;parent&quot;), ex(&quot;b&quot;)))
+add!(g_trans, Triple(ex(&quot;b&quot;), ex(&quot;parent&quot;), ex(&quot;c&quot;)))
+add!(g_trans, Triple(ex(&quot;c&quot;), ex(&quot;parent&quot;), ex(&quot;d&quot;)))
+
+reachable = transitive_objects(g_trans, ex(&quot;a&quot;), ex(&quot;parent&quot;))
+println(&quot;Ancestors of a (transitive):&quot;)
+for obj in reachable
+    println(&quot;  $obj&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Ancestors of a (transitive):
+  URIRef(&quot;http://example.org/c&quot;)
+  URIRef(&quot;http://example.org/a&quot;)
+  URIRef(&quot;http://example.org/b&quot;)
+  URIRef(&quot;http://example.org/d&quot;)</code></pre><p>You can also traverse backwards with <code>transitive_subjects</code>:</p><pre><code class="language-julia hljs">descendants = transitive_subjects(g_trans, ex(&quot;d&quot;), ex(&quot;parent&quot;))
+println(&quot;Descendants of d (inverse transitive):&quot;)
+for subj in descendants
+    println(&quot;  $subj&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Descendants of d (inverse transitive):
+  URIRef(&quot;http://example.org/c&quot;)
+  URIRef(&quot;http://example.org/a&quot;)
+  URIRef(&quot;http://example.org/b&quot;)
+  URIRef(&quot;http://example.org/d&quot;)</code></pre><h2 id="Skolemization"><a class="docs-heading-anchor" href="#Skolemization">Skolemization</a><a id="Skolemization-1"></a><a class="docs-heading-anchor-permalink" href="#Skolemization" title="Permalink"></a></h2><p>Replace blank nodes with deterministic URIs:</p><pre><code class="language-julia hljs">g_bnode = RDFGraph()
+b1 = BNode()
+add!(g_bnode, Triple(ex(&quot;s&quot;), ex(&quot;p&quot;), b1))
+add!(g_bnode, Triple(b1, ex(&quot;q&quot;), Literal(&quot;hello&quot;)))
+
+g_skolem = skolemize(g_bnode)
+println(&quot;Skolemized graph:&quot;)
+for t in triples(g_skolem, (nothing, nothing, nothing))
+    println(&quot;  $(t.subject) $(t.predicate) $(t.object)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Skolemized graph:
+  URIRef(&quot;http://example.org/s&quot;) URIRef(&quot;http://example.org/p&quot;) URIRef(&quot;https://rdflib.github.io/.well-known/genid/N38086dce0d57c36235bf78b5eb50cd4d&quot;)
+  URIRef(&quot;https://rdflib.github.io/.well-known/genid/N38086dce0d57c36235bf78b5eb50cd4d&quot;) URIRef(&quot;http://example.org/q&quot;) Literal(&quot;hello&quot;)</code></pre><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p>Generate DOT format for Graphviz rendering:</p><pre><code class="language-julia hljs">g_viz = RDFGraph()
+add!(g_viz, Triple(ex(&quot;alice&quot;), FOAF(&quot;name&quot;), Literal(&quot;Alice&quot;)))
+add!(g_viz, Triple(ex(&quot;alice&quot;), FOAF(&quot;knows&quot;), ex(&quot;bob&quot;)))
+add!(g_viz, Triple(ex(&quot;bob&quot;), FOAF(&quot;name&quot;), Literal(&quot;Bob&quot;)))
+
+dot = to_dot(g_viz; label=&quot;Friendship Graph&quot;)
+println(dot)</code></pre><pre><code class="nohighlight hljs">digraph {
+  rankdir=LR;
+  label=&quot;Friendship Graph&quot;;
+
+  n1 [shape=box, label=&quot;Alice&quot;];
+  n2 [label=&quot;ns1:alice&quot;];
+  n3 [shape=box, label=&quot;Bob&quot;];
+  n4 [label=&quot;ns1:bob&quot;];
+
+  n2 -&gt; n1 [label=&quot;ns2:name&quot;];
+  n2 -&gt; n4 [label=&quot;ns2:knows&quot;];
+  n4 -&gt; n3 [label=&quot;ns2:name&quot;];
+}</code></pre><p>To render this as an image, pipe the output to Graphviz:</p><pre><code class="language-julia hljs"># Save to file
+save_visualization(g_viz, &quot;graph.png&quot;; label=&quot;Friendship Graph&quot;)
+
+# Or pipe to Graphviz manually
+# echo &quot;$dot&quot; | dot -Tpng -o graph.png</code></pre><h2 id="VoID-Descriptions"><a class="docs-heading-anchor" href="#VoID-Descriptions">VoID Descriptions</a><a id="VoID-Descriptions-1"></a><a class="docs-heading-anchor-permalink" href="#VoID-Descriptions" title="Permalink"></a></h2><p>Generate <a href="https://www.w3.org/TR/void/">VoID</a> (Vocabulary of Interlinked Datasets) metadata:</p><pre><code class="language-julia hljs">void_graph = generate_void(g, ex(&quot;myDataset&quot;); title=&quot;Example Dataset&quot;)
+println(&quot;VoID graph: $(length(void_graph)) triples&quot;)
+println(serialize(void_graph, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">VoID graph: 22 triples
+@prefix dcterms: &lt;http://purl.org/dc/terms/&gt; .
+@prefix ns1: &lt;http://example.org/&gt; .
+@prefix ns2: &lt;http://xmlns.com/foaf/0.1/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix void: &lt;http://rdfs.org/ns/void#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ns1:myDataset a void:Dataset ;
+    dcterms:title &quot;Example Dataset&quot; ;
+    void:classPartition [ void:class ns2:Person ;
+        void:entities 2 ] ;
+    void:classes 1 ;
+    void:distinctObjects 6 ;
+    void:distinctSubjects 2 ;
+    void:properties 4 ;
+    void:propertyPartition [ void:property ns2:age ;
+        void:triples 2 ],
+        [ void:property rdf:type ;
+        void:triples 2 ],
+        [ void:property ns2:name ;
+        void:triples 2 ],
+        [ void:property ns2:knows ;
+        void:triples 1 ] ;
+    void:triples 7 .</code></pre><h2 id="What’s-Next?"><a class="docs-heading-anchor" href="#What’s-Next?">What’s Next?</a><a id="What’s-Next?-1"></a><a class="docs-heading-anchor-permalink" href="#What’s-Next?" title="Permalink"></a></h2><ul><li><strong>SPARQL Queries</strong> — query graphs with the full SPARQL 1.1 language</li><li><strong>Property Paths</strong> — navigate graphs with <code>/</code>, <code>*</code>, <code>+</code>, <code>^</code></li><li><strong>SHACL Validation</strong> — validate graph structure against shapes</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../property-paths/">« Property Paths</a><a class="docs-footer-nextpage" href="../geosparql/">GeoSPARQL »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

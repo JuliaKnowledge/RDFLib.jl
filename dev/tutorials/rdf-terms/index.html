@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>RDF Terms · RDFLib.jl</title><meta name="title" content="RDF Terms · RDFLib.jl"/><meta property="og:title" content="RDF Terms · RDFLib.jl"/><meta property="twitter:title" content="RDF Terms · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/rdf-terms/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/rdf-terms/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/rdf-terms/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting-started/">Getting Started</a></li><li class="is-active"><a class="tocitem" href>RDF Terms</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#URIs-(URIRef)"><span>URIs (URIRef)</span></a></li><li><a class="tocitem" href="#Literals"><span>Literals</span></a></li><li><a class="tocitem" href="#Blank-Nodes-(BNode)"><span>Blank Nodes (BNode)</span></a></li><li><a class="tocitem" href="#Variables"><span>Variables</span></a></li><li><a class="tocitem" href="#Triples"><span>Triples</span></a></li><li><a class="tocitem" href="#Type-Hierarchy"><span>Type Hierarchy</span></a></li><li><a class="tocitem" href="#Equality-and-Hashing"><span>Equality and Hashing</span></a></li><li><a class="tocitem" href="#Parsing-Terms-from-N3-Syntax"><span>Parsing Terms from N3 Syntax</span></a></li></ul></li><li><a class="tocitem" href="../building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../namespaces/">Namespaces</a></li><li><a class="tocitem" href="../serialization/">Serialization</a></li><li><a class="tocitem" href="../sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>RDF Terms</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>RDF Terms</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/tutorials/rdf-terms.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="RDF-Terms:-URIs,-Literals,-and-Blank-Nodes"><a class="docs-heading-anchor" href="#RDF-Terms:-URIs,-Literals,-and-Blank-Nodes">RDF Terms: URIs, Literals, and Blank Nodes</a><a id="RDF-Terms:-URIs,-Literals,-and-Blank-Nodes-1"></a><a class="docs-heading-anchor-permalink" href="#RDF-Terms:-URIs,-Literals,-and-Blank-Nodes" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>Every RDF triple is built from three kinds of <em>terms</em>: URIs (resources), Literals (values), and Blank Nodes (anonymous resources). This vignette covers how to create and work with each type.</p><pre><code class="language-julia hljs">using RDFLib</code></pre><h2 id="URIs-(URIRef)"><a class="docs-heading-anchor" href="#URIs-(URIRef)">URIs (URIRef)</a><a id="URIs-(URIRef)-1"></a><a class="docs-heading-anchor-permalink" href="#URIs-(URIRef)" title="Permalink"></a></h2><p>A URI (Uniform Resource Identifier) uniquely identifies a resource. In RDFLib.jl, they are represented by <code>URIRef</code>.</p><pre><code class="language-julia hljs"># Create URIs directly
+person = URIRef(&quot;http://example.org/person/alice&quot;)
+println(person)
+println(&quot;Type: &quot;, typeof(person))</code></pre><pre><code class="nohighlight hljs">URIRef(&quot;http://example.org/person/alice&quot;)
+Type: URIRef</code></pre><pre><code class="language-julia hljs"># Using namespaces (preferred)
+ex = Namespace(&quot;http://example.org/&quot;)
+alice = ex(&quot;alice&quot;)
+knows = ex(&quot;knows&quot;)
+
+println(alice)
+println(&quot;Value: &quot;, alice.value)</code></pre><pre><code class="nohighlight hljs">URIRef(&quot;http://example.org/alice&quot;)
+Value: http://example.org/alice</code></pre><pre><code class="language-julia hljs"># URI utilities
+uri = URIRef(&quot;http://example.org/vocab#name&quot;)
+println(&quot;Fragment: &quot;, fragment(uri))
+println(&quot;Defragmented: &quot;, defrag(uri))
+println(&quot;N3 syntax: &quot;, n3(uri))</code></pre><pre><code class="nohighlight hljs">Fragment: name
+Defragmented: URIRef(&quot;http://example.org/vocab&quot;)
+N3 syntax: &lt;http://example.org/vocab#name&gt;</code></pre><h2 id="Literals"><a class="docs-heading-anchor" href="#Literals">Literals</a><a id="Literals-1"></a><a class="docs-heading-anchor-permalink" href="#Literals" title="Permalink"></a></h2><p>Literals represent data values — strings, numbers, dates, booleans, etc. They can have an optional language tag or datatype.</p><h3 id="Plain-Strings"><a class="docs-heading-anchor" href="#Plain-Strings">Plain Strings</a><a id="Plain-Strings-1"></a><a class="docs-heading-anchor-permalink" href="#Plain-Strings" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Simple string literal
+name = Literal(&quot;Alice&quot;)
+println(name)
+println(&quot;Lexical value: &quot;, name.lexical)
+println(&quot;Datatype: &quot;, datatype(name))
+println(&quot;N3: &quot;, n3(name))</code></pre><pre><code class="nohighlight hljs">Literal(&quot;Alice&quot;)
+Lexical value: Alice
+Datatype: nothing
+N3: &quot;Alice&quot;</code></pre><h3 id="Language-Tagged-Strings"><a class="docs-heading-anchor" href="#Language-Tagged-Strings">Language-Tagged Strings</a><a id="Language-Tagged-Strings-1"></a><a class="docs-heading-anchor-permalink" href="#Language-Tagged-Strings" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Literals with language tags
+label_en = Literal(&quot;Cat&quot;; lang=&quot;en&quot;)
+label_fr = Literal(&quot;Chat&quot;; lang=&quot;fr&quot;)
+label_de = Literal(&quot;Katze&quot;; lang=&quot;de&quot;)
+
+println(&quot;English: &quot;, label_en, &quot; (lang=&quot;, lang(label_en), &quot;)&quot;)
+println(&quot;French:  &quot;, label_fr, &quot; (lang=&quot;, lang(label_fr), &quot;)&quot;)
+println(&quot;German:  &quot;, label_de, &quot; (lang=&quot;, lang(label_de), &quot;)&quot;)</code></pre><pre><code class="nohighlight hljs">English: Literal(&quot;Cat&quot;, lang=&quot;en&quot;) (lang=en)
+French:  Literal(&quot;Chat&quot;, lang=&quot;fr&quot;) (lang=fr)
+German:  Literal(&quot;Katze&quot;, lang=&quot;de&quot;) (lang=de)</code></pre><h3 id="Typed-Literals"><a class="docs-heading-anchor" href="#Typed-Literals">Typed Literals</a><a id="Typed-Literals-1"></a><a class="docs-heading-anchor-permalink" href="#Typed-Literals" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Numeric types
+age = Literal(30)
+println(&quot;Integer: &quot;, age, &quot; — datatype: &quot;, datatype(age))
+
+height = Literal(1.75)
+println(&quot;Float:   &quot;, height, &quot; — datatype: &quot;, datatype(height))
+
+# Boolean
+active = Literal(true)
+println(&quot;Boolean: &quot;, active, &quot; — datatype: &quot;, datatype(active))
+
+# Explicit datatype
+score = Literal(&quot;98.6&quot;; datatype=XSD.decimal)
+println(&quot;Decimal: &quot;, score, &quot; — datatype: &quot;, datatype(score))</code></pre><pre><code class="nohighlight hljs">Integer: Literal(&quot;30&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)) — datatype: URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)
+Float:   Literal(&quot;1.75&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#double&quot;)) — datatype: URIRef(&quot;http://www.w3.org/2001/XMLSchema#double&quot;)
+Boolean: Literal(&quot;true&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#boolean&quot;)) — datatype: URIRef(&quot;http://www.w3.org/2001/XMLSchema#boolean&quot;)
+Decimal: Literal(&quot;98.6&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#decimal&quot;)) — datatype: URIRef(&quot;http://www.w3.org/2001/XMLSchema#decimal&quot;)</code></pre><h3 id="XSD-Date/Time-Types"><a class="docs-heading-anchor" href="#XSD-Date/Time-Types">XSD Date/Time Types</a><a id="XSD-Date/Time-Types-1"></a><a class="docs-heading-anchor-permalink" href="#XSD-Date/Time-Types" title="Permalink"></a></h3><pre><code class="language-julia hljs">using Dates
+
+# Date and time literals
+today_lit = xsd_literal(today())
+println(&quot;Date: &quot;, n3(today_lit))
+
+now_lit = xsd_literal(now())
+println(&quot;DateTime: &quot;, n3(now_lit))</code></pre><pre><code class="nohighlight hljs">Date: &quot;2026-03-10&quot;^^&lt;http://www.w3.org/2001/XMLSchema#date&gt;
+DateTime: &quot;2026-03-10T09:40:09&quot;^^&lt;http://www.w3.org/2001/XMLSchema#dateTime&gt;</code></pre><h3 id="Extracting-Values"><a class="docs-heading-anchor" href="#Extracting-Values">Extracting Values</a><a id="Extracting-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Extracting-Values" title="Permalink"></a></h3><pre><code class="language-julia hljs"># convert(Any, lit) extracts the native Julia value from a Literal
+println(&quot;convert(Any, Literal(42))     = &quot;, convert(Any, Literal(42)), &quot; :: &quot;, typeof(convert(Any, Literal(42))))
+println(&quot;convert(Any, Literal(3.14))   = &quot;, convert(Any, Literal(3.14)), &quot; :: &quot;, typeof(convert(Any, Literal(3.14))))
+println(&quot;convert(Any, Literal(true))   = &quot;, convert(Any, Literal(true)), &quot; :: &quot;, typeof(convert(Any, Literal(true))))
+println(&quot;convert(Any, Literal(\&quot;hi\&quot;)) = &quot;, convert(Any, Literal(&quot;hi&quot;)), &quot; :: &quot;, typeof(convert(Any, Literal(&quot;hi&quot;))))</code></pre><pre><code class="nohighlight hljs">convert(Any, Literal(42))     = 42 :: Int64
+convert(Any, Literal(3.14))   = 3.14 :: Float64
+convert(Any, Literal(true))   = true :: Bool
+convert(Any, Literal(&quot;hi&quot;)) = hi :: String</code></pre><h2 id="Blank-Nodes-(BNode)"><a class="docs-heading-anchor" href="#Blank-Nodes-(BNode)">Blank Nodes (BNode)</a><a id="Blank-Nodes-(BNode)-1"></a><a class="docs-heading-anchor-permalink" href="#Blank-Nodes-(BNode)" title="Permalink"></a></h2><p>Blank nodes represent anonymous resources — they have no global identifier.</p><pre><code class="language-julia hljs"># Auto-generated blank node (UUID-based)
+b1 = BNode()
+println(&quot;Auto BNode: &quot;, b1, &quot; (id=&quot;, b1.id, &quot;)&quot;)
+
+# Named blank node
+b2 = BNode(&quot;address1&quot;)
+println(&quot;Named BNode: &quot;, b2, &quot; (id=&quot;, b2.id, &quot;)&quot;)
+println(&quot;N3 syntax: &quot;, n3(b2))</code></pre><pre><code class="nohighlight hljs">Auto BNode: BNode(&quot;Nae8dab45210f526ae0d1202f6c803340&quot;) (id=Nae8dab45210f526ae0d1202f6c803340)
+Named BNode: BNode(&quot;address1&quot;) (id=address1)
+N3 syntax: _:address1</code></pre><pre><code class="language-julia hljs"># Blank nodes are useful for structured data without global identity
+g = RDFGraph()
+ex = Namespace(&quot;http://example.org/&quot;)
+
+alice = ex(&quot;alice&quot;)
+address = BNode(&quot;addr1&quot;)
+
+add!(g, Triple(alice, ex(&quot;address&quot;), address))
+add!(g, Triple(address, ex(&quot;street&quot;), Literal(&quot;123 Main St&quot;)))
+add!(g, Triple(address, ex(&quot;city&quot;), Literal(&quot;Springfield&quot;)))
+add!(g, Triple(address, ex(&quot;zip&quot;), Literal(&quot;62701&quot;)))
+
+println(serialize(g, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">@prefix ns1: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ns1:alice ns1:address [ ns1:city &quot;Springfield&quot; ;
+        ns1:street &quot;123 Main St&quot; ;
+        ns1:zip &quot;62701&quot; ] .</code></pre><h2 id="Variables"><a class="docs-heading-anchor" href="#Variables">Variables</a><a id="Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Variables" title="Permalink"></a></h2><p>Variables are used in SPARQL queries and N3 rules. They represent unknowns to be bound during matching.</p><pre><code class="language-julia hljs"># Create variables
+x = Variable(&quot;x&quot;)
+name_var = Variable(&quot;name&quot;)
+
+println(&quot;Variable: &quot;, x, &quot; — name: &quot;, x.name)
+println(&quot;N3: &quot;, n3(x))</code></pre><pre><code class="nohighlight hljs">Variable: Variable(&quot;x&quot;) — name: x
+N3: ?x</code></pre><h2 id="Triples"><a class="docs-heading-anchor" href="#Triples">Triples</a><a id="Triples-1"></a><a class="docs-heading-anchor-permalink" href="#Triples" title="Permalink"></a></h2><p>A triple combines a subject, predicate, and object into a single statement.</p><pre><code class="language-julia hljs">ex = Namespace(&quot;http://example.org/&quot;)
+
+t = Triple(ex(&quot;earth&quot;), RDF.type, ex(&quot;Planet&quot;))
+println(&quot;Subject:   &quot;, t.subject)
+println(&quot;Predicate: &quot;, t.predicate)
+println(&quot;Object:    &quot;, t.object)
+println(&quot;N3:        &quot;, n3(t.subject), &quot; &quot;, n3(t.predicate), &quot; &quot;, n3(t.object), &quot; .&quot;)</code></pre><pre><code class="nohighlight hljs">Subject:   URIRef(&quot;http://example.org/earth&quot;)
+Predicate: URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;)
+Object:    URIRef(&quot;http://example.org/Planet&quot;)
+N3:        &lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .</code></pre><h2 id="Type-Hierarchy"><a class="docs-heading-anchor" href="#Type-Hierarchy">Type Hierarchy</a><a id="Type-Hierarchy-1"></a><a class="docs-heading-anchor-permalink" href="#Type-Hierarchy" title="Permalink"></a></h2><p>RDFLib.jl uses Julia’s type system to model the RDF term hierarchy:</p><pre><code class="nohighlight hljs">Identifier (abstract)
+├── Node (abstract)
+│   ├── IdentifiedNode (abstract)
+│   │   ├── URIRef
+│   │   └── BNode
+│   └── Formula (N3 quoted graphs)
+├── Literal
+└── Variable</code></pre><pre><code class="language-julia hljs"># Type checking
+println(&quot;URIRef &lt;: Node: &quot;, URIRef &lt;: Node)
+println(&quot;Literal &lt;: Identifier: &quot;, Literal &lt;: Identifier)
+println(&quot;BNode &lt;: IdentifiedNode: &quot;, BNode &lt;: IdentifiedNode)
+println(&quot;Variable &lt;: Identifier: &quot;, Variable &lt;: Identifier)</code></pre><pre><code class="nohighlight hljs">URIRef &lt;: Node: true
+Literal &lt;: Identifier: true
+BNode &lt;: IdentifiedNode: true
+Variable &lt;: Identifier: true</code></pre><h2 id="Equality-and-Hashing"><a class="docs-heading-anchor" href="#Equality-and-Hashing">Equality and Hashing</a><a id="Equality-and-Hashing-1"></a><a class="docs-heading-anchor-permalink" href="#Equality-and-Hashing" title="Permalink"></a></h2><p>RDF terms support equality comparison and hashing, which is important for graph operations.</p><pre><code class="language-julia hljs"># URIs are equal if their values match
+println(URIRef(&quot;http://example.org/a&quot;) == URIRef(&quot;http://example.org/a&quot;))  # true
+println(URIRef(&quot;http://example.org/a&quot;) == URIRef(&quot;http://example.org/b&quot;))  # false
+
+# Literals compare by value, datatype, and language
+println(Literal(&quot;hello&quot;) == Literal(&quot;hello&quot;))     # true
+println(Literal(42) == Literal(42))               # true
+println(Literal(&quot;hi&quot;; lang=&quot;en&quot;) == Literal(&quot;hi&quot;; lang=&quot;fr&quot;))  # false</code></pre><pre><code class="nohighlight hljs">true
+false
+true
+true
+false</code></pre><h2 id="Parsing-Terms-from-N3-Syntax"><a class="docs-heading-anchor" href="#Parsing-Terms-from-N3-Syntax">Parsing Terms from N3 Syntax</a><a id="Parsing-Terms-from-N3-Syntax-1"></a><a class="docs-heading-anchor-permalink" href="#Parsing-Terms-from-N3-Syntax" title="Permalink"></a></h2><p>You can parse individual terms from N3/SPARQL string syntax:</p><pre><code class="language-julia hljs"># Parse various term types from N3 notation
+println(from_n3(&quot;&lt;http://example.org/alice&gt;&quot;))
+println(from_n3(&quot;\&quot;hello\&quot;&quot;))
+println(from_n3(&quot;\&quot;42\&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt;&quot;))
+println(from_n3(&quot;_:blank1&quot;))</code></pre><pre><code class="nohighlight hljs">URIRef(&quot;http://example.org/alice&quot;)
+Literal(&quot;hello&quot;)
+Literal(&quot;42&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+BNode(&quot;blank1&quot;)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../getting-started/">« Getting Started</a><a class="docs-footer-nextpage" href="../building-graphs/">Building Graphs »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Serialization · RDFLib.jl</title><meta name="title" content="Serialization · RDFLib.jl"/><meta property="og:title" content="Serialization · RDFLib.jl"/><meta property="twitter:title" content="Serialization · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/serialization/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/serialization/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/serialization/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting-started/">Getting Started</a></li><li><a class="tocitem" href="../rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../namespaces/">Namespaces</a></li><li class="is-active"><a class="tocitem" href>Serialization</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Turtle"><span>Turtle</span></a></li><li><a class="tocitem" href="#N-Triples"><span>N-Triples</span></a></li><li><a class="tocitem" href="#N3-(Notation3)"><span>N3 (Notation3)</span></a></li><li><a class="tocitem" href="#RDF/XML"><span>RDF/XML</span></a></li><li><a class="tocitem" href="#JSON-LD"><span>JSON-LD</span></a></li><li><a class="tocitem" href="#N-Quads"><span>N-Quads</span></a></li><li><a class="tocitem" href="#TriG"><span>TriG</span></a></li><li><a class="tocitem" href="#TriX"><span>TriX</span></a></li><li><a class="tocitem" href="#HexTuples-(HEXT)"><span>HexTuples (HEXT)</span></a></li><li><a class="tocitem" href="#Long-Turtle"><span>Long Turtle</span></a></li><li><a class="tocitem" href="#RDF-Patch"><span>RDF Patch</span></a></li><li><a class="tocitem" href="#File-I/O"><span>File I/O</span></a></li><li><a class="tocitem" href="#Content-Negotiation"><span>Content Negotiation</span></a></li><li><a class="tocitem" href="#Format-Comparison"><span>Format Comparison</span></a></li></ul></li><li><a class="tocitem" href="../sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Serialization</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Serialization</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/tutorials/serialization.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Serialization-Formats"><a class="docs-heading-anchor" href="#Serialization-Formats">Serialization Formats</a><a id="Serialization-Formats-1"></a><a class="docs-heading-anchor-permalink" href="#Serialization-Formats" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>RDFLib.jl supports reading and writing RDF data in many formats. This vignette demonstrates each format with the same sample graph.</p><pre><code class="language-julia hljs">using RDFLib
+
+# Build a sample graph
+g = RDFGraph()
+ex = Namespace(&quot;http://example.org/&quot;)
+bind!(g, &quot;ex&quot;, ex)
+
+add!(g, Triple(ex(&quot;earth&quot;), RDF.type, ex(&quot;Planet&quot;)))
+add!(g, Triple(ex(&quot;earth&quot;), RDFS(&quot;label&quot;), Literal(&quot;Earth&quot;; lang=&quot;en&quot;)))
+add!(g, Triple(ex(&quot;earth&quot;), RDFS(&quot;label&quot;), Literal(&quot;Terre&quot;; lang=&quot;fr&quot;)))
+add!(g, Triple(ex(&quot;earth&quot;), ex(&quot;radius_km&quot;), Literal(6371)))
+add!(g, Triple(ex(&quot;earth&quot;), ex(&quot;hasMoon&quot;), ex(&quot;moon&quot;)))
+add!(g, Triple(ex(&quot;moon&quot;), RDF.type, ex(&quot;Moon&quot;)))
+add!(g, Triple(ex(&quot;moon&quot;), RDFS(&quot;label&quot;), Literal(&quot;The Moon&quot;)))</code></pre><pre><code class="nohighlight hljs">RDFGraph (7 triples)</code></pre><h2 id="Turtle"><a class="docs-heading-anchor" href="#Turtle">Turtle</a><a id="Turtle-1"></a><a class="docs-heading-anchor-permalink" href="#Turtle" title="Permalink"></a></h2><p>Turtle is the most human-readable RDF format. It supports prefixes, abbreviations, and multi-value shorthand.</p><pre><code class="language-julia hljs">ttl = serialize(g, TurtleFormat())
+println(ttl)</code></pre><pre><code class="nohighlight hljs">@prefix ex: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ex:earth a ex:Planet ;
+    ex:hasMoon ex:moon ;
+    ex:radius_km 6371 ;
+    rdfs:label &quot;Earth&quot;@en,
+        &quot;Terre&quot;@fr .
+
+ex:moon a ex:Moon ;
+    rdfs:label &quot;The Moon&quot; .</code></pre><pre><code class="language-julia hljs"># Round-trip: parse back
+g2 = parse_rdf(ttl, TurtleFormat())
+println(&quot;Round-trip: $(length(g2)) triples (original: $(length(g)))&quot;)</code></pre><pre><code class="nohighlight hljs">Round-trip: 7 triples (original: 7)</code></pre><h2 id="N-Triples"><a class="docs-heading-anchor" href="#N-Triples">N-Triples</a><a id="N-Triples-1"></a><a class="docs-heading-anchor-permalink" href="#N-Triples" title="Permalink"></a></h2><p>N-Triples is the simplest line-based format — one triple per line, fully expanded URIs.</p><pre><code class="language-julia hljs">nt = serialize(g, NTriplesFormat())
+println(nt)</code></pre><pre><code class="nohighlight hljs">&lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .
+&lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;Earth&quot;@en .
+&lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;Terre&quot;@fr .
+&lt;http://example.org/earth&gt; &lt;http://example.org/radius_km&gt; &quot;6371&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt; .
+&lt;http://example.org/earth&gt; &lt;http://example.org/hasMoon&gt; &lt;http://example.org/moon&gt; .
+&lt;http://example.org/moon&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Moon&gt; .
+&lt;http://example.org/moon&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;The Moon&quot; .</code></pre><pre><code class="language-julia hljs">g3 = parse_rdf(nt, NTriplesFormat())
+println(&quot;Parsed: $(length(g3)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Parsed: 7 triples</code></pre><h2 id="N3-(Notation3)"><a class="docs-heading-anchor" href="#N3-(Notation3)">N3 (Notation3)</a><a id="N3-(Notation3)-1"></a><a class="docs-heading-anchor-permalink" href="#N3-(Notation3)" title="Permalink"></a></h2><p>N3 extends Turtle with formulas (quoted graphs), variables, and implications — the foundation for N3 reasoning.</p><pre><code class="language-julia hljs">n3_str = serialize_n3(g)
+println(n3_str)</code></pre><pre><code class="nohighlight hljs">@prefix ex: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ex:earth a ex:Planet ;
+    ex:hasMoon ex:moon ;
+    ex:radius_km 6371 ;
+    rdfs:label &quot;Earth&quot;@en, &quot;Terre&quot;@fr .
+
+ex:moon a ex:Moon ;
+    rdfs:label &quot;The Moon&quot; .</code></pre><h2 id="RDF/XML"><a class="docs-heading-anchor" href="#RDF/XML">RDF/XML</a><a id="RDF/XML-1"></a><a class="docs-heading-anchor-permalink" href="#RDF/XML" title="Permalink"></a></h2><p>The original RDF serialization format, based on XML.</p><pre><code class="language-julia hljs">rdfxml = serialize(g, RDFXMLFormat())
+println(rdfxml)</code></pre><pre><code class="nohighlight hljs">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;rdf:RDF xmlns:ex=&quot;http://example.org/&quot; xmlns:owl=&quot;http://www.w3.org/2002/07/owl#&quot; xmlns:rdf=&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#&quot; xmlns:rdfs=&quot;http://www.w3.org/2000/01/rdf-schema#&quot; xmlns:skos=&quot;http://www.w3.org/2004/02/skos/core#&quot; xmlns:xsd=&quot;http://www.w3.org/2001/XMLSchema#&quot;&gt;
+  &lt;rdf:Description rdf:about=&quot;http://example.org/earth&quot;&gt;
+    &lt;rdf:type rdf:resource=&quot;http://example.org/Planet&quot;/&gt;
+    &lt;rdfs:label xml:lang=&quot;en&quot;&gt;Earth&lt;/rdfs:label&gt;
+    &lt;rdfs:label xml:lang=&quot;fr&quot;&gt;Terre&lt;/rdfs:label&gt;
+    &lt;ex:radius_km rdf:datatype=&quot;http://www.w3.org/2001/XMLSchema#integer&quot;&gt;6371&lt;/ex:radius_km&gt;
+    &lt;ex:hasMoon rdf:resource=&quot;http://example.org/moon&quot;/&gt;
+  &lt;/rdf:Description&gt;
+  &lt;rdf:Description rdf:about=&quot;http://example.org/moon&quot;&gt;
+    &lt;rdf:type rdf:resource=&quot;http://example.org/Moon&quot;/&gt;
+    &lt;rdfs:label&gt;The Moon&lt;/rdfs:label&gt;
+  &lt;/rdf:Description&gt;
+&lt;/rdf:RDF&gt;</code></pre><pre><code class="language-julia hljs">g4 = parse_rdf(rdfxml, RDFXMLFormat())
+println(&quot;Parsed: $(length(g4)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Parsed: 7 triples</code></pre><h2 id="JSON-LD"><a class="docs-heading-anchor" href="#JSON-LD">JSON-LD</a><a id="JSON-LD-1"></a><a class="docs-heading-anchor-permalink" href="#JSON-LD" title="Permalink"></a></h2><p>JSON-LD embeds RDF in JSON, making it web-developer friendly.</p><pre><code class="language-julia hljs">jsonld = serialize(g, JSONLDFormat())
+println(jsonld)</code></pre><pre><code class="nohighlight hljs">{
+    &quot;@context&quot;: {
+        &quot;rdfs&quot;: &quot;http://www.w3.org/2000/01/rdf-schema#&quot;,
+        &quot;owl&quot;: &quot;http://www.w3.org/2002/07/owl#&quot;,
+        &quot;skos&quot;: &quot;http://www.w3.org/2004/02/skos/core#&quot;,
+        &quot;ex&quot;: &quot;http://example.org/&quot;,
+        &quot;rdf&quot;: &quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#&quot;,
+        &quot;xsd&quot;: &quot;http://www.w3.org/2001/XMLSchema#&quot;
+    },
+    &quot;@graph&quot;: [
+        {
+            &quot;rdfs:label&quot;: [
+                {
+                    &quot;@language&quot;: &quot;en&quot;,
+                    &quot;@value&quot;: &quot;Earth&quot;
+                },
+                {
+                    &quot;@language&quot;: &quot;fr&quot;,
+                    &quot;@value&quot;: &quot;Terre&quot;
+                }
+            ],
+            &quot;@id&quot;: &quot;http://example.org/earth&quot;,
+            &quot;ex:hasMoon&quot;: {
+                &quot;@id&quot;: &quot;http://example.org/moon&quot;
+            },
+            &quot;ex:radius_km&quot;: 6371,
+            &quot;@type&quot;: &quot;http://example.org/Planet&quot;
+        },
+        {
+            &quot;rdfs:label&quot;: &quot;The Moon&quot;,
+            &quot;@id&quot;: &quot;http://example.org/moon&quot;,
+            &quot;@type&quot;: &quot;http://example.org/Moon&quot;
+        }
+    ]
+}</code></pre><pre><code class="language-julia hljs"># Parse JSON-LD
+g5 = parse_rdf(jsonld, JSONLDFormat())
+println(&quot;Parsed: $(length(g5)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Parsed: 7 triples</code></pre><h3 id="JSON-LD-Processing"><a class="docs-heading-anchor" href="#JSON-LD-Processing">JSON-LD Processing</a><a id="JSON-LD-Processing-1"></a><a class="docs-heading-anchor-permalink" href="#JSON-LD-Processing" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Expand — remove context, show full URIs
+expanded = jsonld_expand(jsonld)
+println(&quot;Expanded:&quot;)
+println(expanded)</code></pre><pre><code class="nohighlight hljs">Expanded:
+Dict{String, Any}[Dict(&quot;@graph&quot; =&gt; Any[Dict{String, Any}(&quot;rdfs:label&quot; =&gt; Any[Dict{String, Any}(&quot;@language&quot; =&gt; &quot;en&quot;, &quot;@value&quot; =&gt; &quot;Earth&quot;), Dict{String, Any}(&quot;@language&quot; =&gt; &quot;fr&quot;, &quot;@value&quot; =&gt; &quot;Terre&quot;)], &quot;@id&quot; =&gt; &quot;http://example.org/earth&quot;, &quot;ex:hasMoon&quot; =&gt; Dict{String, Any}(&quot;@id&quot; =&gt; &quot;http://example.org/moon&quot;), &quot;ex:radius_km&quot; =&gt; 6371, &quot;@type&quot; =&gt; &quot;http://example.org/Planet&quot;), Dict{String, Any}(&quot;rdfs:label&quot; =&gt; &quot;The Moon&quot;, &quot;@id&quot; =&gt; &quot;http://example.org/moon&quot;, &quot;@type&quot; =&gt; &quot;http://example.org/Moon&quot;)])]</code></pre><pre><code class="language-julia hljs"># Compact — apply a context to shorten URIs
+context = Dict{String,Any}(&quot;@context&quot; =&gt; Dict{String,Any}(&quot;ex&quot; =&gt; &quot;http://example.org/&quot;, &quot;label&quot; =&gt; &quot;http://www.w3.org/2000/01/rdf-schema#label&quot;))
+compacted = jsonld_compact(jsonld, context)
+println(&quot;Compacted:&quot;)
+println(compacted)</code></pre><pre><code class="nohighlight hljs">Compacted:
+Dict{String, Any}(&quot;@context&quot; =&gt; Dict{String, Any}(&quot;@context&quot; =&gt; Dict{String, Any}(&quot;label&quot; =&gt; &quot;http://www.w3.org/2000/01/rdf-schema#label&quot;, &quot;ex&quot; =&gt; &quot;http://example.org/&quot;)), &quot;@graph&quot; =&gt; Any[Dict{String, Any}(&quot;rdfs:label&quot; =&gt; Any[Dict{String, Any}(&quot;@language&quot; =&gt; &quot;en&quot;, &quot;@value&quot; =&gt; &quot;Earth&quot;), Dict{String, Any}(&quot;@language&quot; =&gt; &quot;fr&quot;, &quot;@value&quot; =&gt; &quot;Terre&quot;)], &quot;@id&quot; =&gt; &quot;http://example.org/earth&quot;, &quot;ex:hasMoon&quot; =&gt; Dict{String, Any}(&quot;@id&quot; =&gt; &quot;http://example.org/moon&quot;), &quot;ex:radius_km&quot; =&gt; 6371, &quot;@type&quot; =&gt; &quot;http://example.org/Planet&quot;), Dict{String, Any}(&quot;rdfs:label&quot; =&gt; &quot;The Moon&quot;, &quot;@id&quot; =&gt; &quot;http://example.org/moon&quot;, &quot;@type&quot; =&gt; &quot;http://example.org/Moon&quot;)])</code></pre><h2 id="N-Quads"><a class="docs-heading-anchor" href="#N-Quads">N-Quads</a><a id="N-Quads-1"></a><a class="docs-heading-anchor-permalink" href="#N-Quads" title="Permalink"></a></h2><p>N-Quads extend N-Triples with a fourth element for named graphs.</p><pre><code class="language-julia hljs">ds = Dataset()
+for t in g
+    add!(ds, t)
+end
+nq = serialize_nquads(ds)
+println(nq)</code></pre><pre><code class="nohighlight hljs">&lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .
+&lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;Earth&quot;@en .
+&lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;Terre&quot;@fr .
+&lt;http://example.org/earth&gt; &lt;http://example.org/radius_km&gt; &quot;6371&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt; .
+&lt;http://example.org/earth&gt; &lt;http://example.org/hasMoon&gt; &lt;http://example.org/moon&gt; .
+&lt;http://example.org/moon&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Moon&gt; .
+&lt;http://example.org/moon&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;The Moon&quot; .</code></pre><h2 id="TriG"><a class="docs-heading-anchor" href="#TriG">TriG</a><a id="TriG-1"></a><a class="docs-heading-anchor-permalink" href="#TriG" title="Permalink"></a></h2><p>TriG extends Turtle with named graph support.</p><pre><code class="language-julia hljs">trig = serialize_trig(ds)
+println(trig)</code></pre><pre><code class="nohighlight hljs">@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+{
+    ns1:earth a ns1:Planet ;
+        ns1:hasMoon ns1:moon ;
+        ns1:radius_km 6371 ;
+        rdfs:label &quot;Earth&quot;@en, &quot;Terre&quot;@fr .
+
+    ns1:moon a ns1:Moon ;
+        rdfs:label &quot;The Moon&quot; .
+}</code></pre><h2 id="TriX"><a class="docs-heading-anchor" href="#TriX">TriX</a><a id="TriX-1"></a><a class="docs-heading-anchor-permalink" href="#TriX" title="Permalink"></a></h2><p>TriX is an XML-based format for named graphs.</p><pre><code class="language-julia hljs">trix = serialize_trix(g)
+println(trix)</code></pre><pre><code class="nohighlight hljs">&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;
+&lt;TriX xmlns=&quot;http://www.w3.org/2004/03/trix/trix-1/&quot;&gt;
+  &lt;graph&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/earth&lt;/uri&gt;
+      &lt;uri&gt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&lt;/uri&gt;
+      &lt;uri&gt;http://example.org/Planet&lt;/uri&gt;
+    &lt;/triple&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/earth&lt;/uri&gt;
+      &lt;uri&gt;http://www.w3.org/2000/01/rdf-schema#label&lt;/uri&gt;
+      &lt;plainLiteral xml:lang=&quot;en&quot;&gt;Earth&lt;/plainLiteral&gt;
+    &lt;/triple&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/earth&lt;/uri&gt;
+      &lt;uri&gt;http://www.w3.org/2000/01/rdf-schema#label&lt;/uri&gt;
+      &lt;plainLiteral xml:lang=&quot;fr&quot;&gt;Terre&lt;/plainLiteral&gt;
+    &lt;/triple&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/earth&lt;/uri&gt;
+      &lt;uri&gt;http://example.org/radius_km&lt;/uri&gt;
+      &lt;typedLiteral datatype=&quot;http://www.w3.org/2001/XMLSchema#integer&quot;&gt;6371&lt;/typedLiteral&gt;
+    &lt;/triple&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/earth&lt;/uri&gt;
+      &lt;uri&gt;http://example.org/hasMoon&lt;/uri&gt;
+      &lt;uri&gt;http://example.org/moon&lt;/uri&gt;
+    &lt;/triple&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/moon&lt;/uri&gt;
+      &lt;uri&gt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&lt;/uri&gt;
+      &lt;uri&gt;http://example.org/Moon&lt;/uri&gt;
+    &lt;/triple&gt;
+    &lt;triple&gt;
+      &lt;uri&gt;http://example.org/moon&lt;/uri&gt;
+      &lt;uri&gt;http://www.w3.org/2000/01/rdf-schema#label&lt;/uri&gt;
+      &lt;plainLiteral&gt;The Moon&lt;/plainLiteral&gt;
+    &lt;/triple&gt;
+  &lt;/graph&gt;
+&lt;/TriX&gt;</code></pre><h2 id="HexTuples-(HEXT)"><a class="docs-heading-anchor" href="#HexTuples-(HEXT)">HexTuples (HEXT)</a><a id="HexTuples-(HEXT)-1"></a><a class="docs-heading-anchor-permalink" href="#HexTuples-(HEXT)" title="Permalink"></a></h2><p>A line-based JSON format, one array per triple.</p><pre><code class="language-julia hljs">hext = serialize_hextuples(g)
+println(hext)</code></pre><pre><code class="nohighlight hljs">[&quot;http://example.org/earth&quot;,&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;,&quot;http://example.org/Planet&quot;,&quot;globalId&quot;,&quot;&quot;,&quot;&quot;]
+[&quot;http://example.org/earth&quot;,&quot;http://www.w3.org/2000/01/rdf-schema#label&quot;,&quot;Earth&quot;,&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#langString&quot;,&quot;en&quot;,&quot;&quot;]
+[&quot;http://example.org/earth&quot;,&quot;http://www.w3.org/2000/01/rdf-schema#label&quot;,&quot;Terre&quot;,&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#langString&quot;,&quot;fr&quot;,&quot;&quot;]
+[&quot;http://example.org/earth&quot;,&quot;http://example.org/radius_km&quot;,&quot;6371&quot;,&quot;http://www.w3.org/2001/XMLSchema#integer&quot;,&quot;&quot;,&quot;&quot;]
+[&quot;http://example.org/earth&quot;,&quot;http://example.org/hasMoon&quot;,&quot;http://example.org/moon&quot;,&quot;globalId&quot;,&quot;&quot;,&quot;&quot;]
+[&quot;http://example.org/moon&quot;,&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;,&quot;http://example.org/Moon&quot;,&quot;globalId&quot;,&quot;&quot;,&quot;&quot;]
+[&quot;http://example.org/moon&quot;,&quot;http://www.w3.org/2000/01/rdf-schema#label&quot;,&quot;The Moon&quot;,&quot;http://www.w3.org/2001/XMLSchema#string&quot;,&quot;&quot;,&quot;&quot;]</code></pre><h2 id="Long-Turtle"><a class="docs-heading-anchor" href="#Long-Turtle">Long Turtle</a><a id="Long-Turtle-1"></a><a class="docs-heading-anchor-permalink" href="#Long-Turtle" title="Permalink"></a></h2><p>Verbose Turtle with one triple per line (useful for diffs).</p><pre><code class="language-julia hljs">lt = serialize(g, TurtleFormat())
+println(lt)</code></pre><pre><code class="nohighlight hljs">@prefix ex: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ex:earth a ex:Planet ;
+    ex:hasMoon ex:moon ;
+    ex:radius_km 6371 ;
+    rdfs:label &quot;Earth&quot;@en,
+        &quot;Terre&quot;@fr .
+
+ex:moon a ex:Moon ;
+    rdfs:label &quot;The Moon&quot; .</code></pre><h2 id="RDF-Patch"><a class="docs-heading-anchor" href="#RDF-Patch">RDF Patch</a><a id="RDF-Patch-1"></a><a class="docs-heading-anchor-permalink" href="#RDF-Patch" title="Permalink"></a></h2><p>RDF Patch represents changes (additions/deletions) to a graph.</p><pre><code class="language-julia hljs"># serialize_rdfpatch takes additions and deletions vectors
+additions = collect(g)
+deletions = Triple[]
+patch = serialize_rdfpatch(additions, deletions)
+println(first(patch, 500))</code></pre><pre><code class="nohighlight hljs">TX .
+A &lt;http://example.org/earth&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Planet&gt; .
+A &lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;Earth&quot;@en .
+A &lt;http://example.org/earth&gt; &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; &quot;Terre&quot;@fr .
+A &lt;http://example.org/earth&gt; &lt;http://example.org/radius_km&gt; &quot;6371&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt; .
+A &lt;http://example.org/earth&gt; &lt;http://example.org/hasMoon&gt; &lt;http://example.org/moon&gt; .
+A &lt;http://exa</code></pre><h2 id="File-I/O"><a class="docs-heading-anchor" href="#File-I/O">File I/O</a><a id="File-I/O-1"></a><a class="docs-heading-anchor-permalink" href="#File-I/O" title="Permalink"></a></h2><h3 id="Saving-to-Files"><a class="docs-heading-anchor" href="#Saving-to-Files">Saving to Files</a><a id="Saving-to-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Saving-to-Files" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Format is auto-detected from file extension
+save_rdf(g, &quot;planets.ttl&quot;)          # Turtle
+save_rdf(g, &quot;planets.nt&quot;)           # N-Triples
+save_rdf(g, &quot;planets.jsonld&quot;)       # JSON-LD
+save_rdf(g, &quot;planets.rdf&quot;)          # RDF/XML
+
+# Or specify format explicitly
+save_rdf(g, &quot;planets.dat&quot;; format=NTriplesFormat())</code></pre><h3 id="Loading-from-Files"><a class="docs-heading-anchor" href="#Loading-from-Files">Loading from Files</a><a id="Loading-from-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Loading-from-Files" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Format auto-detected from extension
+g = load_rdf_file(&quot;planets.ttl&quot;)
+
+# Explicit format
+g = load_rdf_file(&quot;planets.dat&quot;; format=NTriplesFormat())</code></pre><h2 id="Content-Negotiation"><a class="docs-heading-anchor" href="#Content-Negotiation">Content Negotiation</a><a id="Content-Negotiation-1"></a><a class="docs-heading-anchor-permalink" href="#Content-Negotiation" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Get MIME types for formats
+println(&quot;Turtle:    &quot;, mime_type(TurtleFormat()))
+println(&quot;JSON-LD:   &quot;, mime_type(JSONLDFormat()))
+println(&quot;RDF/XML:   &quot;, mime_type(RDFXMLFormat()))
+println(&quot;N-Triples: &quot;, mime_type(NTriplesFormat()))</code></pre><pre><code class="nohighlight hljs">Turtle:    text/turtle
+JSON-LD:   application/ld+json
+RDF/XML:   application/rdf+xml
+N-Triples: application/n-triples</code></pre><h2 id="Format-Comparison"><a class="docs-heading-anchor" href="#Format-Comparison">Format Comparison</a><a id="Format-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Format-Comparison" title="Permalink"></a></h2><table><tr><th style="text-align: right">Format</th><th style="text-align: center">Human Readable</th><th style="text-align: center">Compact</th><th style="text-align: center">Named Graphs</th><th style="text-align: center">Standard</th></tr><tr><td style="text-align: right">Turtle</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">N-Triples</td><td style="text-align: center">⚠️</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">N3</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅ (formulas)</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">RDF/XML</td><td style="text-align: center">❌</td><td style="text-align: center">⚠️</td><td style="text-align: center">❌</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">JSON-LD</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">TriG</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">N-Quads</td><td style="text-align: center">⚠️</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">TriX</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">W3C</td></tr><tr><td style="text-align: right">HexTuples</td><td style="text-align: center">⚠️</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">Community</td></tr></table></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../namespaces/">« Namespaces</a><a class="docs-footer-nextpage" href="../sparql-queries/">SPARQL Queries »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

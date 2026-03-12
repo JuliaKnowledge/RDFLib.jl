@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>GeoSPARQL · RDFLib.jl</title><meta name="title" content="GeoSPARQL · RDFLib.jl"/><meta property="og:title" content="GeoSPARQL · RDFLib.jl"/><meta property="twitter:title" content="GeoSPARQL · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/geosparql/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/geosparql/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/guide/geosparql/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../store-backends/">Store Backends</a></li><li><a class="tocitem" href="../tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../property-paths/">Property Paths</a></li><li><a class="tocitem" href="../graph-utilities/">Graph Utilities</a></li><li class="is-active"><a class="tocitem" href>GeoSPARQL</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Creating-Spatial-Data"><span>Creating Spatial Data</span></a></li><li><a class="tocitem" href="#Parsing-WKT"><span>Parsing WKT</span></a></li><li><a class="tocitem" href="#Spatial-Predicates"><span>Spatial Predicates</span></a></li><li><a class="tocitem" href="#Metric-Functions"><span>Metric Functions</span></a></li><li><a class="tocitem" href="#Polygon-with-Holes"><span>Polygon with Holes</span></a></li><li><a class="tocitem" href="#Multi-Geometries"><span>Multi-Geometries</span></a></li><li><a class="tocitem" href="#SPARQL-Integration"><span>SPARQL Integration</span></a></li><li><a class="tocitem" href="#Boundary-Computation"><span>Boundary Computation</span></a></li><li><a class="tocitem" href="#Summary"><span>Summary</span></a></li></ul></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Guide</a></li><li class="is-active"><a href>GeoSPARQL</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>GeoSPARQL</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/guide/geosparql.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="GeoSPARQL:-Spatial-Data-in-RDF"><a class="docs-heading-anchor" href="#GeoSPARQL:-Spatial-Data-in-RDF">GeoSPARQL: Spatial Data in RDF</a><a id="GeoSPARQL:-Spatial-Data-in-RDF-1"></a><a class="docs-heading-anchor-permalink" href="#GeoSPARQL:-Spatial-Data-in-RDF" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>GeoSPARQL is an OGC standard for representing and querying spatial data in RDF. RDFLib.jl includes native support for:</p><ul><li><strong>WKT (Well-Known Text)</strong> geometry parsing</li><li><strong>Spatial predicates</strong> (contains, within, intersects, disjoint, etc.)</li><li><strong>Metric functions</strong> (area, distance, centroid, convex hull)</li><li><strong>SPARQL integration</strong> via GeoSPARQL function URIs</li></ul><pre><code class="language-julia hljs">using RDFLib</code></pre><h2 id="Creating-Spatial-Data"><a class="docs-heading-anchor" href="#Creating-Spatial-Data">Creating Spatial Data</a><a id="Creating-Spatial-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-Spatial-Data" title="Permalink"></a></h2><p>Geometries are stored as WKT literals with the <code>geo:wktLiteral</code> datatype:</p><pre><code class="language-julia hljs">geo = Namespace(&quot;http://www.opengis.net/ont/geosparql#&quot;)
+ex = Namespace(&quot;http://example.org/&quot;)
+
+g = RDFGraph()
+
+# Add some spatial features
+add!(g, Triple(ex.london, geo.hasGeometry, ex.london_geom))
+add!(g, Triple(ex.london_geom, geo.asWKT,
+    Literal(&quot;POINT(-0.1276 51.5074)&quot;,
+            datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))))
+
+add!(g, Triple(ex.paris, geo.hasGeometry, ex.paris_geom))
+add!(g, Triple(ex.paris_geom, geo.asWKT,
+    Literal(&quot;POINT(2.3522 48.8566)&quot;,
+            datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))))
+
+add!(g, Triple(ex.uk, geo.hasGeometry, ex.uk_geom))
+add!(g, Triple(ex.uk_geom, geo.asWKT,
+    Literal(&quot;POLYGON((-6 50, 2 50, 2 56, -6 56, -6 50))&quot;,
+            datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))))
+
+println(&quot;Graph has $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Graph has 6 triples</code></pre><h2 id="Parsing-WKT"><a class="docs-heading-anchor" href="#Parsing-WKT">Parsing WKT</a><a id="Parsing-WKT-1"></a><a class="docs-heading-anchor-permalink" href="#Parsing-WKT" title="Permalink"></a></h2><p>The <code>parse_wkt</code> function converts WKT strings into geometry structs:</p><pre><code class="language-julia hljs">point = parse_wkt(&quot;POINT(-0.1276 51.5074)&quot;)
+println(&quot;Point: &quot;, point)
+
+line = parse_wkt(&quot;LINESTRING(0 0, 1 1, 2 0)&quot;)
+println(&quot;Line: $(length(line.points)) points&quot;)
+
+polygon = parse_wkt(&quot;POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))&quot;)
+println(&quot;Polygon exterior: $(length(polygon.exterior)) points&quot;)
+
+# SRID prefix is handled automatically
+srid_point = parse_wkt(&quot;SRID=4326;POINT(2.3522 48.8566)&quot;)
+println(&quot;SRID point: &quot;, srid_point)</code></pre><pre><code class="nohighlight hljs">Point: GeoPoint(-0.1276, 51.5074, NaN)
+Line: 3 points
+Polygon exterior: 5 points
+SRID point: GeoPoint(2.3522, 48.8566, NaN)</code></pre><h2 id="Spatial-Predicates"><a class="docs-heading-anchor" href="#Spatial-Predicates">Spatial Predicates</a><a id="Spatial-Predicates-1"></a><a class="docs-heading-anchor-permalink" href="#Spatial-Predicates" title="Permalink"></a></h2><p>Test topological relationships between geometries:</p><pre><code class="language-julia hljs"># A large bounding box and a point inside it
+box = parse_wkt(&quot;POLYGON((-6 50, 2 50, 2 56, -6 56, -6 50))&quot;)
+london = parse_wkt(&quot;POINT(-0.1276 51.5074)&quot;)
+paris = parse_wkt(&quot;POINT(2.3522 48.8566)&quot;)
+
+# Contains / Within
+println(&quot;Box contains London: &quot;, geo_contains(box, london))
+println(&quot;Box contains Paris:  &quot;, geo_contains(box, paris))
+println(&quot;London within box:   &quot;, geo_within(london, box))
+
+# Intersects / Disjoint
+println(&quot;Box intersects London: &quot;, geo_intersects(box, london))
+println(&quot;London disjoint Paris: &quot;, geo_disjoint(london, paris))</code></pre><pre><code class="nohighlight hljs">Box contains London: true
+Box contains Paris:  false
+London within box:   true
+Box intersects London: true
+London disjoint Paris: true</code></pre><h2 id="Metric-Functions"><a class="docs-heading-anchor" href="#Metric-Functions">Metric Functions</a><a id="Metric-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Metric-Functions" title="Permalink"></a></h2><p>Compute geometric measurements:</p><pre><code class="language-julia hljs"># Area of a polygon
+square = parse_wkt(&quot;POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))&quot;)
+println(&quot;Square area: &quot;, geo_area(square))
+
+# Distance between points
+p1 = parse_wkt(&quot;POINT(0 0)&quot;)
+p2 = parse_wkt(&quot;POINT(3 4)&quot;)
+println(&quot;Distance: &quot;, geo_distance(p1, p2))
+
+# Area of a triangle
+triangle = parse_wkt(&quot;POLYGON((0 0, 6 0, 3 6, 0 0))&quot;)
+println(&quot;Triangle area: &quot;, geo_area(triangle))</code></pre><pre><code class="nohighlight hljs">Square area: 100.0
+Distance: 5.0
+Triangle area: 18.0</code></pre><h2 id="Polygon-with-Holes"><a class="docs-heading-anchor" href="#Polygon-with-Holes">Polygon with Holes</a><a id="Polygon-with-Holes-1"></a><a class="docs-heading-anchor-permalink" href="#Polygon-with-Holes" title="Permalink"></a></h2><p>GeoSPARQL supports polygons with interior holes:</p><pre><code class="language-julia hljs"># Polygon with a hole
+holed = parse_wkt(&quot;POLYGON((0 0, 20 0, 20 20, 0 20, 0 0), (5 5, 15 5, 15 15, 5 15, 5 5))&quot;)
+println(&quot;Outer ring: $(length(holed.exterior)) points&quot;)
+println(&quot;Holes: $(length(holed.holes))&quot;)
+println(&quot;Area: &quot;, geo_area(holed))  # 400 - 100 = 300
+
+# Point in the hole
+center = parse_wkt(&quot;POINT(10 10)&quot;)
+corner = parse_wkt(&quot;POINT(2 2)&quot;)
+println(&quot;Center in holed polygon: &quot;, geo_contains(holed, center))  # false (in hole)
+println(&quot;Corner in holed polygon: &quot;, geo_contains(holed, corner))  # true</code></pre><pre><code class="nohighlight hljs">Outer ring: 5 points
+Holes: 1
+Area: 300.0
+Center in holed polygon: false
+Corner in holed polygon: true</code></pre><h2 id="Multi-Geometries"><a class="docs-heading-anchor" href="#Multi-Geometries">Multi-Geometries</a><a id="Multi-Geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-Geometries" title="Permalink"></a></h2><pre><code class="language-julia hljs"># MultiPoint
+mp = parse_wkt(&quot;MULTIPOINT((0 0), (1 1), (2 2))&quot;)
+println(&quot;MultiPoint: $(length(mp.points)) points&quot;)
+
+# MultiPolygon
+mpoly = parse_wkt(&quot;MULTIPOLYGON(((0 0, 1 0, 1 1, 0 1, 0 0)), ((2 2, 3 2, 3 3, 2 3, 2 2)))&quot;)
+println(&quot;MultiPolygon: $(length(mpoly.polygons)) polygons&quot;)
+println(&quot;Total area: &quot;, geo_area(mpoly))</code></pre><pre><code class="nohighlight hljs">MultiPoint: 3 points
+MultiPolygon: 2 polygons
+Total area: 2.0</code></pre><h2 id="SPARQL-Integration"><a class="docs-heading-anchor" href="#SPARQL-Integration">SPARQL Integration</a><a id="SPARQL-Integration-1"></a><a class="docs-heading-anchor-permalink" href="#SPARQL-Integration" title="Permalink"></a></h2><p>GeoSPARQL functions can be used directly in SPARQL FILTER expressions via the <code>geof:</code> namespace:</p><pre><code class="language-julia hljs"># Build a graph with spatial data
+g2 = RDFGraph()
+places = [
+    (ex.london,  &quot;POINT(-0.1276 51.5074)&quot;),
+    (ex.paris,   &quot;POINT(2.3522 48.8566)&quot;),
+    (ex.berlin,  &quot;POINT(13.4050 52.5200)&quot;),
+    (ex.madrid,  &quot;POINT(-3.7038 40.4168)&quot;),
+]
+
+for (place, wkt) in places
+    geom_node = URIRef(string(place) * &quot;_geom&quot;)
+    add!(g2, Triple(place, geo.hasGeometry, geom_node))
+    add!(g2, Triple(geom_node, geo.asWKT,
+        Literal(wkt, datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))))
+end
+
+# Query: find all places with their WKT
+results = sparql_query(g2, &quot;&quot;&quot;
+    PREFIX geo: &lt;http://www.opengis.net/ont/geosparql#&gt;
+    SELECT ?place ?wkt
+    WHERE {
+        ?place geo:hasGeometry ?geom .
+        ?geom geo:asWKT ?wkt .
+    }
+&quot;&quot;&quot;)
+for row in results
+    println(&quot;  $(split(string(row[&quot;place&quot;]), &#39;/&#39;)[end]): $(row[&quot;wkt&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">  london: Literal(&quot;POINT(-0.1276 51.5074)&quot;, datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))
+  paris: Literal(&quot;POINT(2.3522 48.8566)&quot;, datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))
+  berlin: Literal(&quot;POINT(13.4050 52.5200)&quot;, datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))
+  madrid: Literal(&quot;POINT(-3.7038 40.4168)&quot;, datatype=URIRef(&quot;http://www.opengis.net/ont/geosparql#wktLiteral&quot;))</code></pre><h2 id="Boundary-Computation"><a class="docs-heading-anchor" href="#Boundary-Computation">Boundary Computation</a><a id="Boundary-Computation-1"></a><a class="docs-heading-anchor-permalink" href="#Boundary-Computation" title="Permalink"></a></h2><p>Compute the boundary of a geometry:</p><pre><code class="language-julia hljs">poly = parse_wkt(&quot;POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))&quot;)
+boundary = geo_boundary(poly)
+println(&quot;Polygon boundary: &quot;, typeof(boundary), &quot; with $(length(boundary.points)) points&quot;)
+
+line = parse_wkt(&quot;LINESTRING(0 0, 5 5, 10 0)&quot;)
+lb = geo_boundary(line)
+println(&quot;Line boundary: MultiPoint with $(length(lb.points)) endpoints&quot;)</code></pre><pre><code class="nohighlight hljs">Polygon boundary: GeoLineString with 5 points
+Line boundary: MultiPoint with 2 endpoints</code></pre><h2 id="Summary"><a class="docs-heading-anchor" href="#Summary">Summary</a><a id="Summary-1"></a><a class="docs-heading-anchor-permalink" href="#Summary" title="Permalink"></a></h2><p>RDFLib.jl’s GeoSPARQL support enables spatial reasoning over RDF data:</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right">Function</th></tr><tr><td style="text-align: right">Parse WKT</td><td style="text-align: right"><code>parse_wkt(s)</code></td></tr><tr><td style="text-align: right">Contains</td><td style="text-align: right"><code>geo_contains(a, b)</code></td></tr><tr><td style="text-align: right">Within</td><td style="text-align: right"><code>geo_within(a, b)</code></td></tr><tr><td style="text-align: right">Intersects</td><td style="text-align: right"><code>geo_intersects(a, b)</code></td></tr><tr><td style="text-align: right">Disjoint</td><td style="text-align: right"><code>geo_disjoint(a, b)</code></td></tr><tr><td style="text-align: right">Distance</td><td style="text-align: right"><code>geo_distance(a, b)</code></td></tr><tr><td style="text-align: right">Area</td><td style="text-align: right"><code>geo_area(g)</code></td></tr><tr><td style="text-align: right">Boundary</td><td style="text-align: right"><code>geo_boundary(g)</code></td></tr><tr><td style="text-align: right">Buffer</td><td style="text-align: right"><code>geo_buffer(g, dist)</code></td></tr></table><p>All spatial functions work with Points, LineStrings, Polygons, and their Multi- variants, following the OGC Simple Features specification.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../graph-utilities/">« Graph Utilities</a><a class="docs-footer-nextpage" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

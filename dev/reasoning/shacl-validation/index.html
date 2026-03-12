@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>SHACL Validation · RDFLib.jl</title><meta name="title" content="SHACL Validation · RDFLib.jl"/><meta property="og:title" content="SHACL Validation · RDFLib.jl"/><meta property="twitter:title" content="SHACL Validation · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/shacl-validation/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/shacl-validation/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/shacl-validation/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../datalog/">Datalog</a></li><li><a class="tocitem" href="../problog/">ProbLog</a></li><li class="is-active"><a class="tocitem" href>SHACL Validation</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Defining-Shapes"><span>Defining Shapes</span></a></li><li><a class="tocitem" href="#Validating-Conforming-Data"><span>Validating Conforming Data</span></a></li><li><a class="tocitem" href="#Detecting-Violations"><span>Detecting Violations</span></a></li><li><a class="tocitem" href="#Shape-Constraint-Types"><span>Shape Constraint Types</span></a></li><li><a class="tocitem" href="#Use-Case:-Validating-a-Data-Pipeline"><span>Use Case: Validating a Data Pipeline</span></a></li></ul></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Reasoning &amp; Inference</a></li><li class="is-active"><a href>SHACL Validation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>SHACL Validation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/reasoning/shacl-validation.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SHACL-Validation"><a class="docs-heading-anchor" href="#SHACL-Validation">SHACL Validation</a><a id="SHACL-Validation-1"></a><a class="docs-heading-anchor-permalink" href="#SHACL-Validation" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>SHACL (Shapes Constraint Language) is a W3C standard for validating RDF graphs against a set of shape constraints. RDFLib.jl includes a SHACL validator that checks whether data conforms to declared shapes.</p><pre><code class="language-julia hljs">using RDFLib
+ex = Namespace(&quot;http://example.org/&quot;)
+sh = Namespace(&quot;http://www.w3.org/ns/shacl#&quot;)</code></pre><pre><code class="nohighlight hljs">Namespace(&quot;http://www.w3.org/ns/shacl#&quot;)</code></pre><h2 id="Defining-Shapes"><a class="docs-heading-anchor" href="#Defining-Shapes">Defining Shapes</a><a id="Defining-Shapes-1"></a><a class="docs-heading-anchor-permalink" href="#Defining-Shapes" title="Permalink"></a></h2><p>Shapes describe the expected structure of your data — required properties, value types, cardinality, etc.</p><pre><code class="language-julia hljs">shapes = parse_rdf(&quot;&quot;&quot;
+    @prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:PersonShape a sh:NodeShape ;
+        sh:targetClass ex:Person ;
+        sh:property [
+            sh:path ex:name ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+            sh:datatype xsd:string ;
+            sh:name &quot;name&quot; ;
+        ] ;
+        sh:property [
+            sh:path ex:age ;
+            sh:minCount 1 ;
+            sh:datatype xsd:integer ;
+            sh:minInclusive 0 ;
+            sh:maxInclusive 150 ;
+            sh:name &quot;age&quot; ;
+        ] ;
+        sh:property [
+            sh:path ex:email ;
+            sh:maxCount 1 ;
+            sh:pattern &quot;^[^@]+@[^@]+\\\\.[^@]+\$&quot; ;
+            sh:name &quot;email&quot; ;
+        ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+println(&quot;Shapes graph: $(length(shapes)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Shapes graph: 20 triples</code></pre><h2 id="Validating-Conforming-Data"><a class="docs-heading-anchor" href="#Validating-Conforming-Data">Validating Conforming Data</a><a id="Validating-Conforming-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Validating-Conforming-Data" title="Permalink"></a></h2><pre><code class="language-julia hljs">valid_data = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:alice a ex:Person ;
+        ex:name &quot;Alice&quot;^^xsd:string ;
+        ex:age 30 ;
+        ex:email &quot;alice@example.org&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+report = validate(valid_data, shapes)
+println(&quot;Conforms: &quot;, report.conforms)
+println(&quot;Violations: &quot;, length(report.results))</code></pre><pre><code class="nohighlight hljs">Conforms: true
+Violations: 0</code></pre><h2 id="Detecting-Violations"><a class="docs-heading-anchor" href="#Detecting-Violations">Detecting Violations</a><a id="Detecting-Violations-1"></a><a class="docs-heading-anchor-permalink" href="#Detecting-Violations" title="Permalink"></a></h2><pre><code class="language-julia hljs">invalid_data = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    # Missing required name
+    ex:bob a ex:Person ;
+        ex:age 25 .
+
+    # Age out of range
+    ex:carol a ex:Person ;
+        ex:name &quot;Carol&quot;^^xsd:string ;
+        ex:age -5 .
+
+    # Multiple names (violates maxCount)
+    ex:dave a ex:Person ;
+        ex:name &quot;Dave&quot;^^xsd:string ;
+        ex:name &quot;David&quot;^^xsd:string ;
+        ex:age 40 .
+&quot;&quot;&quot;, TurtleFormat())
+
+report = validate(invalid_data, shapes)
+println(&quot;Conforms: &quot;, report.conforms)
+println(&quot;Number of violations: &quot;, length(report.results))
+
+for r in report.results
+    println(&quot;\nViolation:&quot;)
+    println(&quot;  Focus node: &quot;, r.focus_node)
+    println(&quot;  Property:   &quot;, r.path)
+    println(&quot;  Message:    &quot;, r.message)
+end</code></pre><pre><code class="nohighlight hljs">Conforms: false
+Number of violations: 3
+
+Violation:
+  Focus node: URIRef(&quot;http://example.org/dave&quot;)
+  Property:   URIRef(&quot;http://example.org/name&quot;)
+  Message:    Expected at most 1 values for http://example.org/name, got 2
+
+Violation:
+  Focus node: URIRef(&quot;http://example.org/carol&quot;)
+  Property:   URIRef(&quot;http://example.org/age&quot;)
+  Message:    Value -5 &lt; minInclusive 0.0
+
+Violation:
+  Focus node: URIRef(&quot;http://example.org/bob&quot;)
+  Property:   URIRef(&quot;http://example.org/name&quot;)
+  Message:    Expected at least 1 values for http://example.org/name, got 0</code></pre><h2 id="Shape-Constraint-Types"><a class="docs-heading-anchor" href="#Shape-Constraint-Types">Shape Constraint Types</a><a id="Shape-Constraint-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Shape-Constraint-Types" title="Permalink"></a></h2><h3 id="Datatype-Constraints"><a class="docs-heading-anchor" href="#Datatype-Constraints">Datatype Constraints</a><a id="Datatype-Constraints-1"></a><a class="docs-heading-anchor-permalink" href="#Datatype-Constraints" title="Permalink"></a></h3><pre><code class="language-julia hljs">shapes_dt = parse_rdf(&quot;&quot;&quot;
+    @prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:MeasurementShape a sh:NodeShape ;
+        sh:targetClass ex:Measurement ;
+        sh:property [
+            sh:path ex:value ;
+            sh:datatype xsd:decimal ;
+            sh:minCount 1 ;
+        ] ;
+        sh:property [
+            sh:path ex:unit ;
+            sh:datatype xsd:string ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+data = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:m1 a ex:Measurement ;
+        ex:value &quot;98.6&quot;^^xsd:decimal ;
+        ex:unit &quot;fahrenheit&quot;^^xsd:string .
+
+    ex:m2 a ex:Measurement ;
+        ex:value &quot;not a number&quot; ;
+        ex:unit &quot;celsius&quot;^^xsd:string .
+&quot;&quot;&quot;, TurtleFormat())
+
+report = validate(data, shapes_dt)
+println(&quot;Conforms: &quot;, report.conforms)
+for r in report.results
+    println(&quot;  $(r.focus_node): $(r.message)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Conforms: false
+  URIRef(&quot;http://example.org/m2&quot;): Expected datatype http://www.w3.org/2001/XMLSchema#decimal, got http://www.w3.org/2001/XMLSchema#string</code></pre><h3 id="Class-Constraints"><a class="docs-heading-anchor" href="#Class-Constraints">Class Constraints</a><a id="Class-Constraints-1"></a><a class="docs-heading-anchor-permalink" href="#Class-Constraints" title="Permalink"></a></h3><pre><code class="language-julia hljs">shapes_cls = parse_rdf(&quot;&quot;&quot;
+    @prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix ex: &lt;http://example.org/&gt; .
+
+    ex:EmployeeShape a sh:NodeShape ;
+        sh:targetClass ex:Employee ;
+        sh:property [
+            sh:path ex:worksFor ;
+            sh:class ex:Organization ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+data = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+
+    ex:acme a ex:Organization .
+    ex:alice a ex:Employee ;
+        ex:worksFor ex:acme .
+    ex:bob a ex:Employee ;
+        ex:worksFor ex:unknownCorp .
+&quot;&quot;&quot;, TurtleFormat())
+
+report = validate(data, shapes_cls)
+println(&quot;Conforms: &quot;, report.conforms)
+for r in report.results
+    println(&quot;  $(r.focus_node): $(r.message)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Conforms: false
+  URIRef(&quot;http://example.org/bob&quot;): Value does not have required rdf:type http://example.org/Organization</code></pre><h3 id="String-Length-and-Pattern"><a class="docs-heading-anchor" href="#String-Length-and-Pattern">String Length and Pattern</a><a id="String-Length-and-Pattern-1"></a><a class="docs-heading-anchor-permalink" href="#String-Length-and-Pattern" title="Permalink"></a></h3><pre><code class="language-julia hljs">shapes_str = parse_rdf(&quot;&quot;&quot;
+    @prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:UsernameShape a sh:NodeShape ;
+        sh:targetClass ex:User ;
+        sh:property [
+            sh:path ex:username ;
+            sh:minLength 3 ;
+            sh:maxLength 20 ;
+            sh:pattern &quot;^[a-zA-Z][a-zA-Z0-9_]*\$&quot; ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+data = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+
+    ex:user1 a ex:User ; ex:username &quot;alice_dev&quot; .
+    ex:user2 a ex:User ; ex:username &quot;ab&quot; .
+    ex:user3 a ex:User ; ex:username &quot;123invalid&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+report = validate(data, shapes_str)
+println(&quot;Conforms: &quot;, report.conforms)
+for r in report.results
+    println(&quot;  $(r.focus_node) ($(r.path)): $(r.message)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Conforms: false
+  URIRef(&quot;http://example.org/user2&quot;) (URIRef(&quot;http://example.org/username&quot;)): String length 2 &lt; minLength 3
+  URIRef(&quot;http://example.org/user3&quot;) (URIRef(&quot;http://example.org/username&quot;)): Value &quot;123invalid&quot; does not match pattern &quot;^[a-zA-Z][a-zA-Z0-9_]*$&quot;</code></pre><h2 id="Use-Case:-Validating-a-Data-Pipeline"><a class="docs-heading-anchor" href="#Use-Case:-Validating-a-Data-Pipeline">Use Case: Validating a Data Pipeline</a><a id="Use-Case:-Validating-a-Data-Pipeline-1"></a><a class="docs-heading-anchor-permalink" href="#Use-Case:-Validating-a-Data-Pipeline" title="Permalink"></a></h2><p>A common pattern is to validate incoming data before processing:</p><pre><code class="language-julia hljs"># Define the expected schema
+pipeline_shapes = parse_rdf(&quot;&quot;&quot;
+    @prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:SensorReadingShape a sh:NodeShape ;
+        sh:targetClass ex:SensorReading ;
+        sh:property [
+            sh:path ex:timestamp ;
+            sh:datatype xsd:dateTime ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+        ] ;
+        sh:property [
+            sh:path ex:sensorId ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+        ] ;
+        sh:property [
+            sh:path ex:value ;
+            sh:datatype xsd:decimal ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+# Simulate incoming data
+incoming = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    ex:r1 a ex:SensorReading ;
+        ex:timestamp &quot;2025-01-15T10:30:00&quot;^^xsd:dateTime ;
+        ex:sensorId ex:sensor42 ;
+        ex:value &quot;22.5&quot;^^xsd:decimal .
+
+    ex:r2 a ex:SensorReading ;
+        ex:sensorId ex:sensor43 ;
+        ex:value &quot;18.0&quot;^^xsd:decimal .
+&quot;&quot;&quot;, TurtleFormat())
+
+report = validate(incoming, pipeline_shapes)
+if report.conforms
+    println(&quot;✅ All data valid — proceeding with pipeline&quot;)
+else
+    println(&quot;❌ Validation failed — $(length(report.results)) issue(s):&quot;)
+    for r in report.results
+        println(&quot;  $(r.focus_node): $(r.message)&quot;)
+    end
+end</code></pre><pre><code class="nohighlight hljs">❌ Validation failed — 1 issue(s):
+  URIRef(&quot;http://example.org/r2&quot;): Expected at least 1 values for http://example.org/timestamp, got 0</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../problog/">« ProbLog</a><a class="docs-footer-nextpage" href="../../cases/ecology/">Ecology »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

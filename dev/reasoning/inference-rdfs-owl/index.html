@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>RDFS/OWL Inference · RDFLib.jl</title><meta name="title" content="RDFS/OWL Inference · RDFLib.jl"/><meta property="og:title" content="RDFS/OWL Inference · RDFLib.jl"/><meta property="twitter:title" content="RDFS/OWL Inference · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/inference-rdfs-owl/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/inference-rdfs-owl/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/inference-rdfs-owl/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li class="is-active"><a class="tocitem" href>RDFS/OWL Inference</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#RDFS-Inference"><span>RDFS Inference</span></a></li><li><a class="tocitem" href="#OWL-Inference"><span>OWL Inference</span></a></li><li><a class="tocitem" href="#Entailment-Checking"><span>Entailment Checking</span></a></li><li><a class="tocitem" href="#Building-OWL-Ontologies-with-InfixOWL"><span>Building OWL Ontologies with InfixOWL</span></a></li></ul></li><li><a class="tocitem" href="../n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../datalog/">Datalog</a></li><li><a class="tocitem" href="../problog/">ProbLog</a></li><li><a class="tocitem" href="../shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Reasoning &amp; Inference</a></li><li class="is-active"><a href>RDFS/OWL Inference</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>RDFS/OWL Inference</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/reasoning/inference-rdfs-owl.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="RDFS-and-OWL-Inference"><a class="docs-heading-anchor" href="#RDFS-and-OWL-Inference">RDFS and OWL Inference</a><a id="RDFS-and-OWL-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#RDFS-and-OWL-Inference" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>RDFLib.jl supports forward-chaining inference using RDFS (RDF Schema) and OWL (Web Ontology Language) rules. This vignette demonstrates how to compute closures and check entailment.</p><pre><code class="language-julia hljs">using RDFLib
+ex = Namespace(&quot;http://example.org/&quot;)</code></pre><pre><code class="nohighlight hljs">Namespace(&quot;http://example.org/&quot;)</code></pre><h2 id="RDFS-Inference"><a class="docs-heading-anchor" href="#RDFS-Inference">RDFS Inference</a><a id="RDFS-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#RDFS-Inference" title="Permalink"></a></h2><p>RDFS defines a vocabulary for class hierarchies and property domains/ranges. The RDFS closure computes all implied triples.</p><h3 id="Subclass-Reasoning"><a class="docs-heading-anchor" href="#Subclass-Reasoning">Subclass Reasoning</a><a id="Subclass-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#Subclass-Reasoning" title="Permalink"></a></h3><pre><code class="language-julia hljs">g = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    ex:Dog rdfs:subClassOf ex:Mammal .
+    ex:Mammal rdfs:subClassOf ex:Animal .
+    ex:Animal rdfs:subClassOf ex:LivingThing .
+
+    ex:fido a ex:Dog .
+&quot;&quot;&quot;, TurtleFormat())
+
+println(&quot;Before inference: $(length(g)) triples&quot;)
+
+# Compute RDFS closure
+inferred = rdfs_closure(g)
+println(&quot;After RDFS closure: $(length(inferred)) triples&quot;)
+
+# Check: Is Fido an Animal?
+is_animal = any(t -&gt;
+    t.subject == ex(&quot;fido&quot;) &amp;&amp; t.predicate == RDF.type &amp;&amp; t.object == ex(&quot;Animal&quot;),
+    inferred)
+println(&quot;\nFido is an Animal: $is_animal&quot;)
+
+# What types does Fido have?
+println(&quot;\nFido&#39;s types:&quot;)
+for t in triples(inferred, (ex(&quot;fido&quot;), RDF.type, nothing))
+    println(&quot;  &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">Before inference: 4 triples
+After RDFS closure: 10 triples
+
+Fido is an Animal: true
+
+Fido&#39;s types:
+  URIRef(&quot;http://example.org/LivingThing&quot;)
+  URIRef(&quot;http://example.org/Animal&quot;)
+  URIRef(&quot;http://example.org/Dog&quot;)
+  URIRef(&quot;http://example.org/Mammal&quot;)</code></pre><h3 id="Domain-and-Range-Inference"><a class="docs-heading-anchor" href="#Domain-and-Range-Inference">Domain and Range Inference</a><a id="Domain-and-Range-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#Domain-and-Range-Inference" title="Permalink"></a></h3><pre><code class="language-julia hljs">g2 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    ex:hasParent rdfs:domain ex:Person .
+    ex:hasParent rdfs:range ex:Person .
+
+    ex:alice ex:hasParent ex:bob .
+&quot;&quot;&quot;, TurtleFormat())
+
+inferred = rdfs_closure(g2)
+println(&quot;Inferred types:&quot;)
+for t in triples(inferred, (nothing, RDF.type, ex(&quot;Person&quot;)))
+    println(&quot;  $(t.subject) a Person&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Inferred types:
+  URIRef(&quot;http://example.org/alice&quot;) a Person
+  URIRef(&quot;http://example.org/bob&quot;) a Person</code></pre><h3 id="SubProperty-Reasoning"><a class="docs-heading-anchor" href="#SubProperty-Reasoning">SubProperty Reasoning</a><a id="SubProperty-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#SubProperty-Reasoning" title="Permalink"></a></h3><pre><code class="language-julia hljs">g3 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    ex:hasMother rdfs:subPropertyOf ex:hasParent .
+    ex:hasParent rdfs:subPropertyOf ex:hasAncestor .
+
+    ex:alice ex:hasMother ex:carol .
+&quot;&quot;&quot;, TurtleFormat())
+
+inferred = rdfs_closure(g3)
+
+has_parent = any(t -&gt;
+    t.subject == ex(&quot;alice&quot;) &amp;&amp; t.predicate == ex(&quot;hasParent&quot;) &amp;&amp; t.object == ex(&quot;carol&quot;),
+    inferred)
+has_ancestor = any(t -&gt;
+    t.subject == ex(&quot;alice&quot;) &amp;&amp; t.predicate == ex(&quot;hasAncestor&quot;) &amp;&amp; t.object == ex(&quot;carol&quot;),
+    inferred)
+
+println(&quot;alice hasParent carol:   $has_parent&quot;)
+println(&quot;alice hasAncestor carol: $has_ancestor&quot;)</code></pre><pre><code class="nohighlight hljs">alice hasParent carol:   true
+alice hasAncestor carol: true</code></pre><h2 id="OWL-Inference"><a class="docs-heading-anchor" href="#OWL-Inference">OWL Inference</a><a id="OWL-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#OWL-Inference" title="Permalink"></a></h2><p>OWL provides richer class constructors and property axioms.</p><pre><code class="language-julia hljs">g4 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    ex:Person a owl:Class .
+    ex:Human owl:equivalentClass ex:Person .
+
+    ex:alice a ex:Human .
+&quot;&quot;&quot;, TurtleFormat())
+
+inferred = owl_closure(g4)
+is_person = any(t -&gt;
+    t.subject == ex(&quot;alice&quot;) &amp;&amp; t.predicate == RDF.type &amp;&amp; t.object == ex(&quot;Person&quot;),
+    inferred)
+println(&quot;alice is a Person (via equivalentClass): $is_person&quot;)</code></pre><pre><code class="nohighlight hljs">alice is a Person (via equivalentClass): true</code></pre><h3 id="Inverse-Properties"><a class="docs-heading-anchor" href="#Inverse-Properties">Inverse Properties</a><a id="Inverse-Properties-1"></a><a class="docs-heading-anchor-permalink" href="#Inverse-Properties" title="Permalink"></a></h3><pre><code class="language-julia hljs">g5 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+
+    ex:hasChild owl:inverseOf ex:hasParent .
+    ex:alice ex:hasChild ex:bob .
+&quot;&quot;&quot;, TurtleFormat())
+
+inferred = owl_closure(g5)
+has_parent = any(t -&gt;
+    t.subject == ex(&quot;bob&quot;) &amp;&amp; t.predicate == ex(&quot;hasParent&quot;) &amp;&amp; t.object == ex(&quot;alice&quot;),
+    inferred)
+println(&quot;bob hasParent alice (via inverseOf): $has_parent&quot;)</code></pre><pre><code class="nohighlight hljs">bob hasParent alice (via inverseOf): true</code></pre><h3 id="Symmetric-Properties"><a class="docs-heading-anchor" href="#Symmetric-Properties">Symmetric Properties</a><a id="Symmetric-Properties-1"></a><a class="docs-heading-anchor-permalink" href="#Symmetric-Properties" title="Permalink"></a></h3><pre><code class="language-julia hljs">g6 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+
+    ex:knows a owl:SymmetricProperty .
+    ex:alice ex:knows ex:bob .
+&quot;&quot;&quot;, TurtleFormat())
+
+inferred = owl_closure(g6)
+symmetric = any(t -&gt;
+    t.subject == ex(&quot;bob&quot;) &amp;&amp; t.predicate == ex(&quot;knows&quot;) &amp;&amp; t.object == ex(&quot;alice&quot;),
+    inferred)
+println(&quot;bob knows alice (via symmetry): $symmetric&quot;)</code></pre><pre><code class="nohighlight hljs">bob knows alice (via symmetry): true</code></pre><h3 id="Transitive-Properties"><a class="docs-heading-anchor" href="#Transitive-Properties">Transitive Properties</a><a id="Transitive-Properties-1"></a><a class="docs-heading-anchor-permalink" href="#Transitive-Properties" title="Permalink"></a></h3><pre><code class="language-julia hljs">g7 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+
+    ex:partOf a owl:TransitiveProperty .
+    ex:cell ex:partOf ex:tissue .
+    ex:tissue ex:partOf ex:organ .
+    ex:organ ex:partOf ex:body .
+&quot;&quot;&quot;, TurtleFormat())
+
+inferred = owl_closure(g7)
+println(&quot;Transitive partOf:&quot;)
+for t in triples(inferred, (ex(&quot;cell&quot;), ex(&quot;partOf&quot;), nothing))
+    println(&quot;  cell partOf $(t.object)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Transitive partOf:
+  cell partOf URIRef(&quot;http://example.org/organ&quot;)
+  cell partOf URIRef(&quot;http://example.org/body&quot;)
+  cell partOf URIRef(&quot;http://example.org/tissue&quot;)</code></pre><h2 id="Entailment-Checking"><a class="docs-heading-anchor" href="#Entailment-Checking">Entailment Checking</a><a id="Entailment-Checking-1"></a><a class="docs-heading-anchor-permalink" href="#Entailment-Checking" title="Permalink"></a></h2><p>Test whether one graph logically follows from another:</p><pre><code class="language-julia hljs">premise = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+    ex:Cat rdfs:subClassOf ex:Animal .
+    ex:whiskers a ex:Cat .
+&quot;&quot;&quot;, TurtleFormat())
+
+# Apply RDFS closure first, then check entailment for a specific triple
+closed = rdfs_closure(premise)
+conclusion_triple = Triple(URIRef(&quot;http://example.org/whiskers&quot;), RDF.type, URIRef(&quot;http://example.org/Animal&quot;))
+println(&quot;Premise entails conclusion: &quot;, entails(closed, conclusion_triple))</code></pre><pre><code class="nohighlight hljs">Premise entails conclusion: true</code></pre><h2 id="Building-OWL-Ontologies-with-InfixOWL"><a class="docs-heading-anchor" href="#Building-OWL-Ontologies-with-InfixOWL">Building OWL Ontologies with InfixOWL</a><a id="Building-OWL-Ontologies-with-InfixOWL-1"></a><a class="docs-heading-anchor-permalink" href="#Building-OWL-Ontologies-with-InfixOWL" title="Permalink"></a></h2><p>RDFLib.jl provides a DSL for building OWL class definitions:</p><pre><code class="language-julia hljs">g8 = RDFGraph()
+bind!(g8, &quot;ex&quot;, ex)
+bind!(g8, &quot;owl&quot;, Namespace(&quot;http://www.w3.org/2002/07/owl#&quot;))
+
+# Declare an ontology
+owl_ontology!(g8, ex(&quot;myOntology&quot;); label=&quot;Example Ontology&quot;)
+
+# Define classes
+animal = OWLClass(ex(&quot;Animal&quot;), g8)
+mammal = OWLClass(ex(&quot;Mammal&quot;), g8)
+dog = OWLClass(ex(&quot;Dog&quot;), g8)
+
+# Class hierarchy
+subclass_of!(mammal, animal)
+subclass_of!(dog, mammal)
+
+# Properties
+has_name = OWLDatatypeProperty(ex(&quot;hasName&quot;), g8)
+has_owner = OWLObjectProperty(ex(&quot;hasOwner&quot;), g8)
+
+println(&quot;OWL ontology ($(length(g8)) triples):&quot;)
+println(serialize(g8, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">OWL ontology (9 triples):
+@prefix ex: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ex:Animal a owl:Class .
+
+ex:Dog a owl:Class ;
+    rdfs:subClassOf ex:Mammal .
+
+ex:Mammal a owl:Class ;
+    rdfs:subClassOf ex:Animal .
+
+ex:hasName a owl:DatatypeProperty .
+
+ex:hasOwner a owl:ObjectProperty .
+
+ex:myOntology a owl:Ontology ;
+    rdfs:label &quot;Example Ontology&quot; .</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../guide/geosparql/">« GeoSPARQL</a><a class="docs-footer-nextpage" href="../n3-reasoning/">N3 Reasoning »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

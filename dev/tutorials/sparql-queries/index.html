@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>SPARQL Queries · RDFLib.jl</title><meta name="title" content="SPARQL Queries · RDFLib.jl"/><meta property="og:title" content="SPARQL Queries · RDFLib.jl"/><meta property="twitter:title" content="SPARQL Queries · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/sparql-queries/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/sparql-queries/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/sparql-queries/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting-started/">Getting Started</a></li><li><a class="tocitem" href="../rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../namespaces/">Namespaces</a></li><li><a class="tocitem" href="../serialization/">Serialization</a></li><li class="is-active"><a class="tocitem" href>SPARQL Queries</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#SELECT-Queries"><span>SELECT Queries</span></a></li><li><a class="tocitem" href="#Filtering"><span>Filtering</span></a></li><li><a class="tocitem" href="#OPTIONAL-and-BOUND"><span>OPTIONAL and BOUND</span></a></li><li><a class="tocitem" href="#Aggregation"><span>Aggregation</span></a></li><li><a class="tocitem" href="#ASK-Queries"><span>ASK Queries</span></a></li><li><a class="tocitem" href="#CONSTRUCT-Queries"><span>CONSTRUCT Queries</span></a></li><li><a class="tocitem" href="#DESCRIBE"><span>DESCRIBE</span></a></li><li><a class="tocitem" href="#SPARQL-UPDATE"><span>SPARQL UPDATE</span></a></li><li><a class="tocitem" href="#String-Functions"><span>String Functions</span></a></li><li><a class="tocitem" href="#UNION"><span>UNION</span></a></li><li><a class="tocitem" href="#VALUES-(Inline-Data)"><span>VALUES (Inline Data)</span></a></li><li><a class="tocitem" href="#SPARQL-Results-Serialization"><span>SPARQL Results Serialization</span></a></li></ul></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>SPARQL Queries</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>SPARQL Queries</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/tutorials/sparql-queries.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SPARQL-Queries-and-Updates"><a class="docs-heading-anchor" href="#SPARQL-Queries-and-Updates">SPARQL Queries and Updates</a><a id="SPARQL-Queries-and-Updates-1"></a><a class="docs-heading-anchor-permalink" href="#SPARQL-Queries-and-Updates" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>SPARQL is the standard query language for RDF data. RDFLib.jl includes a built-in SPARQL engine supporting SELECT, CONSTRUCT, ASK, DESCRIBE, and UPDATE operations.</p><pre><code class="language-julia hljs">using RDFLib
+
+# Build a small knowledge graph about scientists
+g = RDFGraph()
+ex = Namespace(&quot;http://example.org/&quot;)
+bind!(g, &quot;ex&quot;, ex)
+bind!(g, &quot;foaf&quot;, Namespace(&quot;http://xmlns.com/foaf/0.1/&quot;))
+
+scientists = [
+    (&quot;einstein&quot;, &quot;Albert Einstein&quot;, 1879, &quot;physics&quot;, &quot;relativity&quot;),
+    (&quot;curie&quot;, &quot;Marie Curie&quot;, 1867, &quot;chemistry&quot;, &quot;radioactivity&quot;),
+    (&quot;darwin&quot;, &quot;Charles Darwin&quot;, 1809, &quot;biology&quot;, &quot;evolution&quot;),
+    (&quot;newton&quot;, &quot;Isaac Newton&quot;, 1643, &quot;physics&quot;, &quot;gravity&quot;),
+    (&quot;turing&quot;, &quot;Alan Turing&quot;, 1912, &quot;computer_science&quot;, &quot;computation&quot;),
+    (&quot;lovelace&quot;, &quot;Ada Lovelace&quot;, 1815, &quot;computer_science&quot;, &quot;programming&quot;),
+]
+
+for (id, name, born, field, topic) in scientists
+    s = ex(id)
+    add!(g, Triple(s, RDF.type, FOAF(&quot;Person&quot;)))
+    add!(g, Triple(s, FOAF(&quot;name&quot;), Literal(name)))
+    add!(g, Triple(s, ex(&quot;birthYear&quot;), Literal(born)))
+    add!(g, Triple(s, ex(&quot;field&quot;), ex(field)))
+    add!(g, Triple(s, ex(&quot;knownFor&quot;), ex(topic)))
+end
+
+# Add some relationships
+add!(g, Triple(ex(&quot;curie&quot;), FOAF(&quot;knows&quot;), ex(&quot;einstein&quot;)))
+add!(g, Triple(ex(&quot;newton&quot;), ex(&quot;influenced&quot;), ex(&quot;einstein&quot;)))
+add!(g, Triple(ex(&quot;lovelace&quot;), ex(&quot;influenced&quot;), ex(&quot;turing&quot;)))
+
+println(&quot;Graph has $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Graph has 33 triples</code></pre><h2 id="SELECT-Queries"><a class="docs-heading-anchor" href="#SELECT-Queries">SELECT Queries</a><a id="SELECT-Queries-1"></a><a class="docs-heading-anchor-permalink" href="#SELECT-Queries" title="Permalink"></a></h2><p>Retrieve tabular results:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    SELECT ?name ?field WHERE {
+        ?person a foaf:Person .
+        ?person foaf:name ?name .
+        ?person ex:field ?field .
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+
+for row in results
+    println(&quot;$(row[&quot;name&quot;]) — $(row[&quot;field&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Literal(&quot;Ada Lovelace&quot;) — URIRef(&quot;http://example.org/computer_science&quot;)
+Literal(&quot;Alan Turing&quot;) — URIRef(&quot;http://example.org/computer_science&quot;)
+Literal(&quot;Albert Einstein&quot;) — URIRef(&quot;http://example.org/physics&quot;)
+Literal(&quot;Charles Darwin&quot;) — URIRef(&quot;http://example.org/biology&quot;)
+Literal(&quot;Isaac Newton&quot;) — URIRef(&quot;http://example.org/physics&quot;)
+Literal(&quot;Marie Curie&quot;) — URIRef(&quot;http://example.org/chemistry&quot;)</code></pre><h2 id="Filtering"><a class="docs-heading-anchor" href="#Filtering">Filtering</a><a id="Filtering-1"></a><a class="docs-heading-anchor-permalink" href="#Filtering" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Scientists born before 1850
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    SELECT ?name ?year WHERE {
+        ?person foaf:name ?name .
+        ?person ex:birthYear ?year .
+        FILTER (?year &lt; 1850)
+    }
+    ORDER BY ?year
+&quot;&quot;&quot;)
+
+println(&quot;Scientists born before 1850:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;name&quot;]) ($(row[&quot;year&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Scientists born before 1850:
+  Literal(&quot;Isaac Newton&quot;) (Literal(&quot;1643&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))
+  Literal(&quot;Charles Darwin&quot;) (Literal(&quot;1809&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))
+  Literal(&quot;Ada Lovelace&quot;) (Literal(&quot;1815&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;)))</code></pre><h2 id="OPTIONAL-and-BOUND"><a class="docs-heading-anchor" href="#OPTIONAL-and-BOUND">OPTIONAL and BOUND</a><a id="OPTIONAL-and-BOUND-1"></a><a class="docs-heading-anchor-permalink" href="#OPTIONAL-and-BOUND" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Find scientists and their influences (if any)
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    SELECT ?name ?influenced WHERE {
+        ?person foaf:name ?name .
+        OPTIONAL {
+            ?person ex:influenced ?other .
+            ?other foaf:name ?influenced .
+        }
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+
+for row in results
+    infl = get(row, &quot;influenced&quot;, nothing)
+    if infl !== nothing
+        println(&quot;$(row[&quot;name&quot;]) influenced $(infl)&quot;)
+    else
+        println(&quot;$(row[&quot;name&quot;])&quot;)
+    end
+end</code></pre><pre><code class="nohighlight hljs">Literal(&quot;Ada Lovelace&quot;) influenced Literal(&quot;Alan Turing&quot;)
+Alan Turing
+Albert Einstein
+Charles Darwin
+Literal(&quot;Isaac Newton&quot;) influenced Literal(&quot;Albert Einstein&quot;)
+Marie Curie</code></pre><h2 id="Aggregation"><a class="docs-heading-anchor" href="#Aggregation">Aggregation</a><a id="Aggregation-1"></a><a class="docs-heading-anchor-permalink" href="#Aggregation" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Count scientists per field
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    SELECT ?field (COUNT(?person) AS ?count) WHERE {
+        ?person ex:field ?field .
+    }
+    GROUP BY ?field
+    ORDER BY DESC(?count)
+&quot;&quot;&quot;)
+
+println(&quot;Scientists per field:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;field&quot;]): $(row[&quot;count&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Scientists per field:
+  URIRef(&quot;http://example.org/computer_science&quot;): Literal(&quot;2&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+  URIRef(&quot;http://example.org/physics&quot;): Literal(&quot;2&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+  URIRef(&quot;http://example.org/chemistry&quot;): Literal(&quot;1&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+  URIRef(&quot;http://example.org/biology&quot;): Literal(&quot;1&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))</code></pre><h2 id="ASK-Queries"><a class="docs-heading-anchor" href="#ASK-Queries">ASK Queries</a><a id="ASK-Queries-1"></a><a class="docs-heading-anchor-permalink" href="#ASK-Queries" title="Permalink"></a></h2><p>Test whether a pattern exists:</p><pre><code class="language-julia hljs"># Is there a physicist in the graph?
+result = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    ASK { ?person ex:field ex:physics }
+&quot;&quot;&quot;)
+println(&quot;Is there a physicist? &quot;, result)</code></pre><pre><code class="nohighlight hljs">Is there a physicist? true</code></pre><h2 id="CONSTRUCT-Queries"><a class="docs-heading-anchor" href="#CONSTRUCT-Queries">CONSTRUCT Queries</a><a id="CONSTRUCT-Queries-1"></a><a class="docs-heading-anchor-permalink" href="#CONSTRUCT-Queries" title="Permalink"></a></h2><p>Build a new graph from query results:</p><pre><code class="language-julia hljs"># Extract a subgraph of physicists
+physicists = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    CONSTRUCT {
+        ?person a foaf:Person .
+        ?person foaf:name ?name .
+        ?person ex:knownFor ?topic .
+    } WHERE {
+        ?person ex:field ex:physics .
+        ?person foaf:name ?name .
+        ?person ex:knownFor ?topic .
+    }
+&quot;&quot;&quot;)
+
+println(&quot;Physicist subgraph ($(length(physicists)) triples):&quot;)
+println(serialize(physicists, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">Physicist subgraph (6 triples):
+@prefix ns1: &lt;http://example.org/&gt; .
+@prefix ns2: &lt;http://xmlns.com/foaf/0.1/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ns1:einstein a ns2:Person ;
+    ns1:knownFor ns1:relativity ;
+    ns2:name &quot;Albert Einstein&quot; .
+
+ns1:newton a ns2:Person ;
+    ns1:knownFor ns1:gravity ;
+    ns2:name &quot;Isaac Newton&quot; .</code></pre><h2 id="DESCRIBE"><a class="docs-heading-anchor" href="#DESCRIBE">DESCRIBE</a><a id="DESCRIBE-1"></a><a class="docs-heading-anchor-permalink" href="#DESCRIBE" title="Permalink"></a></h2><p>Get a description of a resource:</p><pre><code class="language-julia hljs">description = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    DESCRIBE ex:einstein
+&quot;&quot;&quot;)
+
+println(&quot;Description of Einstein ($(length(description)) triples):&quot;)
+for t in description
+    println(&quot;  &quot;, t.predicate, &quot; → &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">Description of Einstein (5 triples):
+  URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;) → URIRef(&quot;http://xmlns.com/foaf/0.1/Person&quot;)
+  URIRef(&quot;http://xmlns.com/foaf/0.1/name&quot;) → Literal(&quot;Albert Einstein&quot;)
+  URIRef(&quot;http://example.org/birthYear&quot;) → Literal(&quot;1879&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+  URIRef(&quot;http://example.org/field&quot;) → URIRef(&quot;http://example.org/physics&quot;)
+  URIRef(&quot;http://example.org/knownFor&quot;) → URIRef(&quot;http://example.org/relativity&quot;)</code></pre><h2 id="SPARQL-UPDATE"><a class="docs-heading-anchor" href="#SPARQL-UPDATE">SPARQL UPDATE</a><a id="SPARQL-UPDATE-1"></a><a class="docs-heading-anchor-permalink" href="#SPARQL-UPDATE" title="Permalink"></a></h2><p>Modify the graph with INSERT and DELETE:</p><pre><code class="language-julia hljs"># Add a new fact
+sparql_update(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    INSERT DATA {
+        ex:einstein ex:nationality &quot;German&quot; .
+        ex:curie ex:nationality &quot;Polish&quot; .
+    }
+&quot;&quot;&quot;)
+
+# Verify
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?name ?nationality WHERE {
+        ?person foaf:name ?name .
+        ?person ex:nationality ?nationality .
+    }
+&quot;&quot;&quot;)
+for row in results
+    println(&quot;$(row[&quot;name&quot;]): $(row[&quot;nationality&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Literal(&quot;Marie Curie&quot;): Literal(&quot;Polish&quot;)
+Literal(&quot;Albert Einstein&quot;): Literal(&quot;German&quot;)</code></pre><pre><code class="language-julia hljs"># DELETE/INSERT (modify existing data)
+sparql_update(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    DELETE { ex:einstein ex:nationality &quot;German&quot; }
+    INSERT { ex:einstein ex:nationality &quot;German-American&quot; }
+    WHERE { ex:einstein ex:nationality &quot;German&quot; }
+&quot;&quot;&quot;)
+
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX ex: &lt;http://example.org/&gt;
+    SELECT ?nat WHERE { ex:einstein ex:nationality ?nat }
+&quot;&quot;&quot;)
+println(&quot;Updated nationality: &quot;, results[1][&quot;nat&quot;])</code></pre><pre><code class="nohighlight hljs">Updated nationality: Literal(&quot;German-American&quot;)</code></pre><h2 id="String-Functions"><a class="docs-heading-anchor" href="#String-Functions">String Functions</a><a id="String-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#String-Functions" title="Permalink"></a></h2><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+
+    SELECT ?name WHERE {
+        ?person foaf:name ?name .
+        FILTER (CONTAINS(?name, &quot;a&quot;) || CONTAINS(?name, &quot;A&quot;))
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+
+println(&quot;Names containing &#39;a&#39;:&quot;)
+for row in results
+    println(&quot;  &quot;, row[&quot;name&quot;])
+end</code></pre><pre><code class="nohighlight hljs">Names containing &#39;a&#39;:
+  Literal(&quot;Ada Lovelace&quot;)
+  Literal(&quot;Alan Turing&quot;)
+  Literal(&quot;Albert Einstein&quot;)
+  Literal(&quot;Charles Darwin&quot;)
+  Literal(&quot;Isaac Newton&quot;)
+  Literal(&quot;Marie Curie&quot;)</code></pre><h2 id="UNION"><a class="docs-heading-anchor" href="#UNION">UNION</a><a id="UNION-1"></a><a class="docs-heading-anchor-permalink" href="#UNION" title="Permalink"></a></h2><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    SELECT ?name ?relation WHERE {
+        {
+            ?person ex:influenced ?other .
+            ?person foaf:name ?name .
+            BIND(&quot;influenced someone&quot; AS ?relation)
+        }
+        UNION
+        {
+            ?person foaf:knows ?other .
+            ?person foaf:name ?name .
+            BIND(&quot;knows someone&quot; AS ?relation)
+        }
+    }
+&quot;&quot;&quot;)
+
+for row in results
+    println(&quot;$(row[&quot;name&quot;]) $(row[&quot;relation&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Literal(&quot;Ada Lovelace&quot;) Literal(&quot;influenced someone&quot;)
+Literal(&quot;Isaac Newton&quot;) Literal(&quot;influenced someone&quot;)
+Literal(&quot;Marie Curie&quot;) Literal(&quot;knows someone&quot;)</code></pre><h2 id="VALUES-(Inline-Data)"><a class="docs-heading-anchor" href="#VALUES-(Inline-Data)">VALUES (Inline Data)</a><a id="VALUES-(Inline-Data)-1"></a><a class="docs-heading-anchor-permalink" href="#VALUES-(Inline-Data)" title="Permalink"></a></h2><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    PREFIX ex: &lt;http://example.org/&gt;
+
+    SELECT ?name ?field WHERE {
+        VALUES ?field { ex:physics ex:computer_science }
+        ?person ex:field ?field .
+        ?person foaf:name ?name .
+    }
+&quot;&quot;&quot;)
+
+println(&quot;Physicists and Computer Scientists:&quot;)
+for row in results
+    println(&quot;  $(row[&quot;name&quot;])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Physicists and Computer Scientists:
+  Literal(&quot;Isaac Newton&quot;)
+  Literal(&quot;Albert Einstein&quot;)
+  Literal(&quot;Ada Lovelace&quot;)
+  Literal(&quot;Alan Turing&quot;)</code></pre><h2 id="SPARQL-Results-Serialization"><a class="docs-heading-anchor" href="#SPARQL-Results-Serialization">SPARQL Results Serialization</a><a id="SPARQL-Results-Serialization-1"></a><a class="docs-heading-anchor-permalink" href="#SPARQL-Results-Serialization" title="Permalink"></a></h2><p>Query results can be serialized to standard formats:</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX foaf: &lt;http://xmlns.com/foaf/0.1/&gt;
+    SELECT ?name WHERE { ?p foaf:name ?name } ORDER BY ?name LIMIT 3
+&quot;&quot;&quot;)
+
+# JSON format
+json_results = sparql_results_json(results)
+println(&quot;JSON Results:&quot;)
+println(json_results)</code></pre><pre><code class="nohighlight hljs">JSON Results:
+{&quot;head&quot;:{&quot;vars&quot;:[&quot;name&quot;]},&quot;results&quot;:{&quot;bindings&quot;:[{&quot;name&quot;:{&quot;type&quot;:&quot;literal&quot;,&quot;value&quot;:&quot;Ada Lovelace&quot;}},{&quot;name&quot;:{&quot;type&quot;:&quot;literal&quot;,&quot;value&quot;:&quot;Alan Turing&quot;}},{&quot;name&quot;:{&quot;type&quot;:&quot;literal&quot;,&quot;value&quot;:&quot;Albert Einstein&quot;}}]}}</code></pre><pre><code class="language-julia hljs"># CSV format
+csv_results = sparql_results_csv(results)
+println(&quot;CSV Results:&quot;)
+println(csv_results)</code></pre><pre><code class="nohighlight hljs">CSV Results:
+name
+Ada Lovelace
+Alan Turing
+Albert Einstein</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../serialization/">« Serialization</a><a class="docs-footer-nextpage" href="../../guide/collections-containers/">Collections &amp; Containers »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

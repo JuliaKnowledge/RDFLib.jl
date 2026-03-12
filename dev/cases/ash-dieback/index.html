@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Ash Dieback · RDFLib.jl</title><meta name="title" content="Ash Dieback · RDFLib.jl"/><meta property="og:title" content="Ash Dieback · RDFLib.jl"/><meta property="twitter:title" content="Ash Dieback · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/ash-dieback/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/ash-dieback/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/ash-dieback/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../ecology/">Ecology</a></li><li class="is-active"><a class="tocitem" href>Ash Dieback</a><ul class="internal"><li><a class="tocitem" href="#Introduction"><span>Introduction</span></a></li><li><a class="tocitem" href="#1.-Disease-Ontology"><span>1. Disease Ontology</span></a></li><li><a class="tocitem" href="#2.-The-Pathogen-and-Its-Hosts"><span>2. The Pathogen and Its Hosts</span></a></li><li><a class="tocitem" href="#3.-Species-Dependent-on-Ash"><span>3. Species Dependent on Ash</span></a></li><li><a class="tocitem" href="#4.-Woodland-Survey-Sites"><span>4. Woodland Survey Sites</span></a></li><li><a class="tocitem" href="#5.-Importing-Surveillance-Data-from-Tabular-Sources"><span>5. Importing Surveillance Data from Tabular Sources</span></a></li><li><a class="tocitem" href="#6.-Validating-Survey-Data-with-SHACL"><span>6. Validating Survey Data with SHACL</span></a></li><li><a class="tocitem" href="#7.-Querying-the-Knowledge-Graph"><span>7. Querying the Knowledge Graph</span></a></li><li><a class="tocitem" href="#8.-Tracing-Impact-Pathways-with-Property-Paths"><span>8. Tracing Impact Pathways with Property Paths</span></a></li><li><a class="tocitem" href="#9.-Inferring-Risk-with-Datalog-Reasoning"><span>9. Inferring Risk with Datalog Reasoning</span></a></li><li><a class="tocitem" href="#10.-Probabilistic-Outcomes-with-ProbLog"><span>10. Probabilistic Outcomes with ProbLog</span></a></li><li><a class="tocitem" href="#11.-Visualization"><span>11. Visualization</span></a></li><li><a class="tocitem" href="#Summary"><span>Summary</span></a></li></ul></li><li><a class="tocitem" href="../bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Case Studies</a></li><li class="is-active"><a href>Ash Dieback</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Ash Dieback</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/cases/ash-dieback.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Ash-Dieback-in-the-UK"><a class="docs-heading-anchor" href="#Ash-Dieback-in-the-UK">Ash Dieback in the UK</a><a id="Ash-Dieback-in-the-UK-1"></a><a class="docs-heading-anchor-permalink" href="#Ash-Dieback-in-the-UK" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Introduction"><a class="docs-heading-anchor" href="#Introduction">Introduction</a><a id="Introduction-1"></a><a class="docs-heading-anchor-permalink" href="#Introduction" title="Permalink"></a></h2><p>Ash dieback, caused by the fungus <em>Hymenoscyphus fraxineus</em>, is the most serious tree disease to affect the UK in a generation. First confirmed in the UK in 2012, it is expected to kill up to 80% of the country’s 80 million ash trees (<em>Fraxinus excelsior</em>), with cascading consequences for the ~955 species that depend on ash.</p><p>This vignette builds a <strong>knowledge graph for ash dieback</strong> that integrates pathology, ecology, and surveillance data, then analyses it using the full breadth of RDFLib.jl: ontology design, tabular data import, SHACL validation, SPARQL queries, property paths, Datalog reasoning, ProbLog probabilistic inference, and visualization.</p><pre><code class="language-julia hljs">using RDFLib</code></pre><h2 id="1.-Disease-Ontology"><a class="docs-heading-anchor" href="#1.-Disease-Ontology">1. Disease Ontology</a><a id="1.-Disease-Ontology-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Disease-Ontology" title="Permalink"></a></h2><p>We define an ontology covering tree species, pathogens, associated organisms, symptoms, woodland sites, and surveillance observations.</p><pre><code class="language-julia hljs">g = RDFGraph()
+
+# Namespaces
+adb = Namespace(&quot;http://example.org/ashdieback#&quot;)
+tax = Namespace(&quot;http://example.org/taxon/&quot;)
+site = Namespace(&quot;http://example.org/site/&quot;)
+
+bind!(g, &quot;adb&quot;, adb)
+bind!(g, &quot;tax&quot;, tax)
+bind!(g, &quot;site&quot;, site)
+
+# Classes
+for cls in [&quot;TreeSpecies&quot;, &quot;Pathogen&quot;, &quot;AssociatedSpecies&quot;,
+            &quot;Symptom&quot;, &quot;WoodlandSite&quot;, &quot;SurveyObservation&quot;,
+            &quot;DiseaseStage&quot;, &quot;ConservationStatus&quot;]
+    add!(g, Triple(adb(cls), RDF.type, OWL.Class))
+end
+
+# Object properties
+for (prop, dom, rng) in [
+    (&quot;causes&quot;,              &quot;Pathogen&quot;,          &quot;Symptom&quot;),
+    (&quot;affects&quot;,             &quot;Pathogen&quot;,          &quot;TreeSpecies&quot;),
+    (&quot;depends_on&quot;,          &quot;AssociatedSpecies&quot;, &quot;TreeSpecies&quot;),
+    (&quot;has_symptom&quot;,         &quot;SurveyObservation&quot;, &quot;Symptom&quot;),
+    (&quot;observed_at&quot;,         &quot;SurveyObservation&quot;, &quot;WoodlandSite&quot;),
+    (&quot;has_disease_stage&quot;,   &quot;SurveyObservation&quot;, &quot;DiseaseStage&quot;),
+    (&quot;secondary_pathogen&quot;,  &quot;Pathogen&quot;,          &quot;TreeSpecies&quot;),
+    (&quot;replacement_for&quot;,     &quot;TreeSpecies&quot;,       &quot;TreeSpecies&quot;),
+    (&quot;competes_with&quot;,       &quot;Pathogen&quot;,          &quot;Pathogen&quot;),
+    (&quot;has_status&quot;,          &quot;AssociatedSpecies&quot;, &quot;ConservationStatus&quot;),
+]
+    p = adb(prop)
+    add!(g, Triple(p, RDF.type, OWL.ObjectProperty))
+    add!(g, Triple(p, RDFS.domain, adb(dom)))
+    add!(g, Triple(p, RDFS.range, adb(rng)))
+end
+
+# Datatype properties
+for prop in [&quot;common_name&quot;, &quot;latin_name&quot;, &quot;host_specificity&quot;,
+             &quot;infection_pct&quot;, &quot;tree_count&quot;, &quot;crown_loss_pct&quot;,
+             &quot;survey_date&quot;, &quot;surveyor&quot;, &quot;grid_ref&quot;, &quot;region&quot;,
+             &quot;spore_load&quot;, &quot;latitude&quot;, &quot;longitude&quot;]
+    add!(g, Triple(adb(prop), RDF.type, OWL.DatatypeProperty))
+end
+
+println(&quot;Ontology: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Ontology: 51 triples</code></pre><h2 id="2.-The-Pathogen-and-Its-Hosts"><a class="docs-heading-anchor" href="#2.-The-Pathogen-and-Its-Hosts">2. The Pathogen and Its Hosts</a><a id="2.-The-Pathogen-and-Its-Hosts-1"></a><a class="docs-heading-anchor-permalink" href="#2.-The-Pathogen-and-Its-Hosts" title="Permalink"></a></h2><pre><code class="language-julia hljs"># The pathogen
+hf = tax(&quot;hymenoscyphus_fraxineus&quot;)
+add!(g, Triple(hf, RDF.type, adb(&quot;Pathogen&quot;)))
+add!(g, Triple(hf, adb(&quot;common_name&quot;), Literal(&quot;Ash dieback fungus&quot;)))
+add!(g, Triple(hf, adb(&quot;latin_name&quot;), Literal(&quot;Hymenoscyphus fraxineus&quot;)))
+
+# Secondary pathogen that accelerates decline
+armillaria = tax(&quot;armillaria_mellea&quot;)
+add!(g, Triple(armillaria, RDF.type, adb(&quot;Pathogen&quot;)))
+add!(g, Triple(armillaria, adb(&quot;common_name&quot;), Literal(&quot;Honey fungus&quot;)))
+add!(g, Triple(armillaria, adb(&quot;latin_name&quot;), Literal(&quot;Armillaria mellea&quot;)))
+add!(g, Triple(armillaria, adb(&quot;secondary_pathogen&quot;), tax(&quot;fraxinus_excelsior&quot;)))
+
+# Host tree species
+trees = [
+    (&quot;fraxinus_excelsior&quot;,  &quot;Common Ash&quot;,       &quot;Fraxinus excelsior&quot;,  &quot;primary&quot;),
+    (&quot;fraxinus_angustifolia&quot;,&quot;Narrow-leaved Ash&quot;,&quot;Fraxinus angustifolia&quot;,&quot;primary&quot;),
+    (&quot;fraxinus_ornus&quot;,      &quot;Manna Ash&quot;,        &quot;Fraxinus ornus&quot;,      &quot;resistant&quot;),
+]
+for (id, common, latin, susceptibility) in trees
+    t = tax(id)
+    add!(g, Triple(t, RDF.type, adb(&quot;TreeSpecies&quot;)))
+    add!(g, Triple(t, adb(&quot;common_name&quot;), Literal(common)))
+    add!(g, Triple(t, adb(&quot;latin_name&quot;), Literal(latin)))
+    add!(g, Triple(t, adb(&quot;host_specificity&quot;), Literal(susceptibility)))
+    add!(g, Triple(hf, adb(&quot;affects&quot;), t))
+end
+
+# Potential replacement species for ash
+replacements = [
+    (&quot;quercus_robur&quot;,       &quot;Pedunculate Oak&quot;,  &quot;Quercus robur&quot;),
+    (&quot;acer_campestre&quot;,      &quot;Field Maple&quot;,      &quot;Acer campestre&quot;),
+    (&quot;tilia_cordata&quot;,       &quot;Small-leaved Lime&quot;,&quot;Tilia cordata&quot;),
+    (&quot;sorbus_aucuparia&quot;,    &quot;Rowan&quot;,            &quot;Sorbus aucuparia&quot;),
+    (&quot;alnus_glutinosa&quot;,     &quot;Common Alder&quot;,     &quot;Alnus glutinosa&quot;),
+]
+for (id, common, latin) in replacements
+    t = tax(id)
+    add!(g, Triple(t, RDF.type, adb(&quot;TreeSpecies&quot;)))
+    add!(g, Triple(t, adb(&quot;common_name&quot;), Literal(common)))
+    add!(g, Triple(t, adb(&quot;latin_name&quot;), Literal(latin)))
+    add!(g, Triple(t, adb(&quot;replacement_for&quot;), tax(&quot;fraxinus_excelsior&quot;)))
+end
+
+# Disease stages
+for (stage, desc) in [
+    (&quot;healthy&quot;,    &quot;No visible symptoms&quot;),
+    (&quot;early&quot;,      &quot;Leaf wilting, small lesions on shoots&quot;),
+    (&quot;moderate&quot;,   &quot;Crown dieback 20-50%, diamond-shaped bark lesions&quot;),
+    (&quot;severe&quot;,     &quot;Crown dieback &gt;50%, extensive bark damage&quot;),
+    (&quot;dead&quot;,       &quot;Complete crown loss, tree dead or structurally unsafe&quot;),
+]
+    s = adb(stage)
+    add!(g, Triple(s, RDF.type, adb(&quot;DiseaseStage&quot;)))
+    add!(g, Triple(s, RDFS.label, Literal(stage)))
+    add!(g, Triple(s, RDFS.comment, Literal(desc)))
+end
+
+# Symptoms caused by the pathogen
+symptoms = [
+    &quot;leaf_wilting&quot;, &quot;shoot_dieback&quot;, &quot;crown_dieback&quot;,
+    &quot;diamond_bark_lesion&quot;, &quot;epicormic_growth&quot;, &quot;basal_lesion&quot;,
+]
+for sym in symptoms
+    s = adb(sym)
+    add!(g, Triple(s, RDF.type, adb(&quot;Symptom&quot;)))
+    add!(g, Triple(s, RDFS.label, Literal(replace(sym, &#39;_&#39; =&gt; &#39; &#39;))))
+    add!(g, Triple(hf, adb(&quot;causes&quot;), s))
+end
+
+println(&quot;Disease model: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Disease model: 126 triples</code></pre><h2 id="3.-Species-Dependent-on-Ash"><a class="docs-heading-anchor" href="#3.-Species-Dependent-on-Ash">3. Species Dependent on Ash</a><a id="3.-Species-Dependent-on-Ash-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Species-Dependent-on-Ash" title="Permalink"></a></h2><p>Of ~955 species associated with ash in the UK, 45 are obligate specialists and 62 are highly associated. We model representative species across taxonomic groups.</p><pre><code class="language-julia hljs"># Conservation status categories
+for status in [&quot;critical&quot;, &quot;endangered&quot;, &quot;vulnerable&quot;, &quot;least_concern&quot;]
+    add!(g, Triple(adb(status), RDF.type, adb(&quot;ConservationStatus&quot;)))
+    add!(g, Triple(adb(status), RDFS.label, Literal(replace(status, &#39;_&#39; =&gt; &#39; &#39;))))
+end
+
+# Associated species: (id, common_name, group, specificity, status)
+associated = [
+    (&quot;actias_isabellae&quot;,    &quot;Centre-barred Sallow&quot;,    &quot;moth&quot;,       &quot;obligate&quot;,   &quot;vulnerable&quot;),
+    (&quot;prays_fraxinella&quot;,    &quot;Ash Bud Moth&quot;,            &quot;moth&quot;,       &quot;obligate&quot;,   &quot;least_concern&quot;),
+    (&quot;agrilus_sinuatus&quot;,    &quot;Jewel Beetle&quot;,            &quot;beetle&quot;,     &quot;obligate&quot;,   &quot;endangered&quot;),
+    (&quot;pseudargyrotoza&quot;,     &quot;Triangle-marked Tortrix&quot;, &quot;moth&quot;,       &quot;obligate&quot;,   &quot;vulnerable&quot;),
+    (&quot;lobaria_pulmonaria&quot;,  &quot;Tree Lungwort&quot;,           &quot;lichen&quot;,     &quot;high&quot;,       &quot;vulnerable&quot;),
+    (&quot;lecanora_sublivescens&quot;,&quot;Ash Lichen&quot;,             &quot;lichen&quot;,     &quot;obligate&quot;,   &quot;critical&quot;),
+    (&quot;orthotrichum_lyellii&quot;,&quot;Lyell&#39;s Bristle-moss&quot;,    &quot;bryophyte&quot;,  &quot;high&quot;,       &quot;vulnerable&quot;),
+    (&quot;lesser_spotted_wp&quot;,   &quot;Lesser Spotted Woodpecker&quot;,&quot;bird&quot;,      &quot;associated&quot;, &quot;endangered&quot;),
+    (&quot;bullfinch&quot;,           &quot;Bullfinch&quot;,               &quot;bird&quot;,       &quot;associated&quot;, &quot;least_concern&quot;),
+    (&quot;nuthatch&quot;,            &quot;Nuthatch&quot;,                &quot;bird&quot;,       &quot;associated&quot;, &quot;least_concern&quot;),
+    (&quot;wood_mouse&quot;,          &quot;Wood Mouse&quot;,              &quot;mammal&quot;,     &quot;associated&quot;, &quot;least_concern&quot;),
+    (&quot;pipistrelle_bat&quot;,     &quot;Common Pipistrelle&quot;,      &quot;mammal&quot;,     &quot;associated&quot;, &quot;least_concern&quot;),
+    (&quot;wild_garlic&quot;,         &quot;Wild Garlic&quot;,             &quot;plant&quot;,      &quot;associated&quot;, &quot;least_concern&quot;),
+    (&quot;dogs_mercury&quot;,        &quot;Dog&#39;s Mercury&quot;,           &quot;plant&quot;,      &quot;high&quot;,       &quot;least_concern&quot;),
+    (&quot;daldinia_concentrica&quot;,&quot;King Alfred&#39;s Cakes&quot;,     &quot;fungus&quot;,     &quot;obligate&quot;,   &quot;least_concern&quot;),
+]
+
+for (id, name, group, specificity, status) in associated
+    s = tax(id)
+    add!(g, Triple(s, RDF.type, adb(&quot;AssociatedSpecies&quot;)))
+    add!(g, Triple(s, adb(&quot;common_name&quot;), Literal(name)))
+    add!(g, Triple(s, adb(&quot;host_specificity&quot;), Literal(specificity)))
+    add!(g, Triple(s, RDFS.comment, Literal(group)))
+    add!(g, Triple(s, adb(&quot;depends_on&quot;), tax(&quot;fraxinus_excelsior&quot;)))
+    add!(g, Triple(s, adb(&quot;has_status&quot;), adb(status)))
+end
+
+println(&quot;Associated species added: $(length(associated))&quot;)
+println(&quot;Total graph: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Associated species added: 15
+Total graph: 224 triples</code></pre><h2 id="4.-Woodland-Survey-Sites"><a class="docs-heading-anchor" href="#4.-Woodland-Survey-Sites">4. Woodland Survey Sites</a><a id="4.-Woodland-Survey-Sites-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Woodland-Survey-Sites" title="Permalink"></a></h2><pre><code class="language-julia hljs">sites = [
+    (&quot;thetford&quot;,     &quot;Thetford Forest&quot;,     &quot;East Anglia&quot;,       52.45, 0.82,  &quot;TL8384&quot;),
+    (&quot;ashdown&quot;,      &quot;Ashdown Forest&quot;,      &quot;South East&quot;,        51.07, 0.03,  &quot;TQ4432&quot;),
+    (&quot;wyre&quot;,         &quot;Wyre Forest&quot;,         &quot;West Midlands&quot;,     52.37, -2.35, &quot;SO7476&quot;),
+    (&quot;glenmore&quot;,     &quot;Glenmore Forest&quot;,     &quot;Scottish Highlands&quot;,57.16, -3.67, &quot;NH9809&quot;),
+    (&quot;coed_y_brenin&quot;,&quot;Coed y Brenin&quot;,       &quot;North Wales&quot;,       52.82, -3.87, &quot;SH7227&quot;),
+    (&quot;killarney&quot;,    &quot;Killarney Oakwoods&quot;,  &quot;South West Ireland&quot;,51.98, -9.55, &quot;V9685&quot;),
+    (&quot;epping&quot;,       &quot;Epping Forest&quot;,       &quot;Greater London&quot;,    51.66, 0.05,  &quot;TQ4198&quot;),
+    (&quot;delamere&quot;,     &quot;Delamere Forest&quot;,     &quot;North West&quot;,        53.23, -2.68, &quot;SJ5571&quot;),
+]
+
+for (id, name, region, lat, lon, gridref) in sites
+    s = site(id)
+    add!(g, Triple(s, RDF.type, adb(&quot;WoodlandSite&quot;)))
+    add!(g, Triple(s, adb(&quot;common_name&quot;), Literal(name)))
+    add!(g, Triple(s, adb(&quot;region&quot;), Literal(region)))
+    add!(g, Triple(s, adb(&quot;latitude&quot;), Literal(lat)))
+    add!(g, Triple(s, adb(&quot;longitude&quot;), Literal(lon)))
+    add!(g, Triple(s, adb(&quot;grid_ref&quot;), Literal(gridref)))
+end
+
+println(&quot;$(length(sites)) woodland sites added&quot;)</code></pre><pre><code class="nohighlight hljs">8 woodland sites added</code></pre><h2 id="5.-Importing-Surveillance-Data-from-Tabular-Sources"><a class="docs-heading-anchor" href="#5.-Importing-Surveillance-Data-from-Tabular-Sources">5. Importing Surveillance Data from Tabular Sources</a><a id="5.-Importing-Surveillance-Data-from-Tabular-Sources-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Importing-Surveillance-Data-from-Tabular-Sources" title="Permalink"></a></h2><p>Forest Research runs annual ash dieback surveillance. We import survey data using <strong>tabular mapping</strong>.</p><pre><code class="language-julia hljs">surveys = [
+    (id=1,  site_id=&quot;thetford&quot;,      stage=&quot;severe&quot;,   infection_pct=78, tree_count=150, crown_loss_pct=62, date=&quot;2023-06-15&quot;, surveyor=&quot;J.Smith&quot;),
+    (id=2,  site_id=&quot;ashdown&quot;,       stage=&quot;moderate&quot;,  infection_pct=55, tree_count=200, crown_loss_pct=38, date=&quot;2023-06-20&quot;, surveyor=&quot;A.Brown&quot;),
+    (id=3,  site_id=&quot;wyre&quot;,          stage=&quot;severe&quot;,    infection_pct=82, tree_count=180, crown_loss_pct=71, date=&quot;2023-07-01&quot;, surveyor=&quot;M.Jones&quot;),
+    (id=4,  site_id=&quot;glenmore&quot;,      stage=&quot;early&quot;,     infection_pct=15, tree_count=90,  crown_loss_pct=8,  date=&quot;2023-07-10&quot;, surveyor=&quot;S.MacLeod&quot;),
+    (id=5,  site_id=&quot;coed_y_brenin&quot;, stage=&quot;moderate&quot;,  infection_pct=45, tree_count=120, crown_loss_pct=32, date=&quot;2023-07-15&quot;, surveyor=&quot;D.Evans&quot;),
+    (id=6,  site_id=&quot;killarney&quot;,     stage=&quot;early&quot;,     infection_pct=22, tree_count=160, crown_loss_pct=12, date=&quot;2023-07-22&quot;, surveyor=&quot;P.Murphy&quot;),
+    (id=7,  site_id=&quot;epping&quot;,        stage=&quot;severe&quot;,    infection_pct=88, tree_count=95,  crown_loss_pct=75, date=&quot;2023-08-01&quot;, surveyor=&quot;L.Taylor&quot;),
+    (id=8,  site_id=&quot;delamere&quot;,      stage=&quot;moderate&quot;,  infection_pct=60, tree_count=110, crown_loss_pct=44, date=&quot;2023-08-10&quot;, surveyor=&quot;R.Wilson&quot;),
+    (id=9,  site_id=&quot;thetford&quot;,      stage=&quot;severe&quot;,    infection_pct=85, tree_count=150, crown_loss_pct=70, date=&quot;2024-06-12&quot;, surveyor=&quot;J.Smith&quot;),
+    (id=10, site_id=&quot;ashdown&quot;,       stage=&quot;severe&quot;,    infection_pct=68, tree_count=195, crown_loss_pct=52, date=&quot;2024-06-18&quot;, surveyor=&quot;A.Brown&quot;),
+    (id=11, site_id=&quot;glenmore&quot;,      stage=&quot;moderate&quot;,  infection_pct=32, tree_count=88,  crown_loss_pct=20, date=&quot;2024-07-08&quot;, surveyor=&quot;S.MacLeod&quot;),
+    (id=12, site_id=&quot;epping&quot;,        stage=&quot;dead&quot;,      infection_pct=95, tree_count=80,  crown_loss_pct=92, date=&quot;2024-08-05&quot;, surveyor=&quot;L.Taylor&quot;),
+]
+
+# Build columns for mapping
+surveys_rdf = [(;
+    r...,
+    site_uri = &quot;http://example.org/site/&quot; * r.site_id,
+    stage_uri = &quot;http://example.org/ashdieback#&quot; * r.stage,
+) for r in surveys]
+
+m = RDFMapping(graph=g)
+
+tpl = RDFTemplate(
+    subject = :id,
+    subject_prefix = &quot;http://example.org/observation/survey_&quot;,
+    properties = [
+        (adb(&quot;observed_at&quot;),       :site_uri,        IRIColumn()),
+        (adb(&quot;has_disease_stage&quot;), :stage_uri,       IRIColumn()),
+        (adb(&quot;infection_pct&quot;),     :infection_pct,   LiteralColumn(XSD.integer)),
+        (adb(&quot;tree_count&quot;),        :tree_count,      LiteralColumn(XSD.integer)),
+        (adb(&quot;crown_loss_pct&quot;),    :crown_loss_pct,  LiteralColumn(XSD.integer)),
+        (adb(&quot;survey_date&quot;),       :date,            LiteralColumn(XSD.date)),
+        (adb(&quot;surveyor&quot;),          :surveyor,        AutoColumn()),
+    ],
+    types = [adb(&quot;SurveyObservation&quot;)]
+)
+
+before = length(g)
+rdf_map!(m, surveys_rdf, tpl)
+println(&quot;Imported $(length(g) - before) triples from $(length(surveys)) survey records&quot;)
+println(&quot;Total knowledge graph: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Imported 96 triples from 12 survey records
+Total knowledge graph: 368 triples</code></pre><h2 id="6.-Validating-Survey-Data-with-SHACL"><a class="docs-heading-anchor" href="#6.-Validating-Survey-Data-with-SHACL">6. Validating Survey Data with SHACL</a><a id="6.-Validating-Survey-Data-with-SHACL-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Validating-Survey-Data-with-SHACL" title="Permalink"></a></h2><p>We ensure every survey observation has required fields and valid ranges.</p><pre><code class="language-julia hljs">shapes_ttl = &quot;&quot;&quot;
+    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix adb: &lt;http://example.org/ashdieback#&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+    adb:SurveyShape a sh:NodeShape ;
+        sh:targetClass adb:SurveyObservation ;
+        sh:property [
+            sh:path adb:observed_at ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+            sh:nodeKind sh:IRI ;
+        ] ;
+        sh:property [
+            sh:path adb:has_disease_stage ;
+            sh:minCount 1 ;
+            sh:nodeKind sh:IRI ;
+        ] ;
+        sh:property [
+            sh:path adb:infection_pct ;
+            sh:minCount 1 ;
+            sh:datatype xsd:integer ;
+        ] ;
+        sh:property [
+            sh:path adb:survey_date ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;
+
+report = rdf_validate(m, shapes_ttl)
+println(&quot;Survey data validation: conforms = $(report.conforms)&quot;)</code></pre><pre><code class="nohighlight hljs">Survey data validation: conforms = true</code></pre><p>Test with an incomplete record:</p><pre><code class="language-julia hljs">bad = URIRef(&quot;http://example.org/observation/survey_incomplete&quot;)
+add!(g, Triple(bad, RDF.type, adb(&quot;SurveyObservation&quot;)))
+add!(g, Triple(bad, adb(&quot;surveyor&quot;), Literal(&quot;Unknown&quot;)))
+
+report2 = rdf_validate(m, shapes_ttl)
+println(&quot;After adding incomplete survey:&quot;)
+println(&quot;  Conforms: $(report2.conforms)&quot;)
+for r in report2.results
+    println(&quot;  ✗ $(r.message)&quot;)
+end
+
+remove!(g, Triple(bad, RDF.type, adb(&quot;SurveyObservation&quot;)))
+remove!(g, Triple(bad, adb(&quot;surveyor&quot;), Literal(&quot;Unknown&quot;)))</code></pre><pre><code class="nohighlight hljs">After adding incomplete survey:
+  Conforms: false
+  ✗ Expected at least 1 values for http://example.org/ashdieback#observed_at, got 0
+  ✗ Expected at least 1 values for http://example.org/ashdieback#has_disease_stage, got 0
+  ✗ Expected at least 1 values for http://example.org/ashdieback#survey_date, got 0
+  ✗ Expected at least 1 values for http://example.org/ashdieback#infection_pct, got 0
+
+RDFGraph (368 triples)</code></pre><h2 id="7.-Querying-the-Knowledge-Graph"><a class="docs-heading-anchor" href="#7.-Querying-the-Knowledge-Graph">7. Querying the Knowledge Graph</a><a id="7.-Querying-the-Knowledge-Graph-1"></a><a class="docs-heading-anchor-permalink" href="#7.-Querying-the-Knowledge-Graph" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Helper for readable output
+readable(x::Literal) = x.lexical
+readable(x::URIRef) = split(x.value, r&quot;[/#]&quot;)[end]
+readable(x) = string(x)</code></pre><pre><code class="nohighlight hljs">readable (generic function with 3 methods)</code></pre><h3 id="Infection-severity-by-site"><a class="docs-heading-anchor" href="#Infection-severity-by-site">Infection severity by site</a><a id="Infection-severity-by-site-1"></a><a class="docs-heading-anchor-permalink" href="#Infection-severity-by-site" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX adb: &lt;http://example.org/ashdieback#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    SELECT ?site_name ?region ?date ?infection ?crown_loss ?stage WHERE {
+        ?obs a adb:SurveyObservation .
+        ?obs adb:observed_at ?site .
+        ?site adb:common_name ?site_name .
+        ?site adb:region ?region .
+        ?obs adb:infection_pct ?infection .
+        ?obs adb:crown_loss_pct ?crown_loss .
+        ?obs adb:survey_date ?date .
+        ?obs adb:has_disease_stage ?stg .
+        ?stg rdfs:label ?stage .
+    }
+    ORDER BY DESC(?infection)
+&quot;&quot;&quot;)
+println(&quot;Survey results by infection severity:&quot;)
+println(&quot;  $(rpad(&quot;Site&quot;, 20)) $(rpad(&quot;Region&quot;, 20)) $(rpad(&quot;Date&quot;, 12)) Inf%  Crown%  Stage&quot;)
+println(&quot;  $(&quot;-&quot;^85)&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;site_name&quot;]), 20)) &quot; *
+            &quot;$(rpad(readable(row[&quot;region&quot;]), 20)) &quot; *
+            &quot;$(rpad(readable(row[&quot;date&quot;]), 12)) &quot; *
+            &quot;$(rpad(readable(row[&quot;infection&quot;]), 6))&quot; *
+            &quot;$(rpad(readable(row[&quot;crown_loss&quot;]), 8))&quot; *
+            readable(row[&quot;stage&quot;]))
+end</code></pre><pre><code class="nohighlight hljs">Survey results by infection severity:
+  Site                 Region               Date         Inf%  Crown%  Stage
+  -------------------------------------------------------------------------------------
+  Epping Forest        Greater London       2024-08-05   95    92      dead
+  Epping Forest        Greater London       2023-08-01   88    75      severe
+  Thetford Forest      East Anglia          2024-06-12   85    70      severe
+  Wyre Forest          West Midlands        2023-07-01   82    71      severe
+  Thetford Forest      East Anglia          2023-06-15   78    62      severe
+  Ashdown Forest       South East           2024-06-18   68    52      severe
+  Delamere Forest      North West           2023-08-10   60    44      moderate
+  Ashdown Forest       South East           2023-06-20   55    38      moderate
+  Coed y Brenin        North Wales          2023-07-15   45    32      moderate
+  Glenmore Forest      Scottish Highlands   2024-07-08   32    20      moderate
+  Killarney Oakwoods   South West Ireland   2023-07-22   22    12      early
+  Glenmore Forest      Scottish Highlands   2023-07-10   15    8       early</code></pre><h3 id="Obligate-species-at-risk"><a class="docs-heading-anchor" href="#Obligate-species-at-risk">Obligate species at risk</a><a id="Obligate-species-at-risk-1"></a><a class="docs-heading-anchor-permalink" href="#Obligate-species-at-risk" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX adb: &lt;http://example.org/ashdieback#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    SELECT ?name ?group ?status WHERE {
+        ?sp a adb:AssociatedSpecies .
+        ?sp adb:common_name ?name .
+        ?sp adb:host_specificity &quot;obligate&quot; .
+        ?sp rdfs:comment ?group .
+        ?sp adb:has_status ?st .
+        ?st rdfs:label ?status .
+    }
+    ORDER BY ?status ?name
+&quot;&quot;&quot;)
+println(&quot;Obligate ash specialists ($(length(results)) species):&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;name&quot;]), 28)) $(rpad(readable(row[&quot;group&quot;]), 12)) [$(readable(row[&quot;status&quot;]))]&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Obligate ash specialists (6 species):
+  Ash Lichen                   lichen       [critical]
+  Jewel Beetle                 beetle       [endangered]
+  Ash Bud Moth                 moth         [least concern]
+  King Alfred&#39;s Cakes          fungus       [least concern]
+  Centre-barred Sallow         moth         [vulnerable]
+  Triangle-marked Tortrix      moth         [vulnerable]</code></pre><h3 id="Sites-with-\\70%-infection"><a class="docs-heading-anchor" href="#Sites-with-\\70%-infection">Sites with \&gt;70% infection</a><a id="Sites-with-\\70%-infection-1"></a><a class="docs-heading-anchor-permalink" href="#Sites-with-\\70%-infection" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX adb: &lt;http://example.org/ashdieback#&gt;
+    SELECT ?name ?infection ?date WHERE {
+        ?obs a adb:SurveyObservation .
+        ?obs adb:observed_at ?site .
+        ?site adb:common_name ?name .
+        ?obs adb:infection_pct ?infection .
+        ?obs adb:survey_date ?date .
+        FILTER (?infection &gt; 70)
+    }
+    ORDER BY DESC(?infection)
+&quot;&quot;&quot;)
+println(&quot;Critically affected sites (&gt;70% infection):&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;name&quot;]), 20)) $(readable(row[&quot;infection&quot;]))%  ($(readable(row[&quot;date&quot;])))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Critically affected sites (&gt;70% infection):
+  Epping Forest        95%  (2024-08-05)
+  Epping Forest        88%  (2023-08-01)
+  Thetford Forest      85%  (2024-06-12)
+  Wyre Forest          82%  (2023-07-01)
+  Thetford Forest      78%  (2023-06-15)</code></pre><h2 id="8.-Tracing-Impact-Pathways-with-Property-Paths"><a class="docs-heading-anchor" href="#8.-Tracing-Impact-Pathways-with-Property-Paths">8. Tracing Impact Pathways with Property Paths</a><a id="8.-Tracing-Impact-Pathways-with-Property-Paths-1"></a><a class="docs-heading-anchor-permalink" href="#8.-Tracing-Impact-Pathways-with-Property-Paths" title="Permalink"></a></h2><p>Which species are transitively threatened by the pathogen?</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX adb: &lt;http://example.org/ashdieback#&gt;
+    PREFIX tax: &lt;http://example.org/taxon/&gt;
+    SELECT ?name ?specificity WHERE {
+        tax:hymenoscyphus_fraxineus adb:affects/^adb:depends_on ?sp .
+        ?sp adb:common_name ?name .
+        ?sp adb:host_specificity ?specificity .
+    }
+    ORDER BY ?specificity ?name
+&quot;&quot;&quot;)
+println(&quot;Species threatened via ash dependency ($(length(results))):&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;name&quot;]), 30)) [$(readable(row[&quot;specificity&quot;]))]&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Species threatened via ash dependency (15):
+  Bullfinch                      [associated]
+  Common Pipistrelle             [associated]
+  Lesser Spotted Woodpecker      [associated]
+  Nuthatch                       [associated]
+  Wild Garlic                    [associated]
+  Wood Mouse                     [associated]
+  Dog&#39;s Mercury                  [high]
+  Lyell&#39;s Bristle-moss           [high]
+  Tree Lungwort                  [high]
+  Ash Bud Moth                   [obligate]
+  Ash Lichen                     [obligate]
+  Centre-barred Sallow           [obligate]
+  Jewel Beetle                   [obligate]
+  King Alfred&#39;s Cakes            [obligate]
+  Triangle-marked Tortrix        [obligate]</code></pre><h3 id="Replacement-tree-options"><a class="docs-heading-anchor" href="#Replacement-tree-options">Replacement tree options</a><a id="Replacement-tree-options-1"></a><a class="docs-heading-anchor-permalink" href="#Replacement-tree-options" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX adb: &lt;http://example.org/ashdieback#&gt;
+    PREFIX tax: &lt;http://example.org/taxon/&gt;
+    SELECT ?name ?latin WHERE {
+        ?tree adb:replacement_for tax:fraxinus_excelsior .
+        ?tree adb:common_name ?name .
+        ?tree adb:latin_name ?latin .
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+println(&quot;Potential replacement species for ash:&quot;)
+for row in results
+    println(&quot;  $(readable(row[&quot;name&quot;])) ($(readable(row[&quot;latin&quot;])))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Potential replacement species for ash:
+  Common Alder (Alnus glutinosa)
+  Field Maple (Acer campestre)
+  Pedunculate Oak (Quercus robur)
+  Rowan (Sorbus aucuparia)
+  Small-leaved Lime (Tilia cordata)</code></pre><h2 id="9.-Inferring-Risk-with-Datalog-Reasoning"><a class="docs-heading-anchor" href="#9.-Inferring-Risk-with-Datalog-Reasoning">9. Inferring Risk with Datalog Reasoning</a><a id="9.-Inferring-Risk-with-Datalog-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#9.-Inferring-Risk-with-Datalog-Reasoning" title="Permalink"></a></h2><p>We use Datalog to derive which species face extinction risk based on host specificity and conservation status, and which sites are critical.</p><pre><code class="language-julia hljs">n3_rules = &quot;&quot;&quot;
+    @prefix adb: &lt;http://example.org/ashdieback#&gt; .
+    @prefix tax: &lt;http://example.org/taxon/&gt; .
+    @prefix site: &lt;http://example.org/site/&gt; .
+
+    # Facts: species dependencies and specificity
+    tax:actias_isabellae    adb:host_specificity &quot;obligate&quot; .
+    tax:prays_fraxinella    adb:host_specificity &quot;obligate&quot; .
+    tax:agrilus_sinuatus    adb:host_specificity &quot;obligate&quot; .
+    tax:pseudargyrotoza     adb:host_specificity &quot;obligate&quot; .
+    tax:lobaria_pulmonaria  adb:host_specificity &quot;high&quot; .
+    tax:lecanora_sublivescens adb:host_specificity &quot;obligate&quot; .
+    tax:orthotrichum_lyellii adb:host_specificity &quot;high&quot; .
+    tax:daldinia_concentrica adb:host_specificity &quot;obligate&quot; .
+
+    tax:actias_isabellae    adb:has_status adb:vulnerable .
+    tax:agrilus_sinuatus    adb:has_status adb:endangered .
+    tax:pseudargyrotoza     adb:has_status adb:vulnerable .
+    tax:lobaria_pulmonaria  adb:has_status adb:vulnerable .
+    tax:lecanora_sublivescens adb:has_status adb:critical .
+    tax:orthotrichum_lyellii adb:has_status adb:vulnerable .
+
+    # Facts: survey infection levels
+    site:thetford   adb:infection_pct &quot;85&quot; .
+    site:epping     adb:infection_pct &quot;95&quot; .
+    site:wyre       adb:infection_pct &quot;82&quot; .
+    site:ashdown    adb:infection_pct &quot;68&quot; .
+    site:delamere   adb:infection_pct &quot;60&quot; .
+    site:coed_y_brenin adb:infection_pct &quot;45&quot; .
+    site:glenmore   adb:infection_pct &quot;32&quot; .
+    site:killarney  adb:infection_pct &quot;22&quot; .
+
+    # Rule: obligate species face extinction risk from ash dieback
+    { ?sp adb:host_specificity &quot;obligate&quot; } =&gt; { ?sp adb:faces_risk adb:ash_dieback_extinction } .
+
+    # Rule: already-threatened obligate species are critically at risk
+    { ?sp adb:host_specificity &quot;obligate&quot; . ?sp adb:has_status adb:vulnerable }
+        =&gt; { ?sp adb:faces_risk adb:critical_extinction } .
+    { ?sp adb:host_specificity &quot;obligate&quot; . ?sp adb:has_status adb:endangered }
+        =&gt; { ?sp adb:faces_risk adb:critical_extinction } .
+    { ?sp adb:host_specificity &quot;obligate&quot; . ?sp adb:has_status adb:critical }
+        =&gt; { ?sp adb:faces_risk adb:critical_extinction } .
+
+    # Rule: highly associated species are at moderate risk
+    { ?sp adb:host_specificity &quot;high&quot; } =&gt; { ?sp adb:faces_risk adb:population_decline } .
+&quot;&quot;&quot;
+
+g_dl = parse_rdf(n3_rules, N3Format())
+println(&quot;Before reasoning: $(length(g_dl)) triples&quot;)
+
+g_inferred = datalog_reason(g_dl)
+println(&quot;After reasoning:  $(length(g_inferred)) triples&quot;)
+
+# Species at critical extinction risk
+critical = [t.subject for t in triples(g_inferred,
+    (nothing, adb(&quot;faces_risk&quot;), adb(&quot;critical_extinction&quot;)))]
+println(&quot;\nSpecies at critical extinction risk ($(length(critical))):&quot;)
+for sp in sort(critical; by=x -&gt; split(string(x), &#39;/&#39;)[end])
+    println(&quot;  ⚠ $(split(string(sp), &#39;/&#39;)[end])&quot;)
+end
+
+# Species at general extinction risk
+general = [t.subject for t in triples(g_inferred,
+    (nothing, adb(&quot;faces_risk&quot;), adb(&quot;ash_dieback_extinction&quot;)))]
+println(&quot;\nAll obligate species facing extinction risk ($(length(general))):&quot;)
+for sp in sort(general; by=x -&gt; split(string(x), &#39;/&#39;)[end])
+    println(&quot;  • $(split(string(sp), &#39;/&#39;)[end])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Before reasoning: 27 triples
+After reasoning:  38 triples
+
+Species at critical extinction risk (8):
+  ⚠ actias_isabellae
+  ⚠ agrilus_sinuatus
+  ⚠ daldinia_concentrica
+  ⚠ lecanora_sublivescens
+  ⚠ lobaria_pulmonaria
+  ⚠ orthotrichum_lyellii
+  ⚠ prays_fraxinella
+  ⚠ pseudargyrotoza
+
+All obligate species facing extinction risk (6):
+  • actias_isabellae
+  • agrilus_sinuatus
+  • daldinia_concentrica
+  • lecanora_sublivescens
+  • prays_fraxinella
+  • pseudargyrotoza</code></pre><h2 id="10.-Probabilistic-Outcomes-with-ProbLog"><a class="docs-heading-anchor" href="#10.-Probabilistic-Outcomes-with-ProbLog">10. Probabilistic Outcomes with ProbLog</a><a id="10.-Probabilistic-Outcomes-with-ProbLog-1"></a><a class="docs-heading-anchor-permalink" href="#10.-Probabilistic-Outcomes-with-ProbLog" title="Permalink"></a></h2><p>We model the probability of different outcomes for an ash woodland given ash dieback, considering factors like genetic resistance, management intervention, and secondary infection.</p><pre><code class="language-julia hljs">woodland_model = &quot;&quot;&quot;
+    0.05::genetic_resistance.
+    0.90::pathogen_present.
+    0.30::management_intervention.
+    0.40::secondary_infection.
+    0.60::wet_summer.
+
+    spore_dispersal :- pathogen_present, wet_summer.
+    infection :- spore_dispersal, \\+genetic_resistance.
+    rapid_decline :- infection, secondary_infection.
+    slow_decline :- infection, \\+secondary_infection, \\+management_intervention.
+    managed_decline :- infection, management_intervention, \\+secondary_infection.
+    tree_survival :- genetic_resistance.
+    tree_survival :- management_intervention, \\+rapid_decline.
+
+    query(infection).
+    query(rapid_decline).
+    query(slow_decline).
+    query(managed_decline).
+    query(tree_survival).
+&quot;&quot;&quot;
+
+results = problog_query(woodland_model)
+println(&quot;Ash woodland outcome probabilities (baseline):&quot;)
+for key in [&quot;infection&quot;, &quot;rapid_decline&quot;, &quot;slow_decline&quot;, &quot;managed_decline&quot;, &quot;tree_survival&quot;]
+    haskey(results, key) &amp;&amp; println(&quot;  $(rpad(key, 20)) $(round(results[key]; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Ash woodland outcome probabilities (baseline):
+  infection            0.513
+  rapid_decline        0.2052
+  slow_decline         0.2155
+  managed_decline      0.0923
+  tree_survival        0.2734</code></pre><h3 id="Scenario:-Active-management-(intervention-guaranteed)"><a class="docs-heading-anchor" href="#Scenario:-Active-management-(intervention-guaranteed)">Scenario: Active management (intervention guaranteed)</a><a id="Scenario:-Active-management-(intervention-guaranteed)-1"></a><a class="docs-heading-anchor-permalink" href="#Scenario:-Active-management-(intervention-guaranteed)" title="Permalink"></a></h3><pre><code class="language-julia hljs">managed = woodland_model * &quot;\n    evidence(management_intervention, true).\n&quot;
+
+r_managed = problog_query(managed)
+println(&quot;With active management:&quot;)
+for key in [&quot;infection&quot;, &quot;rapid_decline&quot;, &quot;slow_decline&quot;, &quot;managed_decline&quot;, &quot;tree_survival&quot;]
+    haskey(r_managed, key) &amp;&amp; println(&quot;  $(rpad(key, 20)) $(round(r_managed[key]; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">With active management:
+  infection            0.513
+  rapid_decline        0.2052
+  slow_decline         0.0
+  managed_decline      0.3078
+  tree_survival        0.7948</code></pre><h3 id="Scenario:-No-management,-wet-summer"><a class="docs-heading-anchor" href="#Scenario:-No-management,-wet-summer">Scenario: No management, wet summer</a><a id="Scenario:-No-management,-wet-summer-1"></a><a class="docs-heading-anchor-permalink" href="#Scenario:-No-management,-wet-summer" title="Permalink"></a></h3><pre><code class="language-julia hljs">worst = woodland_model * &quot;&quot;&quot;
+    evidence(management_intervention, false).
+    evidence(wet_summer, true).
+&quot;&quot;&quot;
+
+r_worst = problog_query(worst)
+println(&quot;Worst case (no management, wet summer):&quot;)
+for key in [&quot;infection&quot;, &quot;rapid_decline&quot;, &quot;slow_decline&quot;, &quot;managed_decline&quot;, &quot;tree_survival&quot;]
+    haskey(r_worst, key) &amp;&amp; println(&quot;  $(rpad(key, 20)) $(round(r_worst[key]; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Worst case (no management, wet summer):
+  infection            0.855
+  rapid_decline        0.342
+  slow_decline         0.513
+  managed_decline      0.0
+  tree_survival        0.05</code></pre><h3 id="Comparing-management-scenarios"><a class="docs-heading-anchor" href="#Comparing-management-scenarios">Comparing management scenarios</a><a id="Comparing-management-scenarios-1"></a><a class="docs-heading-anchor-permalink" href="#Comparing-management-scenarios" title="Permalink"></a></h3><pre><code class="language-julia hljs">println(&quot;Impact of management on ash woodland outcomes:\n&quot;)
+println(&quot;  $(rpad(&quot;Outcome&quot;, 22)) $(rpad(&quot;Baseline&quot;, 12)) $(rpad(&quot;Managed&quot;, 12)) $(rpad(&quot;Worst case&quot;, 12)) Managed vs Worst&quot;)
+println(&quot;  $(&quot;-&quot;^72)&quot;)
+for key in [&quot;infection&quot;, &quot;rapid_decline&quot;, &quot;slow_decline&quot;, &quot;managed_decline&quot;, &quot;tree_survival&quot;]
+    p_base = get(results, key, 0.0)
+    p_man  = get(r_managed, key, 0.0)
+    p_bad  = get(r_worst, key, 0.0)
+    delta  = p_man - p_bad
+    sign   = delta &gt;= 0 ? &quot;+&quot; : &quot;&quot;
+    println(&quot;  $(rpad(key, 22)) $(rpad(round(p_base; digits=4), 12)) &quot; *
+            &quot;$(rpad(round(p_man; digits=4), 12)) $(rpad(round(p_bad; digits=4), 12)) &quot; *
+            &quot;$(sign)$(round(delta; digits=4))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Impact of management on ash woodland outcomes:
+
+  Outcome                Baseline     Managed      Worst case   Managed vs Worst
+  ------------------------------------------------------------------------
+  infection              0.513        0.513        0.855        -0.342
+  rapid_decline          0.2052       0.2052       0.342        -0.1368
+  slow_decline           0.2155       0.0          0.513        -0.513
+  managed_decline        0.0923       0.3078       0.0          +0.3078
+  tree_survival          0.2734       0.7948       0.05         +0.7448</code></pre><h2 id="11.-Visualization"><a class="docs-heading-anchor" href="#11.-Visualization">11. Visualization</a><a id="11.-Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#11.-Visualization" title="Permalink"></a></h2><h3 id="Disease-impact-network"><a class="docs-heading-anchor" href="#Disease-impact-network">Disease impact network</a><a id="Disease-impact-network-1"></a><a class="docs-heading-anchor-permalink" href="#Disease-impact-network" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Build a focused graph showing pathogen → host → dependent species
+viz_g = RDFGraph()
+bind!(viz_g, &quot;adb&quot;, adb)
+bind!(viz_g, &quot;tax&quot;, tax)
+
+for t in triples(g, (nothing, adb(&quot;affects&quot;), nothing))
+    add!(viz_g, t)
+end
+for t in triples(g, (nothing, adb(&quot;depends_on&quot;), nothing))
+    add!(viz_g, t)
+end
+for t in triples(g, (nothing, adb(&quot;causes&quot;), nothing))
+    add!(viz_g, t)
+end
+for t in triples(g, (nothing, adb(&quot;replacement_for&quot;), nothing))
+    add!(viz_g, t)
+end
+
+dot_str = to_dot(viz_g; label=&quot;Ash Dieback Impact Network&quot;)
+println(&quot;Impact network: $(length(viz_g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Impact network: 29 triples</code></pre><pre><code class="language-julia hljs">using GraphViz
+GraphViz.load(IOBuffer(dot_str))</code></pre><p><img src="../ash-dieback_files/figure-commonmark/cell-22-output-1.svg" alt/></p><h3 id="Graph-statistics"><a class="docs-heading-anchor" href="#Graph-statistics">Graph statistics</a><a id="Graph-statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-statistics" title="Permalink"></a></h3><pre><code class="language-julia hljs">stats = graph_stats(g)
+println(&quot;Ash dieback knowledge graph summary:&quot;)
+println(&quot;  Total triples:    $(stats.triples)&quot;)
+println(&quot;  Unique subjects:  $(stats.subjects)&quot;)
+println(&quot;  Unique predicates: $(stats.predicates)&quot;)
+println(&quot;  Unique objects:   $(stats.objects)&quot;)
+println(&quot;  URI references:   $(stats.uri_refs)&quot;)
+println(&quot;  Literals:         $(stats.literals)&quot;)</code></pre><pre><code class="nohighlight hljs">Ash dieback knowledge graph summary:
+  Total triples:    368
+  Unique subjects:  91
+  Unique predicates: 25
+  Unique objects:   196
+  URI references:   99
+  Literals:         160</code></pre><h3 id="Serialization"><a class="docs-heading-anchor" href="#Serialization">Serialization</a><a id="Serialization-1"></a><a class="docs-heading-anchor-permalink" href="#Serialization" title="Permalink"></a></h3><pre><code class="language-julia hljs">ttl = serialize(g, TurtleFormat())
+lines = split(ttl, &#39;\n&#39;)
+println(&quot;Serialized to Turtle: $(length(lines)) lines, $(length(ttl)) bytes&quot;)
+println(&quot;\nFirst 20 lines:&quot;)
+for line in Iterators.take(lines, 20)
+    println(&quot;  $line&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Serialized to Turtle: 469 lines, 13819 bytes
+
+First 20 lines:
+  @prefix adb: &lt;http://example.org/ashdieback#&gt; .
+  @prefix ns1: &lt;http://example.org/observation/&gt; .
+  @prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+  @prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+  @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+  @prefix site: &lt;http://example.org/site/&gt; .
+  @prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+  @prefix tax: &lt;http://example.org/taxon/&gt; .
+  @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+  
+  adb:AssociatedSpecies a owl:Class .
+  
+  adb:ConservationStatus a owl:Class .
+  
+  adb:DiseaseStage a owl:Class .
+  
+  adb:Pathogen a owl:Class .
+  
+  adb:SurveyObservation a owl:Class .</code></pre><h2 id="Summary"><a class="docs-heading-anchor" href="#Summary">Summary</a><a id="Summary-1"></a><a class="docs-heading-anchor-permalink" href="#Summary" title="Permalink"></a></h2><p>This vignette modeled the UK ash dieback crisis as a knowledge graph:</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right">Application</th></tr><tr><td style="text-align: right"><strong>OWL Ontology</strong></td><td style="text-align: right">Pathogens, host trees, symptoms, disease stages, dependent species</td></tr><tr><td style="text-align: right"><strong>Tabular Mapping</strong></td><td style="text-align: right">Forest Research surveillance data from spreadsheets</td></tr><tr><td style="text-align: right"><strong>SHACL Validation</strong></td><td style="text-align: right">Ensuring survey records have required fields</td></tr><tr><td style="text-align: right"><strong>SPARQL Queries</strong></td><td style="text-align: right">Infection severity, obligate species, critical sites</td></tr><tr><td style="text-align: right"><strong>Property Paths</strong></td><td style="text-align: right">Tracing pathogen → host → dependent species impact chains</td></tr><tr><td style="text-align: right"><strong>Datalog Reasoning</strong></td><td style="text-align: right">Inferring extinction risk from host specificity + conservation status</td></tr><tr><td style="text-align: right"><strong>ProbLog</strong></td><td style="text-align: right">Probabilistic woodland outcomes: management reduces rapid decline</td></tr><tr><td style="text-align: right"><strong>Visualization</strong></td><td style="text-align: right">Disease impact network via GraphViz</td></tr></table><p>Key findings from the probabilistic model: active management significantly increases tree survival probability and shifts outcomes from rapid decline toward managed decline, highlighting the importance of intervention even when the pathogen is widespread.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ecology/">« Ecology</a><a class="docs-footer-nextpage" href="../bayesian-belief-networks/">Bayesian Belief Networks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

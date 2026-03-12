@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Datalog · RDFLib.jl</title><meta name="title" content="Datalog · RDFLib.jl"/><meta property="og:title" content="Datalog · RDFLib.jl"/><meta property="twitter:title" content="Datalog · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/datalog/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/datalog/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/reasoning/datalog/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../n3-reasoning/">N3 Reasoning</a></li><li class="is-active"><a class="tocitem" href>Datalog</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Writing-Rules-in-N3"><span>Writing Rules in N3</span></a></li><li><a class="tocitem" href="#Transitive-Closure"><span>Transitive Closure</span></a></li><li><a class="tocitem" href="#Multi-Predicate-Reasoning:-Family-Relationships"><span>Multi-Predicate Reasoning: Family Relationships</span></a></li><li><a class="tocitem" href="#RDFS-Style-Reasoning"><span>RDFS-Style Reasoning</span></a></li><li><a class="tocitem" href="#Multiple-Head-Atoms"><span>Multiple Head Atoms</span></a></li><li><a class="tocitem" href="#Multiple-Interacting-Rules"><span>Multiple Interacting Rules</span></a></li><li><a class="tocitem" href="#Data-Without-Rules"><span>Data Without Rules</span></a></li><li><a class="tocitem" href="#Comparison-with-the-N3-Reasoner"><span>Comparison with the N3 Reasoner</span></a></li><li><a class="tocitem" href="#Performance-Characteristics"><span>Performance Characteristics</span></a></li></ul></li><li><a class="tocitem" href="../problog/">ProbLog</a></li><li><a class="tocitem" href="../shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Reasoning &amp; Inference</a></li><li class="is-active"><a href>Datalog</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Datalog</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/reasoning/datalog.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Datalog-Reasoning"><a class="docs-heading-anchor" href="#Datalog-Reasoning">Datalog Reasoning</a><a id="Datalog-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#Datalog-Reasoning" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>Datalog is a declarative logic programming language that operates over relations (sets of tuples). RDFLib.jl includes a Datalog reasoner that uses semi-naive bottom-up evaluation to compute the logical closure of an RDF graph augmented with N3 rules. It is designed for workloads consisting of pure Datalog rules — conjunctive queries with no built-in predicates — where set-at-a-time evaluation with hash joins can outperform the general-purpose N3 reasoner.</p><pre><code class="language-julia hljs">using RDFLib</code></pre><h2 id="Writing-Rules-in-N3"><a class="docs-heading-anchor" href="#Writing-Rules-in-N3">Writing Rules in N3</a><a id="Writing-Rules-in-N3-1"></a><a class="docs-heading-anchor-permalink" href="#Writing-Rules-in-N3" title="Permalink"></a></h2><p>Rules are written in Notation3 syntax using <code>{ antecedent } =&gt; { consequent }</code>. The antecedent (body) is a conjunction of triple patterns; the consequent (head) is one or more triple patterns to derive when the body matches.</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+
+:alice :type :Person .
+:bob :type :Person .
+
+{ ?x :type :Person } =&gt; { ?x :is :human } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+for t in triples(result, (nothing, URIRef(&quot;http://example.org/is&quot;), nothing))
+    println(t.subject, &quot; is &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">URIRef(&quot;http://example.org/alice&quot;) is URIRef(&quot;http://example.org/human&quot;)
+URIRef(&quot;http://example.org/bob&quot;) is URIRef(&quot;http://example.org/human&quot;)</code></pre><p>Variables (prefixed with <code>?</code>) in the body are matched against data triples. When all body atoms are satisfied by a consistent binding, the head atoms are instantiated and added to the graph. This process repeats until no new triples are derived (fixpoint).</p><h2 id="Transitive-Closure"><a class="docs-heading-anchor" href="#Transitive-Closure">Transitive Closure</a><a id="Transitive-Closure-1"></a><a class="docs-heading-anchor-permalink" href="#Transitive-Closure" title="Permalink"></a></h2><p>The most common Datalog pattern is transitive closure — deriving all reachable pairs from a relation:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+
+:a :p :b .
+:b :p :c .
+:c :p :d .
+
+{ ?x :p ?y . ?y :p ?z } =&gt; { ?x :p ?z } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+p = URIRef(&quot;http://example.org/p&quot;)
+for t in triples(result, (nothing, p, nothing))
+    println(&quot;  &quot;, t.subject, &quot; :p &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">  URIRef(&quot;http://example.org/a&quot;) :p URIRef(&quot;http://example.org/b&quot;)
+  URIRef(&quot;http://example.org/b&quot;) :p URIRef(&quot;http://example.org/c&quot;)
+  URIRef(&quot;http://example.org/c&quot;) :p URIRef(&quot;http://example.org/d&quot;)
+  URIRef(&quot;http://example.org/a&quot;) :p URIRef(&quot;http://example.org/c&quot;)
+  URIRef(&quot;http://example.org/b&quot;) :p URIRef(&quot;http://example.org/d&quot;)
+  URIRef(&quot;http://example.org/a&quot;) :p URIRef(&quot;http://example.org/d&quot;)</code></pre><p>Starting from three direct edges, the reasoner derives all transitive connections: <code>:a :p :c</code> (via <code>:b</code>), <code>:b :p :d</code> (via <code>:c</code>), and <code>:a :p :d</code> (via the chain <code>:a→:b→:c→:d</code>).</p><h2 id="Multi-Predicate-Reasoning:-Family-Relationships"><a class="docs-heading-anchor" href="#Multi-Predicate-Reasoning:-Family-Relationships">Multi-Predicate Reasoning: Family Relationships</a><a id="Multi-Predicate-Reasoning:-Family-Relationships-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-Predicate-Reasoning:-Family-Relationships" title="Permalink"></a></h2><p>Rules can join across different predicates and derive new relationships. Here we infer grandparent and sibling relations from parent data:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+
+:alice :parent :bob .
+:alice :parent :carol .
+:bob :parent :dave .
+:bob :parent :eve .
+:carol :parent :frank .
+
+{ ?x :parent ?y . ?y :parent ?z } =&gt; { ?x :grandparent ?z } .
+{ ?p :parent ?x . ?p :parent ?y } =&gt; { ?x :sibling ?y } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+gp = URIRef(&quot;http://example.org/grandparent&quot;)
+sib = URIRef(&quot;http://example.org/sibling&quot;)
+
+println(&quot;Grandchildren of Alice:&quot;)
+for t in triples(result, (URIRef(&quot;http://example.org/alice&quot;), gp, nothing))
+    println(&quot;  &quot;, t.object)
+end
+
+println(&quot;\nSibling pairs:&quot;)
+seen = Set{Tuple{String,String}}()
+for t in triples(result, (nothing, sib, nothing))
+    a, b = string(t.subject), string(t.object)
+    if a != b
+        pair = (min(a, b), max(a, b))
+        if pair ∉ seen
+            push!(seen, pair)
+            println(&quot;  &quot;, t.subject, &quot; ↔ &quot;, t.object)
+        end
+    end
+end</code></pre><pre><code class="nohighlight hljs">Grandchildren of Alice:
+  URIRef(&quot;http://example.org/eve&quot;)
+  URIRef(&quot;http://example.org/dave&quot;)
+  URIRef(&quot;http://example.org/frank&quot;)
+
+Sibling pairs:
+  URIRef(&quot;http://example.org/bob&quot;) ↔ URIRef(&quot;http://example.org/carol&quot;)
+  URIRef(&quot;http://example.org/dave&quot;) ↔ URIRef(&quot;http://example.org/eve&quot;)
+
+Grandchildren of Alice:
+  URIRef(&quot;http://example.org/dave&quot;)
+  URIRef(&quot;http://example.org/eve&quot;)
+  URIRef(&quot;http://example.org/frank&quot;)
+
+Sibling pairs:
+  URIRef(&quot;http://example.org/bob&quot;) ↔ URIRef(&quot;http://example.org/carol&quot;)
+  URIRef(&quot;http://example.org/dave&quot;) ↔ URIRef(&quot;http://example.org/eve&quot;)</code></pre><p>Note that the sibling rule <code>{ ?p :parent ?x . ?p :parent ?y } =&gt; { ?x :sibling ?y }</code> also derives self-siblings (<code>:bob :sibling :bob</code>) since pure Datalog has no built-in inequality. Above we filter those out when printing. If you need inequality, use the full N3 reasoner which supports <code>log:notEqualTo</code>.</p><h2 id="RDFS-Style-Reasoning"><a class="docs-heading-anchor" href="#RDFS-Style-Reasoning">RDFS-Style Reasoning</a><a id="RDFS-Style-Reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#RDFS-Style-Reasoning" title="Permalink"></a></h2><p>Datalog is well suited for RDFS-style inference. Two simple rules implement transitive subclass reasoning and type propagation:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+:Cat rdfs:subClassOf :Feline .
+:Feline rdfs:subClassOf :Mammal .
+:Mammal rdfs:subClassOf :Animal .
+
+:whiskers rdf:type :Cat .
+
+{ ?c1 rdfs:subClassOf ?c2 . ?c2 rdfs:subClassOf ?c3 }
+    =&gt; { ?c1 rdfs:subClassOf ?c3 } .
+
+{ ?x rdf:type ?c . ?c rdfs:subClassOf ?d }
+    =&gt; { ?x rdf:type ?d } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+whiskers = URIRef(&quot;http://example.org/whiskers&quot;)
+rdf_type = URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;)
+
+println(&quot;Whiskers is a:&quot;)
+for t in triples(result, (whiskers, rdf_type, nothing))
+    println(&quot;  &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">Whiskers is a:
+  URIRef(&quot;http://example.org/Animal&quot;)
+  URIRef(&quot;http://example.org/Cat&quot;)
+  URIRef(&quot;http://example.org/Feline&quot;)
+  URIRef(&quot;http://example.org/Mammal&quot;)
+
+Whiskers is a:
+  URIRef(&quot;http://example.org/Cat&quot;)
+  URIRef(&quot;http://example.org/Mammal&quot;)
+  URIRef(&quot;http://example.org/Feline&quot;)
+  URIRef(&quot;http://example.org/Animal&quot;)</code></pre><p>The subclass transitivity rule first derives <code>:Cat rdfs:subClassOf :Mammal</code>, <code>:Cat rdfs:subClassOf :Animal</code>, and <code>:Feline rdfs:subClassOf :Animal</code>. The type propagation rule then uses all subclass relationships to infer that <code>:whiskers</code> is a member of every superclass.</p><h2 id="Multiple-Head-Atoms"><a class="docs-heading-anchor" href="#Multiple-Head-Atoms">Multiple Head Atoms</a><a id="Multiple-Head-Atoms-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Head-Atoms" title="Permalink"></a></h2><p>A single rule can derive multiple triples at once by placing several triple patterns in the consequent:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+
+:alice :parent :bob .
+:bob :parent :carol .
+
+{ ?x :parent ?y . ?y :parent ?z }
+    =&gt; { ?x :grandparent ?z . ?z :grandchild ?x } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+alice = URIRef(&quot;http://example.org/alice&quot;)
+carol = URIRef(&quot;http://example.org/carol&quot;)
+gp = URIRef(&quot;http://example.org/grandparent&quot;)
+gc = URIRef(&quot;http://example.org/grandchild&quot;)
+
+println(&quot;Grandparent: &quot;, Triple(alice, gp, carol) in result)
+println(&quot;Grandchild:  &quot;, Triple(carol, gc, alice) in result)</code></pre><pre><code class="nohighlight hljs">Grandparent: true
+Grandchild:  true
+
+Grandparent: true
+Grandchild:  true</code></pre><p>Both the forward (<code>:grandparent</code>) and inverse (<code>:grandchild</code>) relationships are derived from a single rule application.</p><h2 id="Multiple-Interacting-Rules"><a class="docs-heading-anchor" href="#Multiple-Interacting-Rules">Multiple Interacting Rules</a><a id="Multiple-Interacting-Rules-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Interacting-Rules" title="Permalink"></a></h2><p>Rules can interact — the conclusions of one rule feed the body of another. Here, transitive subclass closure feeds type inference:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+
+:a :subClassOf :b .
+:b :subClassOf :c .
+:x :type :a .
+
+{ ?c1 :subClassOf ?c2 . ?c2 :subClassOf ?c3 }
+    =&gt; { ?c1 :subClassOf ?c3 } .
+
+{ ?x :type ?c . ?c :subClassOf ?d }
+    =&gt; { ?x :type ?d } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+x = URIRef(&quot;http://example.org/x&quot;)
+tp = URIRef(&quot;http://example.org/type&quot;)
+
+println(&quot;x has types:&quot;)
+for t in triples(result, (x, tp, nothing))
+    println(&quot;  &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">x has types:
+  URIRef(&quot;http://example.org/c&quot;)
+  URIRef(&quot;http://example.org/a&quot;)
+  URIRef(&quot;http://example.org/b&quot;)
+
+x has types:
+  URIRef(&quot;http://example.org/a&quot;)
+  URIRef(&quot;http://example.org/c&quot;)
+  URIRef(&quot;http://example.org/b&quot;)</code></pre><p>The first rule derives <code>:a :subClassOf :c</code>, which the second rule uses together with <code>:x :type :a</code> to derive <code>:x :type :c</code>.</p><h2 id="Data-Without-Rules"><a class="docs-heading-anchor" href="#Data-Without-Rules">Data Without Rules</a><a id="Data-Without-Rules-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Without-Rules" title="Permalink"></a></h2><p>When no rules are present, <code>datalog_reason</code> returns the original data unchanged:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+:a :p :b .
+:c :p :d .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+println(&quot;Triples: &quot;, length(result))</code></pre><pre><code class="nohighlight hljs">Triples: 2</code></pre><h2 id="Comparison-with-the-N3-Reasoner"><a class="docs-heading-anchor" href="#Comparison-with-the-N3-Reasoner">Comparison with the N3 Reasoner</a><a id="Comparison-with-the-N3-Reasoner-1"></a><a class="docs-heading-anchor-permalink" href="#Comparison-with-the-N3-Reasoner" title="Permalink"></a></h2><p>RDFLib.jl provides two reasoning engines. Choose based on your needs:</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right"><code>datalog_reason</code></th><th style="text-align: right"><code>reason</code> (N3)</th></tr><tr><td style="text-align: right"><strong>Evaluation</strong></td><td style="text-align: right">Semi-naive bottom-up</td><td style="text-align: right">Euler Abstract Machine (backward chaining)</td></tr><tr><td style="text-align: right"><strong>Rule scope</strong></td><td style="text-align: right">Pure Datalog (conjunctive body, no built-ins)</td><td style="text-align: right">Full N3 (built-ins, negation, backward chaining)</td></tr><tr><td style="text-align: right"><strong>Built-in predicates</strong></td><td style="text-align: right">None</td><td style="text-align: right">100+ (math, string, list, crypto, log)</td></tr><tr><td style="text-align: right"><strong>Backward chaining (<code>&lt;=</code>)</strong></td><td style="text-align: right">Not supported</td><td style="text-align: right">Supported</td></tr><tr><td style="text-align: right"><strong>Inequality (<code>log:notEqualTo</code>)</strong></td><td style="text-align: right">Not supported</td><td style="text-align: right">Supported</td></tr><tr><td style="text-align: right"><strong>Multiple head atoms</strong></td><td style="text-align: right">Supported</td><td style="text-align: right">Supported</td></tr><tr><td style="text-align: right"><strong>Optimal for</strong></td><td style="text-align: right">Large-scale relational inference</td><td style="text-align: right">Rules needing built-in computations</td></tr></table><p>Both reasoners produce identical results for pure Datalog rules:</p><pre><code class="language-julia hljs">n3 = &quot;&quot;&quot;
+@prefix : &lt;http://example.org/&gt; .
+:a :p :b .
+:b :p :c .
+:c :p :d .
+:d :p :e .
+{ ?x :p ?y . ?y :p ?z } =&gt; { ?x :p ?z } .
+&quot;&quot;&quot;
+
+g = parse_rdf(n3, N3Format())
+
+dl_result = datalog_reason(g)
+n3_result = reason(g)
+
+p = URIRef(&quot;http://example.org/p&quot;)
+dl_triples = Set(t for t in triples(dl_result) if t.predicate == p)
+n3_triples = Set(t for t in triples(n3_result) if t.predicate == p)
+
+println(&quot;Results match: &quot;, dl_triples == n3_triples)
+println(&quot;Triples derived: &quot;, length(dl_triples))</code></pre><pre><code class="nohighlight hljs">Results match: true
+Triples derived: 10
+
+Results match: true
+Triples derived: 10</code></pre><p><strong>When to use <code>datalog_reason</code>:</strong> Your rules are pure Datalog — no built-in predicates, no backward chaining, no inequality. You want straightforward relational inference (transitive closure, type propagation, classification).</p><p><strong>When to use <code>reason</code>:</strong> You need built-in predicates (<code>math:sum</code>, <code>string:length</code>, <code>log:notEqualTo</code>), backward chaining (<code>&lt;=</code>), meta-reasoning (<code>log:conclusion</code>), or list/formula manipulation.</p><h2 id="Performance-Characteristics"><a class="docs-heading-anchor" href="#Performance-Characteristics">Performance Characteristics</a><a id="Performance-Characteristics-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Characteristics" title="Permalink"></a></h2><p>The Datalog reasoner uses several optimizations:</p><ul><li><strong>Semi-naive evaluation:</strong> Each iteration only considers newly derived facts (delta tuples), avoiding redundant work from re-processing previously known facts.</li><li><strong>Integer encoding:</strong> RDF terms are mapped to compact integer IDs before evaluation. All pattern matching operates on integers rather than string comparisons.</li><li><strong>Hash joins:</strong> Multi-body rules use hash-based indices (SPO, POS, PSO) to efficiently join body atoms on shared variables.</li><li><strong>Body reordering:</strong> The reasoner automatically reorders body atoms using a greedy algorithm that maximizes the number of bound variables at each join step.</li></ul><p>The <code>max_iterations</code> parameter (default 1000) bounds the evaluation loop. For graphs where the fixpoint requires more iterations, increase it:</p><pre><code class="language-julia hljs">result = datalog_reason(g; max_iterations=5000)</code></pre><pre><code class="nohighlight hljs">RDFGraph (10 triples)</code></pre><p>For large transitive chains, the number of derived triples grows quadratically — a chain of <em>n</em> edges produces <em>n(n+1)/2</em> total reachable pairs:</p><pre><code class="language-julia hljs">n3_lines = [&quot;@prefix : &lt;http://example.org/&gt; .&quot;]
+for i in 0:49
+    push!(n3_lines, &quot;:n$i :p :n$(i+1) .&quot;)
+end
+push!(n3_lines, &quot;{ ?x :p ?y . ?y :p ?z } =&gt; { ?x :p ?z } .&quot;)
+
+g = parse_rdf(join(n3_lines, &quot;\n&quot;), N3Format())
+result = datalog_reason(g)
+
+p = URIRef(&quot;http://example.org/p&quot;)
+p_count = count(t -&gt; t.predicate == p, triples(result))
+println(&quot;50-element chain → $p_count :p triples (expected $(50*51÷2))&quot;)</code></pre><pre><code class="nohighlight hljs">50-element chain → 1275 :p triples (expected 1275)</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../n3-reasoning/">« N3 Reasoning</a><a class="docs-footer-nextpage" href="../problog/">ProbLog »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

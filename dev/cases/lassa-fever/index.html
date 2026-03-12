@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Lassa Fever · RDFLib.jl</title><meta name="title" content="Lassa Fever · RDFLib.jl"/><meta property="og:title" content="Lassa Fever · RDFLib.jl"/><meta property="twitter:title" content="Lassa Fever · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/lassa-fever/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/lassa-fever/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/lassa-fever/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../ecology/">Ecology</a></li><li><a class="tocitem" href="../ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../epidemiology/">Epidemiology</a></li><li class="is-active"><a class="tocitem" href>Lassa Fever</a><ul class="internal"><li><a class="tocitem" href="#Introduction"><span>Introduction</span></a></li><li><a class="tocitem" href="#Setup"><span>Setup</span></a></li><li><a class="tocitem" href="#Part-1:-Ontology-—-Modeling-Lassa-Fever-Concepts"><span>Part 1: Ontology — Modeling Lassa Fever Concepts</span></a></li><li><a class="tocitem" href="#Part-2:-Loading-Surveillance-Data-via-Tabular-Mapping"><span>Part 2: Loading Surveillance Data via Tabular Mapping</span></a></li><li><a class="tocitem" href="#Part-3:-GeoSPARQL-—-Spatial-Modeling"><span>Part 3: GeoSPARQL — Spatial Modeling</span></a></li><li><a class="tocitem" href="#Part-4:-SPARQL-Queries-—-Epidemiological-Analysis"><span>Part 4: SPARQL Queries — Epidemiological Analysis</span></a></li><li><a class="tocitem" href="#Part-5:-SHACL-Validation"><span>Part 5: SHACL Validation</span></a></li><li><a class="tocitem" href="#Part-6:-N3-Reasoning-—-Risk-Classification"><span>Part 6: N3 Reasoning — Risk Classification</span></a></li><li><a class="tocitem" href="#Part-7:-Datalog-Reasoning-—-Transitive-Spatial-Risk"><span>Part 7: Datalog Reasoning — Transitive Spatial Risk</span></a></li><li><a class="tocitem" href="#Part-8:-ProbLog-—-Probabilistic-Zoonotic-Risk-Modeling"><span>Part 8: ProbLog — Probabilistic Zoonotic Risk Modeling</span></a></li><li><a class="tocitem" href="#Part-9:-Named-Graphs-—-Multi-Year-Dataset"><span>Part 9: Named Graphs — Multi-Year Dataset</span></a></li><li><a class="tocitem" href="#Part-10:-Serialization"><span>Part 10: Serialization</span></a></li><li><a class="tocitem" href="#Part-11:-Visualization"><span>Part 11: Visualization</span></a></li><li><a class="tocitem" href="#Summary"><span>Summary</span></a></li></ul></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Case Studies</a></li><li class="is-active"><a href>Lassa Fever</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Lassa Fever</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/cases/lassa-fever.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Lassa-Fever-Surveillance-in-Nigeria:-A-Knowledge-Graph-Approach"><a class="docs-heading-anchor" href="#Lassa-Fever-Surveillance-in-Nigeria:-A-Knowledge-Graph-Approach">Lassa Fever Surveillance in Nigeria: A Knowledge Graph Approach</a><a id="Lassa-Fever-Surveillance-in-Nigeria:-A-Knowledge-Graph-Approach-1"></a><a class="docs-heading-anchor-permalink" href="#Lassa-Fever-Surveillance-in-Nigeria:-A-Knowledge-Graph-Approach" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Introduction"><a class="docs-heading-anchor" href="#Introduction">Introduction</a><a id="Introduction-1"></a><a class="docs-heading-anchor-permalink" href="#Introduction" title="Permalink"></a></h2><p><a href="https://en.wikipedia.org/wiki/Lassa_fever">Lassa fever</a> is a viral hemorrhagic fever caused by the Lassa mammarenavirus, endemic to West Africa. Nigeria bears the highest burden, with seasonal outbreaks driven by human contact with the multimammate rat (<em>Mastomys natalensis</em>). The disease disproportionately affects certain states — particularly Edo, Ondo, and Ebonyi — and exhibits strong spatiotemporal patterns linked to climate and ecology.</p><p>This vignette demonstrates how RDFLib.jl can be used to model, integrate, and analyze real Lassa fever surveillance data from Nigeria. We build a knowledge graph combining:</p><ul><li><strong>Epidemiological surveillance</strong> data (weekly confirmed case counts by state, 2012–2026)</li><li><strong>Environmental covariates</strong> (vegetation index, temperature, precipitation)</li><li><strong>Spatial relationships</strong> between Nigerian states (adjacency, geopolitical zones)</li><li><strong>Domain knowledge</strong> about Lassa fever ecology and transmission</li></ul><p>We showcase a wide range of RDFLib.jl features: <strong>tabular mapping</strong> of real data to RDF, <strong>OWL ontology</strong> modeling, <strong>SPARQL</strong> queries including aggregation and subqueries, <strong>GeoSPARQL</strong> spatial analysis, <strong>SHACL</strong> validation, <strong>N3 reasoning</strong>, <strong>Datalog</strong> inference, <strong>ProbLog</strong> probabilistic reasoning, and <strong>graph visualization</strong>.</p><p>The surveillance data come from the <a href="https://github.com/SimonFrost-Arm/gam-frameworks">gam-frameworks</a> repository, which compiles Nigeria Centre for Disease Control (NCDC) Lassa fever reports in a format suitable for spatiotemporal modeling, following the approach of <a href="https://www.nature.com/articles/s41467-021-25910-y">Redding et al. (2021)</a>.</p><h3 id="Analysis-pipeline"><a class="docs-heading-anchor" href="#Analysis-pipeline">Analysis pipeline</a><a id="Analysis-pipeline-1"></a><a class="docs-heading-anchor-permalink" href="#Analysis-pipeline" title="Permalink"></a></h3><pre><code class="language-mermaid hljs">flowchart LR
+    A[&quot;📊 NCDC\nSurveillance\nData&quot;] --&gt; B[&quot;🔗 Tabular\nMapping&quot;]
+    B --&gt; C[&quot;🧠 Knowledge\nGraph&quot;]
+    D[&quot;🌍 Spatial\nAdjacency&quot;] --&gt; B
+    E[&quot;📖 OWL\nOntology&quot;] --&gt; C
+    C --&gt; F[&quot;🔍 SPARQL\nQueries&quot;]
+    C --&gt; G[&quot;📐 GeoSPARQL\nSpatial&quot;]
+    C --&gt; H[&quot;✅ SHACL\nValidation&quot;]
+    C --&gt; I[&quot;⚙️ N3/Datalog\nReasoning&quot;]
+    C --&gt; J[&quot;🎲 ProbLog\nProbabilistic&quot;]
+    F --&gt; K[&quot;📈 Epi\nInsights&quot;]
+    G --&gt; K
+    I --&gt; K
+    J --&gt; K
+
+    style A fill:#e1f5fe
+    style C fill:#fff3e0
+    style K fill:#e8f5e9</code></pre><h2 id="Setup"><a class="docs-heading-anchor" href="#Setup">Setup</a><a id="Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Setup" title="Permalink"></a></h2><pre><code class="language-julia hljs">using RDFLib
+using Dates
+
+# Helper to extract clean string from SPARQL result values
+val(x) = x isa Literal ? x.lexical : x isa URIRef ? string(x) : string(x)</code></pre><pre><code class="nohighlight hljs">val (generic function with 1 method)</code></pre><h2 id="Part-1:-Ontology-—-Modeling-Lassa-Fever-Concepts"><a class="docs-heading-anchor" href="#Part-1:-Ontology-—-Modeling-Lassa-Fever-Concepts">Part 1: Ontology — Modeling Lassa Fever Concepts</a><a id="Part-1:-Ontology-—-Modeling-Lassa-Fever-Concepts-1"></a><a class="docs-heading-anchor-permalink" href="#Part-1:-Ontology-—-Modeling-Lassa-Fever-Concepts" title="Permalink"></a></h2><p>We first define an OWL ontology capturing the domain concepts: states, geopolitical zones, surveillance observations, environmental conditions, and the Lassa fever pathogen itself.</p><pre><code class="language-julia hljs">g = RDFGraph()
+
+# Namespaces
+lassa = Namespace(&quot;http://example.org/lassa/&quot;)
+geo_ns = Namespace(&quot;http://www.opengis.net/ont/geosparql#&quot;)
+geof = Namespace(&quot;http://www.opengis.net/def/function/geosparql/&quot;)
+time_ns = Namespace(&quot;http://www.w3.org/2006/time#&quot;)
+sosa = Namespace(&quot;http://www.w3.org/ns/sosa/&quot;)
+qudt = Namespace(&quot;http://qudt.org/schema/qudt/&quot;)
+
+bind!(g, &quot;lassa&quot;, lassa)
+bind!(g, &quot;owl&quot;, OWL)
+bind!(g, &quot;rdfs&quot;, RDFS)
+bind!(g, &quot;xsd&quot;, XSD)
+bind!(g, &quot;geo&quot;, geo_ns)
+bind!(g, &quot;time&quot;, time_ns)
+bind!(g, &quot;sosa&quot;, sosa)
+bind!(g, &quot;qudt&quot;, qudt)
+bind!(g, &quot;skos&quot;, SKOS)</code></pre><pre><code class="nohighlight hljs">NamespaceManager(Dict(&quot;rdfs&quot; =&gt; &quot;http://www.w3.org/2000/01/rdf-schema#&quot;, &quot;owl&quot; =&gt; &quot;http://www.w3.org/2002/07/owl#&quot;, &quot;skos&quot; =&gt; &quot;http://www.w3.org/2004/02/skos/core#&quot;, &quot;geo&quot; =&gt; &quot;http://www.opengis.net/ont/geosparql#&quot;, &quot;time&quot; =&gt; &quot;http://www.w3.org/2006/time#&quot;, &quot;rdf&quot; =&gt; &quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#&quot;, &quot;qudt&quot; =&gt; &quot;http://qudt.org/schema/qudt/&quot;, &quot;xsd&quot; =&gt; &quot;http://www.w3.org/2001/XMLSchema#&quot;, &quot;lassa&quot; =&gt; &quot;http://example.org/lassa/&quot;, &quot;sosa&quot; =&gt; &quot;http://www.w3.org/ns/sosa/&quot;…), Dict(&quot;http://www.w3.org/2006/time#&quot; =&gt; &quot;time&quot;, &quot;http://qudt.org/schema/qudt/&quot; =&gt; &quot;qudt&quot;, &quot;http://www.w3.org/ns/sosa/&quot; =&gt; &quot;sosa&quot;, &quot;http://www.w3.org/2000/01/rdf-schema#&quot; =&gt; &quot;rdfs&quot;, &quot;http://www.opengis.net/ont/geosparql#&quot; =&gt; &quot;geo&quot;, &quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#&quot; =&gt; &quot;rdf&quot;, &quot;http://www.w3.org/2001/XMLSchema#&quot; =&gt; &quot;xsd&quot;, &quot;http://www.w3.org/2004/02/skos/core#&quot; =&gt; &quot;skos&quot;, &quot;http://example.org/lassa/&quot; =&gt; &quot;lassa&quot;, &quot;http://www.w3.org/2002/07/owl#&quot; =&gt; &quot;owl&quot;…), 0)</code></pre><h3 id="Class-hierarchy"><a class="docs-heading-anchor" href="#Class-hierarchy">Class hierarchy</a><a id="Class-hierarchy-1"></a><a class="docs-heading-anchor-permalink" href="#Class-hierarchy" title="Permalink"></a></h3><p>The ontology models key entities in the Lassa fever surveillance domain:</p><pre><code class="language-mermaid hljs">classDiagram
+    direction TB
+
+    class State {
+        adminCode : string
+        population : integer
+        hasGeometry()
+    }
+    class GeopoliticalZone {
+        label : string
+    }
+    class Observation {
+        cases : integer
+        epiWeek : integer
+        year : integer
+        date : date
+        caseRate : double
+    }
+    class EnvironmentalCondition {
+        evi : double
+        temperature : double
+        precipitation : double
+    }
+    class Pathogen {
+        family : string
+        caseFatalityRate : double
+    }
+    class ReservoirHost {
+        scientificName : string
+    }
+    class RiskLevel {
+        prefLabel : string
+        riskRank : integer
+    }
+
+    State --&gt; GeopoliticalZone : inZone
+    State --&gt; State : adjacentTo
+    Observation --&gt; State : observedIn
+    Observation --&gt; EnvironmentalCondition : hasCondition
+    Pathogen --&gt; ReservoirHost : hasReservoir
+    State --&gt; RiskLevel : hasRiskLevel
+
+    style State fill:#bbdefb
+    style Observation fill:#c8e6c9
+    style Pathogen fill:#ffccbc
+    style RiskLevel fill:#fff9c4</code></pre><pre><code class="language-julia hljs"># Top-level classes
+classes = [
+    &quot;State&quot;              =&gt; &quot;A Nigerian administrative state&quot;,
+    &quot;GeopoliticalZone&quot;   =&gt; &quot;One of Nigeria&#39;s six geopolitical zones&quot;,
+    &quot;Observation&quot;        =&gt; &quot;A surveillance observation for a state-week&quot;,
+    &quot;EnvironmentalCondition&quot; =&gt; &quot;Environmental covariates for a state-week&quot;,
+    &quot;Pathogen&quot;           =&gt; &quot;A disease-causing agent&quot;,
+    &quot;ReservoirHost&quot;      =&gt; &quot;An animal reservoir of a pathogen&quot;,
+    &quot;OutbreakSeason&quot;     =&gt; &quot;A seasonal Lassa fever outbreak period&quot;,
+    &quot;RiskLevel&quot;          =&gt; &quot;Categorical risk classification&quot;,
+]
+
+for (name, desc) in classes
+    add!(g, Triple(lassa(name), RDF.type, OWL(&quot;Class&quot;)))
+    add!(g, Triple(lassa(name), RDFS(&quot;label&quot;), Literal(name)))
+    add!(g, Triple(lassa(name), RDFS(&quot;comment&quot;), Literal(desc)))
+end
+
+# State is a subclass of geo:Feature (for GeoSPARQL)
+add!(g, Triple(lassa(&quot;State&quot;), RDFS(&quot;subClassOf&quot;), geo_ns(&quot;Feature&quot;)))
+
+# Observation is a subclass of sosa:Observation (sensor ontology pattern)
+add!(g, Triple(lassa(&quot;Observation&quot;), RDFS(&quot;subClassOf&quot;), sosa(&quot;Observation&quot;)))</code></pre><pre><code class="nohighlight hljs">RDFGraph (26 triples)</code></pre><h3 id="Object-and-datatype-properties"><a class="docs-heading-anchor" href="#Object-and-datatype-properties">Object and datatype properties</a><a id="Object-and-datatype-properties-1"></a><a class="docs-heading-anchor-permalink" href="#Object-and-datatype-properties" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Object properties
+obj_props = [
+    &quot;inZone&quot;        =&gt; (&quot;State&quot;, &quot;GeopoliticalZone&quot;, &quot;Links a state to its geopolitical zone&quot;),
+    &quot;adjacentTo&quot;    =&gt; (&quot;State&quot;, &quot;State&quot;, &quot;Spatial adjacency between states&quot;),
+    &quot;observedIn&quot;    =&gt; (&quot;Observation&quot;, &quot;State&quot;, &quot;State where observation was made&quot;),
+    &quot;hasSeason&quot;     =&gt; (&quot;Observation&quot;, &quot;OutbreakSeason&quot;, &quot;Links to outbreak season&quot;),
+    &quot;hasCondition&quot;  =&gt; (&quot;Observation&quot;, &quot;EnvironmentalCondition&quot;, &quot;Associated environmental data&quot;),
+    &quot;hasRiskLevel&quot;  =&gt; (&quot;State&quot;, &quot;RiskLevel&quot;, &quot;Current risk classification of a state&quot;),
+    &quot;hasReservoir&quot;  =&gt; (&quot;Pathogen&quot;, &quot;ReservoirHost&quot;, &quot;Natural reservoir of the pathogen&quot;),
+]
+
+for (name, (dom, rng, desc)) in obj_props
+    add!(g, Triple(lassa(name), RDF.type, OWL(&quot;ObjectProperty&quot;)))
+    add!(g, Triple(lassa(name), RDFS(&quot;domain&quot;), lassa(dom)))
+    add!(g, Triple(lassa(name), RDFS(&quot;range&quot;), lassa(rng)))
+    add!(g, Triple(lassa(name), RDFS(&quot;comment&quot;), Literal(desc)))
+end
+
+# adjacentTo is symmetric
+add!(g, Triple(lassa(&quot;adjacentTo&quot;), RDF.type, OWL(&quot;SymmetricProperty&quot;)))
+
+# Datatype properties
+data_props = [
+    (&quot;adminCode&quot;,      &quot;State&quot;,       &quot;xsd:string&quot;,  &quot;NCDC admin code&quot;),
+    (&quot;population&quot;,     &quot;State&quot;,       &quot;xsd:integer&quot;, &quot;Population estimate&quot;),
+    (&quot;cases&quot;,          &quot;Observation&quot;, &quot;xsd:integer&quot;, &quot;Confirmed Lassa fever cases&quot;),
+    (&quot;epiWeek&quot;,        &quot;Observation&quot;, &quot;xsd:integer&quot;, &quot;Epidemiological week number&quot;),
+    (&quot;year&quot;,           &quot;Observation&quot;, &quot;xsd:integer&quot;, &quot;Calendar year&quot;),
+    (&quot;date&quot;,           &quot;Observation&quot;, &quot;xsd:date&quot;,    &quot;Start date of observation window&quot;),
+    (&quot;evi&quot;,            &quot;EnvironmentalCondition&quot;, &quot;xsd:double&quot;, &quot;Enhanced Vegetation Index&quot;),
+    (&quot;temperature&quot;,    &quot;EnvironmentalCondition&quot;, &quot;xsd:double&quot;, &quot;Mean temperature (°C)&quot;),
+    (&quot;precipitation&quot;,  &quot;EnvironmentalCondition&quot;, &quot;xsd:double&quot;, &quot;Total precipitation (mm)&quot;),
+    (&quot;spi1&quot;,           &quot;EnvironmentalCondition&quot;, &quot;xsd:double&quot;, &quot;1-month Standardized Precipitation Index&quot;),
+    (&quot;caseRate&quot;,       &quot;Observation&quot;, &quot;xsd:double&quot;, &quot;Cases per 100,000 population&quot;),
+]
+
+for (name, dom, _, desc) in data_props
+    add!(g, Triple(lassa(name), RDF.type, OWL(&quot;DatatypeProperty&quot;)))
+    add!(g, Triple(lassa(name), RDFS(&quot;domain&quot;), lassa(dom)))
+    add!(g, Triple(lassa(name), RDFS(&quot;comment&quot;), Literal(desc)))
+end</code></pre><h3 id="Domain-knowledge-—-Lassa-fever-facts"><a class="docs-heading-anchor" href="#Domain-knowledge-—-Lassa-fever-facts">Domain knowledge — Lassa fever facts</a><a id="Domain-knowledge-—-Lassa-fever-facts-1"></a><a class="docs-heading-anchor-permalink" href="#Domain-knowledge-—-Lassa-fever-facts" title="Permalink"></a></h3><pre><code class="language-julia hljs"># The Lassa virus
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), RDF.type, lassa(&quot;Pathogen&quot;)))
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), RDFS(&quot;label&quot;), Literal(&quot;Lassa mammarenavirus&quot;)))
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), lassa(&quot;family&quot;), Literal(&quot;Arenaviridae&quot;)))
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), lassa(&quot;caseFatalityRate&quot;), Literal(0.01)))
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), lassa(&quot;hospitalCFR&quot;), Literal(0.15)))
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), SKOS(&quot;altLabel&quot;), Literal(&quot;LASV&quot;)))
+
+# Reservoir host
+add!(g, Triple(lassa(&quot;MastomysNatalensis&quot;), RDF.type, lassa(&quot;ReservoirHost&quot;)))
+add!(g, Triple(lassa(&quot;MastomysNatalensis&quot;), RDFS(&quot;label&quot;), Literal(&quot;Multimammate rat&quot;)))
+add!(g, Triple(lassa(&quot;MastomysNatalensis&quot;), lassa(&quot;scientificName&quot;), Literal(&quot;Mastomys natalensis&quot;)))
+add!(g, Triple(lassa(&quot;LassaVirus&quot;), lassa(&quot;hasReservoir&quot;), lassa(&quot;MastomysNatalensis&quot;)))
+
+# Risk levels (SKOS concept scheme)
+add!(g, Triple(lassa(&quot;RiskScheme&quot;), RDF.type, SKOS(&quot;ConceptScheme&quot;)))
+add!(g, Triple(lassa(&quot;RiskScheme&quot;), RDFS(&quot;label&quot;), Literal(&quot;Lassa Fever Risk Classification&quot;)))
+
+for (level, desc, rank) in [
+    (&quot;High&quot;,     &quot;Endemic state with frequent outbreaks&quot;, 3),
+    (&quot;Moderate&quot;, &quot;Sporadic cases, adjacent to endemic areas&quot;, 2),
+    (&quot;Low&quot;,      &quot;Rare or no reported cases&quot;, 1),
+]
+    uri = lassa(&quot;risk_$(lowercase(level))&quot;)
+    add!(g, Triple(uri, RDF.type, SKOS(&quot;Concept&quot;)))
+    add!(g, Triple(uri, RDF.type, lassa(&quot;RiskLevel&quot;)))
+    add!(g, Triple(uri, SKOS(&quot;inScheme&quot;), lassa(&quot;RiskScheme&quot;)))
+    add!(g, Triple(uri, SKOS(&quot;prefLabel&quot;), Literal(level)))
+    add!(g, Triple(uri, SKOS(&quot;definition&quot;), Literal(desc)))
+    add!(g, Triple(uri, lassa(&quot;riskRank&quot;), Literal(rank)))
+end
+
+# Narrower/broader relations
+add!(g, Triple(lassa(&quot;risk_high&quot;), SKOS(&quot;broader&quot;), lassa(&quot;risk_moderate&quot;)))
+add!(g, Triple(lassa(&quot;risk_moderate&quot;), SKOS(&quot;broader&quot;), lassa(&quot;risk_low&quot;)))
+
+println(&quot;Ontology triples: &quot;, length(g))</code></pre><pre><code class="nohighlight hljs">Ontology triples: 120</code></pre><p>The resulting knowledge graph encodes the domain model as an interconnected set of RDF triples:</p><pre><code class="language-mermaid hljs">graph LR
+    LV[&quot;🦠 lassa:LassaVirus&quot;]
+    MN[&quot;🐀 lassa:MastomysNatalensis&quot;]
+    Edo[&quot;📍 lassa:state_Edo&quot;]
+    Obs[&quot;📋 lassa:obs_Edo_2020_w5&quot;]
+    High[&quot;🔴 lassa:risk_high&quot;]
+    SZ[&quot;🗺️ lassa:zone_South_South&quot;]
+
+    LV -- &quot;hasReservoir&quot; --&gt; MN
+    LV -- &quot;rdf:type&quot; --&gt; Pat[&quot;lassa:Pathogen&quot;]
+    MN -- &quot;scientificName&quot; --&gt; SN[&quot;&#39;Mastomys natalensis&#39;&quot;]
+    Edo -- &quot;rdf:type&quot; --&gt; St[&quot;lassa:State&quot;]
+    Edo -- &quot;inZone&quot; --&gt; SZ
+    Edo -- &quot;hasRiskLevel&quot; --&gt; High
+    Obs -- &quot;observedIn&quot; --&gt; Edo
+    Obs -- &quot;cases&quot; --&gt; C[&quot;42&quot;]
+    Obs -- &quot;epiWeek&quot; --&gt; W[&quot;5&quot;]
+
+    style LV fill:#ffccbc
+    style MN fill:#d7ccc8
+    style Edo fill:#bbdefb
+    style Obs fill:#c8e6c9
+    style High fill:#ffcdd2</code></pre><h2 id="Part-2:-Loading-Surveillance-Data-via-Tabular-Mapping"><a class="docs-heading-anchor" href="#Part-2:-Loading-Surveillance-Data-via-Tabular-Mapping">Part 2: Loading Surveillance Data via Tabular Mapping</a><a id="Part-2:-Loading-Surveillance-Data-via-Tabular-Mapping-1"></a><a class="docs-heading-anchor-permalink" href="#Part-2:-Loading-Surveillance-Data-via-Tabular-Mapping" title="Permalink"></a></h2><p>We load the real surveillance data from the TSV file and map it into RDF. To keep the knowledge graph manageable for this vignette, we focus on a subset: the years 2018–2020, which include a major Lassa fever surge.</p><pre><code class="language-julia hljs"># Read the TSV data
+datapath = joinpath(@__DIR__, &quot;data&quot;, &quot;lassa_states.tsv&quot;)
+lines = readlines(datapath)
+header = split(lines[1], &#39;\t&#39;)
+# Clean quotes from header
+header = [replace(h, &quot;\&quot;&quot; =&gt; &quot;&quot;) for h in header]
+
+# Parse data rows
+data = []
+for line in lines[2:end]
+    fields = split(line, &#39;\t&#39;)
+    push!(data, fields)
+end
+
+println(&quot;Loaded $(length(data)) rows with $(length(header)) columns&quot;)
+println(&quot;Columns: &quot;, join(header[1:10], &quot;, &quot;), &quot; ...&quot;)</code></pre><pre><code class="nohighlight hljs">Loaded 27195 rows with 12 columns
+Columns: adminCode, date, cases, epiWeek, year, population, evi_0avg, temperature_0avg, precip_0avg, adminName ...</code></pre><h3 id="Map-states-and-zones"><a class="docs-heading-anchor" href="#Map-states-and-zones">Map states and zones</a><a id="Map-states-and-zones-1"></a><a class="docs-heading-anchor-permalink" href="#Map-states-and-zones" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Extract unique states with metadata
+states_seen = Dict{String,NamedTuple}()
+for row in data
+    code = replace(row[1], &quot;\&quot;&quot; =&gt; &quot;&quot;)
+    name = replace(row[10], &quot;\&quot;&quot; =&gt; &quot;&quot;)
+    region = replace(row[11], &quot;\&quot;&quot; =&gt; &quot;&quot;)
+    zone = replace(row[12], &quot;\&quot;&quot; =&gt; &quot;&quot;)
+    pop_f = tryparse(Float64, row[6])
+    pop_f === nothing &amp;&amp; continue
+    pop = round(Int, pop_f)
+    pop &lt;= 0 &amp;&amp; continue
+    if !haskey(states_seen, code)
+        states_seen[code] = (name=name, region=region, zone=zone, population=pop)
+    end
+end
+
+# Add states to graph
+for (code, info) in states_seen
+    state_uri = lassa(&quot;state_$(replace(info.name, &quot; &quot; =&gt; &quot;_&quot;))&quot;)
+    add!(g, Triple(state_uri, RDF.type, lassa(&quot;State&quot;)))
+    add!(g, Triple(state_uri, RDFS(&quot;label&quot;), Literal(info.name)))
+    add!(g, Triple(state_uri, lassa(&quot;adminCode&quot;), Literal(code)))
+    add!(g, Triple(state_uri, lassa(&quot;population&quot;), Literal(info.population)))
+    add!(g, Triple(state_uri, lassa(&quot;region&quot;), Literal(info.region)))
+
+    # Link to geopolitical zone
+    zone_uri = lassa(&quot;zone_$(replace(info.zone, &quot; &quot; =&gt; &quot;_&quot;))&quot;)
+    add!(g, Triple(zone_uri, RDF.type, lassa(&quot;GeopoliticalZone&quot;)))
+    add!(g, Triple(zone_uri, RDFS(&quot;label&quot;), Literal(info.zone)))
+    add!(g, Triple(state_uri, lassa(&quot;inZone&quot;), zone_uri))
+end
+
+println(&quot;States added: &quot;, length(states_seen))</code></pre><pre><code class="nohighlight hljs">States added: 37</code></pre><h3 id="Map-state-adjacency"><a class="docs-heading-anchor" href="#Map-state-adjacency">Map state adjacency</a><a id="Map-state-adjacency-1"></a><a class="docs-heading-anchor-permalink" href="#Map-state-adjacency" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Load adjacency data
+adjpath = joinpath(@__DIR__, &quot;data&quot;, &quot;states_nb.csv&quot;)
+adjlines = readlines(adjpath)
+
+let adj_count = 0
+    for line in adjlines[2:end]
+        parts = split(line, &#39;,&#39;)
+        if length(parts) &gt;= 2
+            s1 = strip(parts[1])
+            s2 = strip(parts[2])
+            uri1 = lassa(&quot;state_$(replace(s1, &quot; &quot; =&gt; &quot;_&quot;))&quot;)
+            uri2 = lassa(&quot;state_$(replace(s2, &quot; &quot; =&gt; &quot;_&quot;))&quot;)
+            add!(g, Triple(uri1, lassa(&quot;adjacentTo&quot;), uri2))
+            adj_count += 1
+        end
+    end
+    println(&quot;Adjacency relations added: &quot;, adj_count)
+end</code></pre><pre><code class="nohighlight hljs">Adjacency relations added: 172</code></pre><h3 id="Map-surveillance-observations-(2018–2020)"><a class="docs-heading-anchor" href="#Map-surveillance-observations-(2018–2020)">Map surveillance observations (2018–2020)</a><a id="Map-surveillance-observations-(2018–2020)-1"></a><a class="docs-heading-anchor-permalink" href="#Map-surveillance-observations-(2018–2020)" title="Permalink"></a></h3><p>We filter to three years for a focused analysis. Each row becomes an Observation with linked EnvironmentalCondition.</p><pre><code class="language-julia hljs">let obs_count = 0
+for row in data
+    year = tryparse(Int, row[5])
+    year === nothing &amp;&amp; continue
+    (year &lt; 2018 || year &gt; 2020) &amp;&amp; continue
+
+    name = replace(row[10], &quot;\&quot;&quot; =&gt; &quot;&quot;)
+    week = tryparse(Int, row[4])
+    week === nothing &amp;&amp; continue
+    cases_f = tryparse(Float64, row[3])
+    cases_f === nothing &amp;&amp; continue  # skip NA values
+    cases = round(Int, cases_f)
+    datestr = row[2]
+    pop_f = tryparse(Float64, row[6])
+    pop_f === nothing &amp;&amp; continue
+    pop = round(Int, pop_f)
+    pop &lt;= 0 &amp;&amp; continue
+
+    state_uri = lassa(&quot;state_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))&quot;)
+    obs_id = &quot;obs_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))_$(year)_w$(week)&quot;
+    obs_uri = lassa(obs_id)
+
+    add!(g, Triple(obs_uri, RDF.type, lassa(&quot;Observation&quot;)))
+    add!(g, Triple(obs_uri, lassa(&quot;observedIn&quot;), state_uri))
+    add!(g, Triple(obs_uri, lassa(&quot;cases&quot;), Literal(cases)))
+    add!(g, Triple(obs_uri, lassa(&quot;epiWeek&quot;), Literal(week)))
+    add!(g, Triple(obs_uri, lassa(&quot;year&quot;), Literal(year)))
+    add!(g, Triple(obs_uri, lassa(&quot;date&quot;), Literal(datestr, datatype=XSD(&quot;date&quot;))))
+    add!(g, Triple(obs_uri, lassa(&quot;caseRate&quot;),
+        Literal(round(cases / pop * 100_000, digits=4))))
+
+    # Environmental condition
+    evi = tryparse(Float64, row[7])
+    temp = tryparse(Float64, row[8])
+    precip = tryparse(Float64, row[9])
+
+    if evi !== nothing &amp;&amp; temp !== nothing
+        cond_uri = lassa(&quot;env_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))_$(year)_w$(week)&quot;)
+        add!(g, Triple(cond_uri, RDF.type, lassa(&quot;EnvironmentalCondition&quot;)))
+        add!(g, Triple(obs_uri, lassa(&quot;hasCondition&quot;), cond_uri))
+        add!(g, Triple(cond_uri, lassa(&quot;evi&quot;), Literal(round(evi, digits=4))))
+        add!(g, Triple(cond_uri, lassa(&quot;temperature&quot;), Literal(round(temp, digits=2))))
+        if precip !== nothing
+            add!(g, Triple(cond_uri, lassa(&quot;precipitation&quot;), Literal(round(precip, digits=2))))
+        end
+    end
+
+    obs_count += 1
+end
+
+println(&quot;Observations added: &quot;, obs_count)
+println(&quot;Total triples: &quot;, length(g))
+end  # let</code></pre><pre><code class="nohighlight hljs">Observations added: 5735
+Total triples: 69060</code></pre><h2 id="Part-3:-GeoSPARQL-—-Spatial-Modeling"><a class="docs-heading-anchor" href="#Part-3:-GeoSPARQL-—-Spatial-Modeling">Part 3: GeoSPARQL — Spatial Modeling</a><a id="Part-3:-GeoSPARQL-—-Spatial-Modeling-1"></a><a class="docs-heading-anchor-permalink" href="#Part-3:-GeoSPARQL-—-Spatial-Modeling" title="Permalink"></a></h2><p>We add simplified polygon geometries for key endemic states and their neighbors to demonstrate spatial querying. We use centroid points for all states and representative polygons for the Lassa fever belt.</p><pre><code class="language-julia hljs"># State centroid coordinates (approximate lat/lon)
+state_coords = Dict(
+    &quot;Edo&quot;     =&gt; (6.34, 5.62),
+    &quot;Ondo&quot;    =&gt; (7.09, 4.84),
+    &quot;Ebonyi&quot;  =&gt; (6.26, 8.09),
+    &quot;Bauchi&quot;  =&gt; (10.31, 9.84),
+    &quot;Plateau&quot; =&gt; (9.22, 9.52),
+    &quot;Taraba&quot;  =&gt; (7.87, 10.76),
+    &quot;Nasarawa&quot; =&gt; (8.54, 8.52),
+    &quot;Kogi&quot;    =&gt; (7.73, 6.74),
+    &quot;Enugu&quot;   =&gt; (6.44, 7.50),
+    &quot;Anambra&quot; =&gt; (6.22, 6.94),
+    &quot;Delta&quot;   =&gt; (5.53, 5.90),
+    &quot;Lagos&quot;   =&gt; (6.52, 3.47),
+    &quot;Kaduna&quot;  =&gt; (10.52, 7.43),
+    &quot;Ogun&quot;    =&gt; (7.16, 3.35),
+    &quot;Oyo&quot;     =&gt; (8.12, 3.42),
+    &quot;Benue&quot;   =&gt; (7.34, 8.77),
+    &quot;Abia&quot;    =&gt; (5.43, 7.49),
+    &quot;Imo&quot;     =&gt; (5.48, 7.03),
+    &quot;Rivers&quot;  =&gt; (4.84, 6.92),
+    &quot;Cross River&quot; =&gt; (5.87, 8.33),
+    &quot;Akwa Ibom&quot; =&gt; (5.01, 7.85),
+    &quot;Adamawa&quot; =&gt; (9.33, 12.40),
+    &quot;Borno&quot;   =&gt; (11.85, 13.15),
+    &quot;Gombe&quot;   =&gt; (10.29, 11.17),
+    &quot;Jigawa&quot;  =&gt; (12.23, 9.56),
+    &quot;Kano&quot;    =&gt; (12.00, 8.52),
+    &quot;Katsina&quot; =&gt; (13.00, 7.60),
+    &quot;Kebbi&quot;   =&gt; (12.45, 4.20),
+    &quot;Kwara&quot;   =&gt; (8.97, 4.54),
+    &quot;Niger&quot;   =&gt; (10.00, 5.96),
+    &quot;Sokoto&quot;  =&gt; (13.06, 5.24),
+    &quot;Yobe&quot;    =&gt; (12.29, 11.44),
+    &quot;Zamfara&quot; =&gt; (12.17, 6.66),
+    &quot;Bayelsa&quot; =&gt; (4.77, 6.07),
+    &quot;Ekiti&quot;   =&gt; (7.72, 5.31),
+    &quot;Osun&quot;    =&gt; (7.56, 4.52),
+    &quot;Federal Capital Territory&quot; =&gt; (9.06, 7.49),
+)
+
+for (name, (lat, lon)) in state_coords
+    state_uri = lassa(&quot;state_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))&quot;)
+    wkt = &quot;POINT($lon $lat)&quot;
+    wkt_lit = Literal(wkt, datatype=geo_ns(&quot;wktLiteral&quot;))
+    add!(g, Triple(state_uri, geo_ns(&quot;hasGeometry&quot;), lassa(&quot;geom_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))&quot;)))
+    add!(g, Triple(lassa(&quot;geom_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))&quot;), RDF.type, geo_ns(&quot;Geometry&quot;)))
+    add!(g, Triple(lassa(&quot;geom_$(replace(name, &quot; &quot; =&gt; &quot;_&quot;))&quot;), geo_ns(&quot;asWKT&quot;), wkt_lit))
+end
+
+# Add a bounding polygon for the &quot;Lassa belt&quot; (Edo-Ondo-Ebonyi endemic corridor)
+lassa_belt_wkt = &quot;POLYGON((4.5 5.0, 4.5 9.0, 8.5 9.0, 8.5 5.0, 4.5 5.0))&quot;
+add!(g, Triple(lassa(&quot;LassaBelt&quot;), RDF.type, geo_ns(&quot;Feature&quot;)))
+add!(g, Triple(lassa(&quot;LassaBelt&quot;), RDFS(&quot;label&quot;), Literal(&quot;Lassa Fever Endemic Belt&quot;)))
+belt_geom = lassa(&quot;geom_LassaBelt&quot;)
+add!(g, Triple(lassa(&quot;LassaBelt&quot;), geo_ns(&quot;hasGeometry&quot;), belt_geom))
+add!(g, Triple(belt_geom, RDF.type, geo_ns(&quot;Geometry&quot;)))
+add!(g, Triple(belt_geom, geo_ns(&quot;asWKT&quot;),
+    Literal(lassa_belt_wkt, datatype=geo_ns(&quot;wktLiteral&quot;))))
+
+println(&quot;Spatial data added. Total triples: &quot;, length(g))</code></pre><pre><code class="nohighlight hljs">Spatial data added. Total triples: 69176</code></pre><h3 id="GeoSPARQL:-Which-states-fall-within-the-endemic-belt?"><a class="docs-heading-anchor" href="#GeoSPARQL:-Which-states-fall-within-the-endemic-belt?">GeoSPARQL: Which states fall within the endemic belt?</a><a id="GeoSPARQL:-Which-states-fall-within-the-endemic-belt?-1"></a><a class="docs-heading-anchor-permalink" href="#GeoSPARQL:-Which-states-fall-within-the-endemic-belt?" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    PREFIX geo: &lt;http://www.opengis.net/ont/geosparql#&gt;
+    PREFIX geof: &lt;http://www.opengis.net/def/function/geosparql/&gt;
+
+    SELECT ?state ?name WHERE {
+        ?state a lassa:State ;
+               rdfs:label ?name ;
+               geo:hasGeometry ?geom .
+        ?geom geo:asWKT ?wkt .
+
+        lassa:LassaBelt geo:hasGeometry ?beltGeom .
+        ?beltGeom geo:asWKT ?beltWkt .
+
+        FILTER(geof:sfWithin(?wkt, ?beltWkt))
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+
+println(&quot;States within the Lassa belt:&quot;)
+for row in results
+    println(&quot;  • $(val(row[&quot;name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">States within the Lassa belt:
+  • Abia
+  • Akwa Ibom
+  • Anambra
+  • Cross River
+  • Delta
+  • Ebonyi
+  • Edo
+  • Ekiti
+  • Enugu
+  • Imo
+  • Kogi
+  • Kwara
+  • Ondo
+  • Osun</code></pre><h3 id="GeoSPARQL:-Distance-between-endemic-states"><a class="docs-heading-anchor" href="#GeoSPARQL:-Distance-between-endemic-states">GeoSPARQL: Distance between endemic states</a><a id="GeoSPARQL:-Distance-between-endemic-states-1"></a><a class="docs-heading-anchor-permalink" href="#GeoSPARQL:-Distance-between-endemic-states" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    PREFIX geo: &lt;http://www.opengis.net/ont/geosparql#&gt;
+    PREFIX geof: &lt;http://www.opengis.net/def/function/geosparql/&gt;
+
+    SELECT ?name1 ?name2 ?dist WHERE {
+        ?s1 a lassa:State ; rdfs:label ?name1 ; geo:hasGeometry/geo:asWKT ?wkt1 .
+        ?s2 a lassa:State ; rdfs:label ?name2 ; geo:hasGeometry/geo:asWKT ?wkt2 .
+
+        FILTER(?name1 = &quot;Edo&quot; || ?name1 = &quot;Ondo&quot; || ?name1 = &quot;Ebonyi&quot;)
+        FILTER(?name2 = &quot;Edo&quot; || ?name2 = &quot;Ondo&quot; || ?name2 = &quot;Ebonyi&quot;)
+        FILTER(STR(?name1) &lt; STR(?name2))
+
+        BIND(geof:distance(?wkt1, ?wkt2) AS ?dist)
+    }
+    ORDER BY ?dist
+&quot;&quot;&quot;)
+
+println(&quot;Distances between key endemic states (degrees):&quot;)
+for row in results
+    println(&quot;  $(val(row[&quot;name1&quot;])) ↔ $(val(row[&quot;name2&quot;])): $(round(parse(Float64, val(row[&quot;dist&quot;])), digits=2))°&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Distances between key endemic states (degrees):
+  Edo ↔ Ondo: 1.08°
+  Ebonyi ↔ Edo: 2.47°
+  Ebonyi ↔ Ondo: 3.35°</code></pre><h2 id="Part-4:-SPARQL-Queries-—-Epidemiological-Analysis"><a class="docs-heading-anchor" href="#Part-4:-SPARQL-Queries-—-Epidemiological-Analysis">Part 4: SPARQL Queries — Epidemiological Analysis</a><a id="Part-4:-SPARQL-Queries-—-Epidemiological-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Part-4:-SPARQL-Queries-—-Epidemiological-Analysis" title="Permalink"></a></h2><h3 id="Total-cases-by-state-(2018–2020)"><a class="docs-heading-anchor" href="#Total-cases-by-state-(2018–2020)">Total cases by state (2018–2020)</a><a id="Total-cases-by-state-(2018–2020)-1"></a><a class="docs-heading-anchor-permalink" href="#Total-cases-by-state-(2018–2020)" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?name (SUM(?cases) AS ?totalCases) WHERE {
+        ?obs a lassa:Observation ;
+             lassa:observedIn ?state ;
+             lassa:cases ?cases .
+        ?state rdfs:label ?name .
+    }
+    GROUP BY ?name
+    HAVING (SUM(?cases) &gt; 10)
+    ORDER BY DESC(?totalCases)
+    LIMIT 15
+&quot;&quot;&quot;)
+
+println(&quot;Top 15 states by total confirmed cases (2018–2020):&quot;)
+println(&quot;-&quot;^40)
+for row in results
+    println(&quot;  $(rpad(val(row[&quot;name&quot;]), 25)) $(val(row[&quot;totalCases&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Top 15 states by total confirmed cases (2018–2020):
+----------------------------------------
+  Edo                       970
+  Ondo                      853
+  Ebonyi                    186
+  Bauchi                    132
+  Taraba                    121
+  Plateau                   89
+  Kogi                      56
+  Delta                     34
+  Nasarawa                  20
+  Benue                     18
+  Kaduna                    15
+  Rivers                    14
+  Gombe                     14
+  Enugu                     13
+  Abia                      12</code></pre><h3 id="Seasonal-pattern-—-cases-by-epi-week"><a class="docs-heading-anchor" href="#Seasonal-pattern-—-cases-by-epi-week">Seasonal pattern — cases by epi week</a><a id="Seasonal-pattern-—-cases-by-epi-week-1"></a><a class="docs-heading-anchor-permalink" href="#Seasonal-pattern-—-cases-by-epi-week" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+
+    SELECT ?week (SUM(?cases) AS ?totalCases) WHERE {
+        ?obs a lassa:Observation ;
+             lassa:epiWeek ?week ;
+             lassa:cases ?cases .
+    }
+    GROUP BY ?week
+    ORDER BY ?week
+&quot;&quot;&quot;)
+
+println(&quot;Weekly cases (all states, 2018–2020):&quot;)
+println(&quot;Week  Cases&quot;)
+println(&quot;-&quot;^20)
+for row in results
+    w = parse(Int, val(row[&quot;week&quot;]))
+    c = parse(Int, val(row[&quot;totalCases&quot;]))
+    bar = repeat(&quot;█&quot;, min(c ÷ 2, 50))
+    println(&quot;  $(lpad(string(w), 2))    $(lpad(string(c), 4))  $bar&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Weekly cases (all states, 2018–2020):
+Week  Cases
+--------------------
+   1      46  ███████████████████████
+   2     132  ██████████████████████████████████████████████████
+   3     192  ██████████████████████████████████████████████████
+   4     226  ██████████████████████████████████████████████████
+   5     213  ██████████████████████████████████████████████████
+   6     211  ██████████████████████████████████████████████████
+   7     210  ██████████████████████████████████████████████████
+   8     158  ██████████████████████████████████████████████████
+   9     142  ██████████████████████████████████████████████████
+  10     143  ██████████████████████████████████████████████████
+  11      87  ███████████████████████████████████████████
+  12      57  ████████████████████████████
+  13      46  ███████████████████████
+  14      29  ██████████████
+  15      18  █████████
+  16      14  ███████
+  17      20  ██████████
+  18      17  ████████
+  19      18  █████████
+  20      15  ███████
+  21      13  ██████
+  22      10  █████
+  23      15  ███████
+  24      13  ██████
+  25      19  █████████
+  26      11  █████
+  27      21  ██████████
+  28      19  █████████
+  29      19  █████████
+  30      14  ███████
+  31      24  ████████████
+  32      14  ███████
+  33       6  ███
+  34      22  ███████████
+  35      21  ██████████
+  36      21  ██████████
+  37       7  ███
+  38       8  ████
+  39      24  ████████████
+  40      20  ██████████
+  41      23  ███████████
+  42      29  ██████████████
+  43      15  ███████
+  44      27  █████████████
+  45      20  ██████████
+  46      18  █████████
+  47      27  █████████████
+  48      24  ████████████
+  49      24  ████████████
+  50      21  ██████████
+  51      36  ██████████████████
+  52      54  ███████████████████████████</code></pre><h3 id="Year-over-year-comparison-for-Edo-state"><a class="docs-heading-anchor" href="#Year-over-year-comparison-for-Edo-state">Year-over-year comparison for Edo state</a><a id="Year-over-year-comparison-for-Edo-state-1"></a><a class="docs-heading-anchor-permalink" href="#Year-over-year-comparison-for-Edo-state" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?year (SUM(?cases) AS ?total) (MAX(?cases) AS ?peakWeek)
+           (AVG(?rate) AS ?avgRate) WHERE {
+        ?obs a lassa:Observation ;
+             lassa:observedIn ?state ;
+             lassa:year ?year ;
+             lassa:cases ?cases ;
+             lassa:caseRate ?rate .
+        ?state rdfs:label &quot;Edo&quot; .
+    }
+    GROUP BY ?year
+    ORDER BY ?year
+&quot;&quot;&quot;)
+
+println(&quot;Edo State — Year-over-Year:&quot;)
+println(&quot;Year  Total  Peak  Avg Rate/100k&quot;)
+println(&quot;-&quot;^45)
+for row in results
+    yr = val(row[&quot;year&quot;])
+    tot = val(row[&quot;total&quot;])
+    pk = val(row[&quot;peakWeek&quot;])
+    rate = round(parse(Float64, val(row[&quot;avgRate&quot;])), digits=3)
+    println(&quot;  $yr    $(lpad(tot, 4))   $(lpad(pk, 3))     $rate&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Edo State — Year-over-Year:
+Year  Total  Peak  Avg Rate/100k
+---------------------------------------------
+  2018     283    35     0.122
+  2019     299    34     0.131
+  2020     394    41     0.154</code></pre><h3 id="SPARQL-subquery:-States-with-above-average-case-rates"><a class="docs-heading-anchor" href="#SPARQL-subquery:-States-with-above-average-case-rates">SPARQL subquery: States with above-average case rates</a><a id="SPARQL-subquery:-States-with-above-average-case-rates-1"></a><a class="docs-heading-anchor-permalink" href="#SPARQL-subquery:-States-with-above-average-case-rates" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?name ?stateTotal ?avg WHERE {
+        {
+            SELECT (AVG(?total) AS ?avg) WHERE {
+                {
+                    SELECT ?state (SUM(?cases) AS ?total) WHERE {
+                        ?obs a lassa:Observation ;
+                             lassa:observedIn ?state ;
+                             lassa:cases ?cases .
+                    }
+                    GROUP BY ?state
+                }
+            }
+        }
+        {
+            SELECT ?state (SUM(?cases) AS ?stateTotal) WHERE {
+                ?obs a lassa:Observation ;
+                     lassa:observedIn ?state ;
+                     lassa:cases ?cases .
+            }
+            GROUP BY ?state
+        }
+        ?state rdfs:label ?name .
+        FILTER(?stateTotal &gt; ?avg)
+    }
+    ORDER BY DESC(?stateTotal)
+&quot;&quot;&quot;)
+
+println(&quot;States with above-average total cases:&quot;)
+if !isempty(results)
+    avg = round(parse(Float64, val(results[1][&quot;avg&quot;])), digits=1)
+    println(&quot;(National average: $avg cases)&quot;)
+    for row in results
+        println(&quot;  $(rpad(val(row[&quot;name&quot;]), 25)) $(val(row[&quot;stateTotal&quot;]))&quot;)
+    end
+end</code></pre><pre><code class="nohighlight hljs">States with above-average total cases:
+(National average: 71.2 cases)
+  Edo                       970
+  Ondo                      853
+  Ebonyi                    186
+  Bauchi                    132
+  Taraba                    121
+  Plateau                   89</code></pre><h3 id="Environmental-correlations-—-high-case-weeks"><a class="docs-heading-anchor" href="#Environmental-correlations-—-high-case-weeks">Environmental correlations — high-case weeks</a><a id="Environmental-correlations-—-high-case-weeks-1"></a><a class="docs-heading-anchor-permalink" href="#Environmental-correlations-—-high-case-weeks" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?name ?week ?cases ?temp ?evi ?precip WHERE {
+        ?obs a lassa:Observation ;
+             lassa:observedIn ?state ;
+             lassa:epiWeek ?week ;
+             lassa:year 2020 ;
+             lassa:cases ?cases ;
+             lassa:hasCondition ?cond .
+        ?state rdfs:label ?name .
+        ?cond lassa:temperature ?temp ;
+              lassa:evi ?evi ;
+              lassa:precipitation ?precip .
+        FILTER(?cases &gt; 15)
+    }
+    ORDER BY DESC(?cases)
+    LIMIT 10
+&quot;&quot;&quot;)
+
+println(&quot;High-case weeks (2020) with environmental conditions:&quot;)
+println(&quot;State          Wk  Cases  Temp°C   EVI   Precip&quot;)
+println(&quot;-&quot;^55)
+for row in results
+    n = rpad(val(row[&quot;name&quot;]), 14)
+    w = lpad(val(row[&quot;week&quot;]), 2)
+    c = lpad(val(row[&quot;cases&quot;]), 4)
+    t = lpad(string(round(parse(Float64, val(row[&quot;temp&quot;])), digits=1)), 5)
+    e = lpad(string(round(parse(Float64, val(row[&quot;evi&quot;])), digits=3)), 6)
+    p = lpad(string(round(parse(Float64, val(row[&quot;precip&quot;])), digits=1)), 6)
+    println(&quot;  $n  $w   $c   $t  $e  $p&quot;)
+end</code></pre><pre><code class="nohighlight hljs">High-case weeks (2020) with environmental conditions:
+State          Wk  Cases  Temp°C   EVI   Precip
+-------------------------------------------------------
+  Ondo             3     42    28.8   0.411     0.4
+  Edo              7     41    30.2   0.324     0.3
+  Edo              5     40    29.9   0.359     0.3
+  Edo              6     39    30.0   0.341     0.3
+  Edo              4     34    29.8   0.378     0.4
+  Ondo             8     34    29.2   0.335     0.5
+  Edo              3     33    29.7   0.396     0.4
+  Ondo            10     33    29.4   0.317     1.0
+  Ondo             2     32    28.8   0.425     0.6
+  Ondo             7     31    29.1   0.348     0.4</code></pre><h2 id="Part-5:-SHACL-Validation"><a class="docs-heading-anchor" href="#Part-5:-SHACL-Validation">Part 5: SHACL Validation</a><a id="Part-5:-SHACL-Validation-1"></a><a class="docs-heading-anchor-permalink" href="#Part-5:-SHACL-Validation" title="Permalink"></a></h2><p>We define shapes to validate our surveillance data, ensuring data quality.</p><pre><code class="language-julia hljs">shapes_ttl = &quot;&quot;&quot;
+@prefix sh: &lt;http://www.w3.org/ns/shacl#&gt; .
+@prefix lassa: &lt;http://example.org/lassa/&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+lassa:ObservationShape a sh:NodeShape ;
+    sh:targetClass lassa:Observation ;
+    sh:property [
+        sh:path lassa:cases ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:name &quot;case count&quot; ;
+        sh:message &quot;Observation must have exactly one non-negative integer case count&quot;
+    ] ;
+    sh:property [
+        sh:path lassa:observedIn ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class lassa:State ;
+        sh:name &quot;observed state&quot; ;
+        sh:message &quot;Observation must be linked to exactly one State&quot;
+    ] ;
+    sh:property [
+        sh:path lassa:epiWeek ;
+        sh:minCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 1 ;
+        sh:maxInclusive 53 ;
+        sh:name &quot;epi week&quot; ;
+        sh:message &quot;Epi week must be 1-53&quot;
+    ] ;
+    sh:property [
+        sh:path lassa:year ;
+        sh:minCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 2000 ;
+        sh:name &quot;year&quot; ;
+        sh:message &quot;Year must be &gt;= 2000&quot;
+    ] .
+
+lassa:StateShape a sh:NodeShape ;
+    sh:targetClass lassa:State ;
+    sh:property [
+        sh:path lassa:adminCode ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:pattern &quot;^NG[0-9]+&quot; ;
+        sh:name &quot;admin code&quot; ;
+        sh:message &quot;State must have an admin code matching NG###&quot;
+    ] ;
+    sh:property [
+        sh:path lassa:population ;
+        sh:minCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minExclusive 0 ;
+        sh:name &quot;population&quot; ;
+        sh:message &quot;State must have a positive population&quot;
+    ] .
+&quot;&quot;&quot;
+
+shapes = RDFGraph()
+parse_rdf!(shapes, IOBuffer(shapes_ttl), TurtleFormat())
+report = validate(g, shapes)
+println(&quot;SHACL Validation: &quot;, report.conforms ? &quot;✓ All constraints satisfied&quot; : &quot;✗ Constraint violations found&quot;)
+println(&quot;  Violations: &quot;, length(report.results))
+if !report.conforms
+    for r in report.results[1:min(5, end)]
+        println(&quot;  - $(r.message) [$(r.focus_node)]&quot;)
+    end
+end</code></pre><pre><code class="nohighlight hljs">SHACL Validation: ✗ Constraint violations found
+  Violations: 5
+  - Expected at most 1 values for http://example.org/lassa/cases, got 2 [URIRef(&quot;http://example.org/lassa/obs_Plateau_2020_w52&quot;)]
+  - Expected at most 1 values for http://example.org/lassa/cases, got 2 [URIRef(&quot;http://example.org/lassa/obs_Ondo_2020_w52&quot;)]
+  - Expected at most 1 values for http://example.org/lassa/cases, got 2 [URIRef(&quot;http://example.org/lassa/obs_Ebonyi_2020_w52&quot;)]
+  - Expected at most 1 values for http://example.org/lassa/cases, got 2 [URIRef(&quot;http://example.org/lassa/obs_Nasarawa_2020_w52&quot;)]
+  - Expected at most 1 values for http://example.org/lassa/cases, got 2 [URIRef(&quot;http://example.org/lassa/obs_Edo_2020_w52&quot;)]</code></pre><p>The SHACL validator caught real data quality issues — some observations for epidemiological week 52 have duplicate case count entries (likely because the original data spans a year boundary). This demonstrates how SHACL shapes can detect inconsistencies in real-world data pipelines.</p><h2 id="Part-6:-N3-Reasoning-—-Risk-Classification"><a class="docs-heading-anchor" href="#Part-6:-N3-Reasoning-—-Risk-Classification">Part 6: N3 Reasoning — Risk Classification</a><a id="Part-6:-N3-Reasoning-—-Risk-Classification-1"></a><a class="docs-heading-anchor-permalink" href="#Part-6:-N3-Reasoning-—-Risk-Classification" title="Permalink"></a></h2><p>We use N3 rules to automatically classify states by Lassa fever risk based on their cumulative case counts. Because Lassa fever is a zoonotic disease (reservoir: <em>Mastomys natalensis</em>), adjacency to high-burden states suggests shared ecological conditions that favor the rodent host, rather than inter-state disease transmission.</p><pre><code class="language-mermaid hljs">flowchart TD
+    S[&quot;State with\ncumulative cases&quot;] --&gt; C1{&quot;cases &gt; 100?&quot;}
+    C1 -- Yes --&gt; H[&quot;🔴 High Risk\n(Endemic)&quot;]
+    C1 -- No --&gt; C2{&quot;cases &gt; 10?&quot;}
+    C2 -- Yes --&gt; M[&quot;🟠 Moderate Risk\n(Sporadic)&quot;]
+    C2 -- No --&gt; L[&quot;🟢 Low Risk\n(Rare)&quot;]
+    L --&gt; C3{&quot;Adjacent to\nhigh-risk state?&quot;}
+    C3 -- Yes --&gt; P[&quot;⚠️ Elevated\nProximity Risk&quot;]
+    C3 -- No --&gt; Safe[&quot;✅ Low\nBaseline Risk&quot;]
+
+    style H fill:#ffcdd2
+    style M fill:#ffe0b2
+    style L fill:#c8e6c9
+    style P fill:#fff9c4
+    style Safe fill:#e8f5e9</code></pre><h3 id="Risk-classification-rules"><a class="docs-heading-anchor" href="#Risk-classification-rules">Risk classification rules</a><a id="Risk-classification-rules-1"></a><a class="docs-heading-anchor-permalink" href="#Risk-classification-rules" title="Permalink"></a></h3><pre><code class="language-julia hljs">n3_rules = &quot;&quot;&quot;
+@prefix lassa: &lt;http://example.org/lassa/&gt; .
+@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+@prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+# Rule 1: High-risk states — cumulative cases &gt; 100
+{
+    ?state a lassa:State .
+    ?state lassa:cumulativeCases ?total .
+    ?total math:greaterThan 100 .
+} =&gt; {
+    ?state lassa:hasRiskLevel lassa:risk_high .
+    ?state lassa:riskReason &quot;Cumulative cases exceed 100 (endemic)&quot; .
+} .
+
+# Rule 2: Moderate-risk — cases &gt; 10 but ≤ 100
+{
+    ?state a lassa:State .
+    ?state lassa:cumulativeCases ?total .
+    ?total math:greaterThan 10 .
+    ?total math:notGreaterThan 100 .
+} =&gt; {
+    ?state lassa:hasRiskLevel lassa:risk_moderate .
+    ?state lassa:riskReason &quot;Sporadic cases (11-100)&quot; .
+} .
+
+# Rule 3: Low-risk — cases ≤ 10
+{
+    ?state a lassa:State .
+    ?state lassa:cumulativeCases ?total .
+    ?total math:notGreaterThan 10 .
+} =&gt; {
+    ?state lassa:hasRiskLevel lassa:risk_low .
+    ?state lassa:riskReason &quot;Rare cases (≤10)&quot; .
+} .
+
+# Rule 4: Spatial proximity risk — adjacent to a high-risk state implies shared
+# ecological conditions (rodent habitat, climate) that may elevate zoonotic risk
+{
+    ?state a lassa:State .
+    ?state lassa:hasRiskLevel lassa:risk_low .
+    ?state lassa:adjacentTo ?neighbor .
+    ?neighbor lassa:hasRiskLevel lassa:risk_high .
+    ?neighbor rdfs:label ?nname .
+} =&gt; {
+    ?state lassa:proximityRisk &quot;true&quot; .
+    ?state lassa:proximitySource ?neighbor .
+} .
+&quot;&quot;&quot;</code></pre><pre><code class="nohighlight hljs">&quot;@prefix lassa: &lt;http://example.org/lassa/&gt; .\n@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .\n@prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .\n@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .\n\n# Rule 1: High-risk states — cumulative cases &gt; 100\n{\n    ?state a &quot; ⋯ 966 bytes ⋯ &quot;sa:State .\n    ?state lassa:hasRiskLevel lassa:risk_low .\n    ?state lassa:adjacentTo ?neighbor .\n    ?neighbor lassa:hasRiskLevel lassa:risk_high .\n    ?neighbor rdfs:label ?nname .\n} =&gt; {\n    ?state lassa:proximityRisk \&quot;true\&quot; .\n    ?state lassa:proximitySource ?neighbor .\n} .\n&quot;</code></pre><h3 id="Pre-compute-cumulative-cases-for-reasoning"><a class="docs-heading-anchor" href="#Pre-compute-cumulative-cases-for-reasoning">Pre-compute cumulative cases for reasoning</a><a id="Pre-compute-cumulative-cases-for-reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#Pre-compute-cumulative-cases-for-reasoning" title="Permalink"></a></h3><pre><code class="language-julia hljs"># First, compute cumulative cases per state via SPARQL and add to graph
+cum_results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    SELECT ?state (SUM(?cases) AS ?total) WHERE {
+        ?obs a lassa:Observation ;
+             lassa:observedIn ?state ;
+             lassa:cases ?cases .
+    }
+    GROUP BY ?state
+&quot;&quot;&quot;)
+
+for row in cum_results
+    state = row[&quot;state&quot;]
+    total = parse(Int, val(row[&quot;total&quot;]))
+    add!(g, Triple(URIRef(val(state)), lassa(&quot;cumulativeCases&quot;), Literal(total)))
+end
+
+println(&quot;Added cumulative case counts for $(length(cum_results)) states&quot;)</code></pre><pre><code class="nohighlight hljs">Added cumulative case counts for 37 states</code></pre><h3 id="Apply-N3-reasoning"><a class="docs-heading-anchor" href="#Apply-N3-reasoning">Apply N3 reasoning</a><a id="Apply-N3-reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#Apply-N3-reasoning" title="Permalink"></a></h3><pre><code class="language-julia hljs">n3_graph = RDFGraph()
+parse_n3!(n3_graph, n3_rules)
+inferred = reason(g; rules=n3_graph)
+
+println(&quot;N3 Reasoning produced $(length(inferred)) inferred triples&quot;)
+
+# Merge inferred triples
+for t in triples(inferred)
+    add!(g, t)
+end</code></pre><pre><code class="nohighlight hljs">N3 Reasoning produced 69305 inferred triples</code></pre><h3 id="Query-risk-classifications"><a class="docs-heading-anchor" href="#Query-risk-classifications">Query risk classifications</a><a id="Query-risk-classifications-1"></a><a class="docs-heading-anchor-permalink" href="#Query-risk-classifications" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    PREFIX skos: &lt;http://www.w3.org/2004/02/skos/core#&gt;
+
+    SELECT ?name ?riskLabel ?reason ?cumCases WHERE {
+        ?state a lassa:State ;
+               rdfs:label ?name ;
+               lassa:hasRiskLevel ?risk ;
+               lassa:riskReason ?reason ;
+               lassa:cumulativeCases ?cumCases .
+        ?risk skos:prefLabel ?riskLabel .
+    }
+    ORDER BY DESC(?cumCases)
+&quot;&quot;&quot;)
+
+println(&quot;State Risk Classifications (N3 inferred):&quot;)
+println(&quot;-&quot;^65)
+for row in results
+    n = rpad(val(row[&quot;name&quot;]), 20)
+    r = rpad(val(row[&quot;riskLabel&quot;]), 10)
+    c = lpad(val(row[&quot;cumCases&quot;]), 5)
+    reason = val(row[&quot;reason&quot;])
+    println(&quot;  $n $r $c cases  ($reason)&quot;)
+end</code></pre><pre><code class="nohighlight hljs">State Risk Classifications (N3 inferred):
+-----------------------------------------------------------------
+  Edo                  High         970 cases  (Cumulative cases exceed 100 (endemic))
+  Ondo                 High         853 cases  (Cumulative cases exceed 100 (endemic))
+  Ebonyi               High         186 cases  (Cumulative cases exceed 100 (endemic))
+  Bauchi               High         132 cases  (Cumulative cases exceed 100 (endemic))
+  Taraba               High         121 cases  (Cumulative cases exceed 100 (endemic))
+  Plateau              Moderate      89 cases  (Sporadic cases (11-100))
+  Kogi                 Moderate      56 cases  (Sporadic cases (11-100))
+  Delta                Moderate      34 cases  (Sporadic cases (11-100))
+  Nasarawa             Moderate      20 cases  (Sporadic cases (11-100))
+  Benue                Moderate      18 cases  (Sporadic cases (11-100))
+  Kaduna               Moderate      15 cases  (Sporadic cases (11-100))
+  Gombe                Moderate      14 cases  (Sporadic cases (11-100))
+  Rivers               Moderate      14 cases  (Sporadic cases (11-100))
+  Enugu                Moderate      13 cases  (Sporadic cases (11-100))
+  Abia                 Moderate      12 cases  (Sporadic cases (11-100))
+  Kebbi                Moderate      11 cases  (Sporadic cases (11-100))
+  Adamawa              Low           10 cases  (Rare cases (≤10))
+  Anambra              Low            9 cases  (Rare cases (≤10))
+  Kano                 Low            8 cases  (Rare cases (≤10))
+  Federal Capital Territory Low            7 cases  (Rare cases (≤10))
+  Sokoto               Low            6 cases  (Rare cases (≤10))
+  Katsina              Low            6 cases  (Rare cases (≤10))
+  Imo                  Low            5 cases  (Rare cases (≤10))
+  Borno                Low            5 cases  (Rare cases (≤10))
+  Osun                 Low            4 cases  (Rare cases (≤10))
+  Lagos                Low            4 cases  (Rare cases (≤10))
+  Kwara                Low            4 cases  (Rare cases (≤10))
+  Ekiti                Low            2 cases  (Rare cases (≤10))
+  Ogun                 Low            2 cases  (Rare cases (≤10))
+  Oyo                  Low            2 cases  (Rare cases (≤10))
+  Zamfara              Low            1 cases  (Rare cases (≤10))
+  Jigawa               Low            0 cases  (Rare cases (≤10))
+  Bayelsa              Low            0 cases  (Rare cases (≤10))
+  Niger                Low            0 cases  (Rare cases (≤10))
+  Akwa Ibom            Low            0 cases  (Rare cases (≤10))
+  Yobe                 Low            0 cases  (Rare cases (≤10))
+  Cross River          Low            0 cases  (Rare cases (≤10))</code></pre><h3 id="Spatial-proximity-risk"><a class="docs-heading-anchor" href="#Spatial-proximity-risk">Spatial proximity risk</a><a id="Spatial-proximity-risk-1"></a><a class="docs-heading-anchor-permalink" href="#Spatial-proximity-risk" title="Permalink"></a></h3><p>States classified as low-risk but adjacent to high-burden states may share similar rodent habitat and climate conditions, elevating their zoonotic risk.</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?name ?sourceName WHERE {
+        ?state a lassa:State ;
+               rdfs:label ?name ;
+               lassa:proximityRisk &quot;true&quot; ;
+               lassa:proximitySource ?source .
+        ?source rdfs:label ?sourceName .
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+
+println(&quot;\nLow-risk states adjacent to endemic areas (shared ecological conditions):&quot;)
+for row in results
+    println(&quot;  $(val(row[&quot;name&quot;])) ← neighbors $(val(row[&quot;sourceName&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Low-risk states adjacent to endemic areas (shared ecological conditions):
+  Adamawa ← neighbors Taraba
+  Anambra ← neighbors Edo
+  Cross River ← neighbors Ebonyi
+  Ekiti ← neighbors Ondo
+  Jigawa ← neighbors Bauchi
+  Kano ← neighbors Bauchi
+  Ogun ← neighbors Ondo
+  Osun ← neighbors Ondo
+  Yobe ← neighbors Bauchi</code></pre><h2 id="Part-7:-Datalog-Reasoning-—-Transitive-Spatial-Risk"><a class="docs-heading-anchor" href="#Part-7:-Datalog-Reasoning-—-Transitive-Spatial-Risk">Part 7: Datalog Reasoning — Transitive Spatial Risk</a><a id="Part-7:-Datalog-Reasoning-—-Transitive-Spatial-Risk-1"></a><a class="docs-heading-anchor-permalink" href="#Part-7:-Datalog-Reasoning-—-Transitive-Spatial-Risk" title="Permalink"></a></h2><p>Datalog’s recursive rules let us propagate risk transitively through adjacency chains. Since <em>Mastomys natalensis</em> populations are not bounded by administrative borders, states connected to endemic areas through chains of neighbors may share contiguous rodent habitat and thus elevated zoonotic risk.</p><pre><code class="language-mermaid hljs">graph LR
+    Edo[&quot;🔴 Edo\n(endemic)&quot;] --- Delta[&quot;Delta&quot;]
+    Edo --- Kogi[&quot;Kogi&quot;]
+    Edo --- Anambra[&quot;Anambra&quot;]
+    Delta --- Bayelsa[&quot;Bayelsa&quot;]
+    Kogi --- Kwara[&quot;Kwara&quot;]
+    Kogi --- Niger[&quot;Niger&quot;]
+    Anambra --- Enugu[&quot;Enugu&quot;]
+    Niger --- Kaduna[&quot;Kaduna&quot;]
+
+    Ondo[&quot;🔴 Ondo\n(endemic)&quot;] --- Ekiti[&quot;Ekiti&quot;]
+    Ondo --- Ogun[&quot;Ogun&quot;]
+    Ondo --- Osun[&quot;Osun&quot;]
+
+    Ebonyi[&quot;🔴 Ebonyi\n(endemic)&quot;] --- Benue[&quot;Benue&quot;]
+    Ebonyi --- CrossRiver[&quot;Cross River&quot;]
+
+    style Edo fill:#ffcdd2
+    style Ondo fill:#ffcdd2
+    style Ebonyi fill:#ffcdd2
+    style Delta fill:#ffe0b2
+    style Kogi fill:#ffe0b2
+    style Anambra fill:#ffe0b2
+    style Ekiti fill:#ffe0b2
+    style Ogun fill:#ffe0b2
+    style Osun fill:#ffe0b2
+    style Benue fill:#ffe0b2
+    style CrossRiver fill:#ffe0b2
+    style Enugu fill:#ffe0b2
+    style Bayelsa fill:#fff9c4
+    style Kwara fill:#fff9c4
+    style Niger fill:#fff9c4
+    style Kaduna fill:#fff9c4</code></pre><p>Red = endemic (high risk), orange = 1 step from endemic, yellow = 2 steps. Datalog’s recursive rules compute the full transitive closure.</p><pre><code class="language-julia hljs"># Encode Datalog-style rules as N3 and add to a copy of the graph
+datalog_n3 = &quot;&quot;&quot;
+@prefix lassa: &lt;http://example.org/lassa/&gt; .
+@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+
+# Rule: a state is near_endemic if it has high risk
+{ ?x a lassa:State . ?x lassa:hasRiskLevel lassa:risk_high . } =&gt;
+{ ?x lassa:near_endemic true . } .
+
+# Rule: a state is near_endemic if adjacent to a near_endemic state
+{ ?x a lassa:State . ?x lassa:adjacentTo ?y . ?y lassa:near_endemic true . } =&gt;
+{ ?x lassa:near_endemic true . } .
+&quot;&quot;&quot;
+
+# Parse N3 rules into the graph for Datalog
+datalog_g = RDFGraph()
+# Copy relevant triples
+for t in triples(g)
+    add!(datalog_g, t)
+end
+parse_n3!(datalog_g, datalog_n3)
+
+datalog_results = datalog_reason(datalog_g)
+println(&quot;Datalog inferred $(length(datalog_results)) triples&quot;)
+
+for t in triples(datalog_results)
+    add!(g, t)
+end</code></pre><pre><code class="nohighlight hljs">Datalog inferred 69342 triples</code></pre><pre><code class="language-julia hljs"># Query which states are reachable from endemic areas
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?name WHERE {
+        ?state a lassa:State ;
+               rdfs:label ?name ;
+               lassa:near_endemic true .
+    }
+    ORDER BY ?name
+&quot;&quot;&quot;)
+
+println(&quot;States in contiguous ecological zones with endemic areas:&quot;)
+for row in results
+    println(&quot;  • $(val(row[&quot;name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">States in contiguous ecological zones with endemic areas:
+  • Abia
+  • Adamawa
+  • Akwa Ibom
+  • Anambra
+  • Bauchi
+  • Bayelsa
+  • Benue
+  • Borno
+  • Cross River
+  • Delta
+  • Ebonyi
+  • Edo
+  • Ekiti
+  • Enugu
+  • Federal Capital Territory
+  • Gombe
+  • Imo
+  • Jigawa
+  • Kaduna
+  • Kano
+  • Katsina
+  • Kebbi
+  • Kogi
+  • Kwara
+  • Lagos
+  • Nasarawa
+  • Niger
+  • Ogun
+  • Ondo
+  • Osun
+  • Oyo
+  • Plateau
+  • Rivers
+  • Sokoto
+  • Taraba
+  • Yobe
+  • Zamfara</code></pre><h2 id="Part-8:-ProbLog-—-Probabilistic-Zoonotic-Risk-Modeling"><a class="docs-heading-anchor" href="#Part-8:-ProbLog-—-Probabilistic-Zoonotic-Risk-Modeling">Part 8: ProbLog — Probabilistic Zoonotic Risk Modeling</a><a id="Part-8:-ProbLog-—-Probabilistic-Zoonotic-Risk-Modeling-1"></a><a class="docs-heading-anchor-permalink" href="#Part-8:-ProbLog-—-Probabilistic-Zoonotic-Risk-Modeling" title="Permalink"></a></h2><p>Using ProbLog, we can model the probability of Lassa fever emergence based on proximity to known endemic foci and rodent habitat suitability. Adjacent states share ecological gradients (vegetation, climate) that influence <em>Mastomys</em> population density, so spatial adjacency serves as a proxy for similar zoonotic risk conditions.</p><pre><code class="language-julia hljs"># Build a ProbLog program with probabilistic facts
+problog_src = &quot;&quot;&quot;
+% Base emergence probability in endemic states
+0.85::emergence(edo).
+0.80::emergence(ondo).
+0.70::emergence(ebonyi).
+0.50::emergence(bauchi).
+0.40::emergence(plateau).
+0.35::emergence(taraba).
+
+% Shared ecological risk via adjacency (proxy for similar rodent habitat)
+0.15::shared_ecology(X, Y) :- adjacent(X, Y).
+
+% Rodent habitat suitability increases risk
+0.30::rodent_habitat(X) :- high_evi(X).
+
+% Adjacency facts (subset)
+adjacent(edo, ondo).
+adjacent(edo, delta).
+adjacent(edo, kogi).
+adjacent(edo, anambra).
+adjacent(ondo, ekiti).
+adjacent(ondo, ogun).
+adjacent(ondo, osun).
+adjacent(ebonyi, enugu).
+adjacent(ebonyi, cross_river).
+adjacent(ebonyi, benue).
+adjacent(ebonyi, abia).
+adjacent(bauchi, plateau).
+adjacent(bauchi, gombe).
+
+% High EVI states (vegetation favoring Mastomys)
+high_evi(edo).
+high_evi(ondo).
+high_evi(delta).
+high_evi(cross_river).
+high_evi(enugu).
+high_evi(benue).
+
+% A state has lassa risk if endemic OR shares ecology with endemic neighbor OR has rodent habitat
+lassa_risk(X) :- emergence(X).
+lassa_risk(X) :- shared_ecology(Y, X), emergence(Y).
+lassa_risk(X) :- shared_ecology(Y, X), lassa_risk(Y), rodent_habitat(X).
+
+% Query probabilities
+query(lassa_risk(delta)).
+query(lassa_risk(kogi)).
+query(lassa_risk(anambra)).
+query(lassa_risk(enugu)).
+query(lassa_risk(ekiti)).
+query(lassa_risk(cross_river)).
+query(lassa_risk(ogun)).
+query(lassa_risk(benue)).
+query(lassa_risk(gombe)).
+&quot;&quot;&quot;
+
+prob_results = problog_query(problog_src)
+
+println(&quot;Probabilistic Lassa fever zoonotic risk (ecological proximity):&quot;)
+println(&quot;-&quot;^45)
+for (query, prob) in sort(collect(prob_results), by=x-&gt;-x[2])
+    name = replace(string(query), &quot;lassa_risk(&quot; =&gt; &quot;&quot;, &quot;)&quot; =&gt; &quot;&quot;)
+    name = uppercasefirst(name)
+    bar = repeat(&quot;█&quot;, round(Int, prob * 40))
+    println(&quot;  $(rpad(name, 15)) $(lpad(string(round(prob, digits=3)), 5))  $bar&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Probabilistic Lassa fever zoonotic risk (ecological proximity):
+---------------------------------------------
+  Kogi            0.128  █████
+  Anambra         0.128  █████
+  Delta           0.128  █████
+  Ogun             0.12  █████
+  Ekiti            0.12  █████
+  Cross_river     0.105  ████
+  Enugu           0.105  ████
+  Benue           0.105  ████
+  Gombe           0.075  ███</code></pre><h2 id="Part-9:-Named-Graphs-—-Multi-Year-Dataset"><a class="docs-heading-anchor" href="#Part-9:-Named-Graphs-—-Multi-Year-Dataset">Part 9: Named Graphs — Multi-Year Dataset</a><a id="Part-9:-Named-Graphs-—-Multi-Year-Dataset-1"></a><a class="docs-heading-anchor-permalink" href="#Part-9:-Named-Graphs-—-Multi-Year-Dataset" title="Permalink"></a></h2><p>We can organize observations by year using named graphs in a Dataset.</p><pre><code class="language-julia hljs">ds = Dataset()
+
+for year in [2018, 2019, 2020]
+    year_graph = RDFGraph()
+    year_results = sparql_query(g, &quot;&quot;&quot;
+        PREFIX lassa: &lt;http://example.org/lassa/&gt;
+        SELECT ?obs ?state ?cases ?week WHERE {
+            ?obs a lassa:Observation ;
+                 lassa:observedIn ?state ;
+                 lassa:cases ?cases ;
+                 lassa:epiWeek ?week ;
+                 lassa:year $year .
+            FILTER(?cases &gt; 0)
+        }
+    &quot;&quot;&quot;)
+
+    for row in year_results
+        obs = URIRef(val(row[&quot;obs&quot;]))
+        state = URIRef(val(row[&quot;state&quot;]))
+        cases = Literal(parse(Int, val(row[&quot;cases&quot;])))
+        add!(year_graph, Triple(obs, lassa(&quot;observedIn&quot;), state))
+        add!(year_graph, Triple(obs, lassa(&quot;cases&quot;), cases))
+    end
+
+    graph_uri = lassa(&quot;year_$year&quot;)
+    named_graph = add_graph(ds, graph_uri)
+    for t in triples(year_graph)
+        add!(named_graph, t)
+    end
+    println(&quot;Year $year: $(length(year_graph)) triples (non-zero case observations)&quot;)
+end
+
+println(&quot;Dataset contexts: &quot;, length(collect(contexts(ds))))</code></pre><pre><code class="nohighlight hljs">Year 2018: 396 triples (non-zero case observations)
+Year 2019: 418 triples (non-zero case observations)
+Year 2020: 549 triples (non-zero case observations)
+Dataset contexts: 4</code></pre><h2 id="Part-10:-Serialization"><a class="docs-heading-anchor" href="#Part-10:-Serialization">Part 10: Serialization</a><a id="Part-10:-Serialization-1"></a><a class="docs-heading-anchor-permalink" href="#Part-10:-Serialization" title="Permalink"></a></h2><p>Export the knowledge graph in Turtle format.</p><pre><code class="language-julia hljs">ttl_buf = IOBuffer()
+serialize(ttl_buf, g, TurtleFormat())
+ttl_str = String(take!(ttl_buf))
+# Show first 80 lines
+ttl_lines = split(ttl_str, &#39;\n&#39;)
+println(&quot;Turtle serialization ($(length(ttl_lines)) lines total):&quot;)
+println(&quot;-&quot;^60)
+for line in ttl_lines[1:min(40, end)]
+    println(line)
+end
+println(&quot;...&quot;)
+println(&quot;[$(length(ttl_lines) - 40) more lines]&quot;)</code></pre><pre><code class="nohighlight hljs">Turtle serialization (80863 lines total):
+------------------------------------------------------------
+@prefix geo: &lt;http://www.opengis.net/ont/geosparql#&gt; .
+@prefix lassa: &lt;http://example.org/lassa/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix qudt: &lt;http://qudt.org/schema/qudt/&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix sosa: &lt;http://www.w3.org/ns/sosa/&gt; .
+@prefix time: &lt;http://www.w3.org/2006/time#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+lassa:EnvironmentalCondition a owl:Class ;
+    rdfs:comment &quot;Environmental covariates for a state-week&quot; ;
+    rdfs:label &quot;EnvironmentalCondition&quot; .
+
+lassa:GeopoliticalZone a owl:Class ;
+    rdfs:comment &quot;One of Nigeria&#39;s six geopolitical zones&quot; ;
+    rdfs:label &quot;GeopoliticalZone&quot; .
+
+lassa:LassaBelt a geo:Feature ;
+    geo:hasGeometry lassa:geom_LassaBelt ;
+    rdfs:label &quot;Lassa Fever Endemic Belt&quot; .
+
+lassa:LassaVirus a lassa:Pathogen ;
+    lassa:caseFatalityRate 0.01e0 ;
+    lassa:family &quot;Arenaviridae&quot; ;
+    lassa:hasReservoir lassa:MastomysNatalensis ;
+    lassa:hospitalCFR 0.15e0 ;
+    rdfs:label &quot;Lassa mammarenavirus&quot; ;
+    skos:altLabel &quot;LASV&quot; .
+
+lassa:MastomysNatalensis a lassa:ReservoirHost ;
+    lassa:scientificName &quot;Mastomys natalensis&quot; ;
+    rdfs:label &quot;Multimammate rat&quot; .
+
+lassa:Observation a owl:Class ;
+    rdfs:comment &quot;A surveillance observation for a state-week&quot; ;
+    rdfs:label &quot;Observation&quot; ;
+    rdfs:subClassOf sosa:Observation .
+
+...
+[80823 more lines]</code></pre><h2 id="Part-11:-Visualization"><a class="docs-heading-anchor" href="#Part-11:-Visualization">Part 11: Visualization</a><a id="Part-11:-Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Part-11:-Visualization" title="Permalink"></a></h2><p>Generate a DOT graph showing the spatial risk network, then render it inline.</p><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    PREFIX skos: &lt;http://www.w3.org/2004/02/skos/core#&gt;
+
+    SELECT ?name ?riskLabel ?cumCases WHERE {
+        ?state a lassa:State ;
+               rdfs:label ?name ;
+               lassa:cumulativeCases ?cumCases .
+        OPTIONAL {
+            ?state lassa:hasRiskLevel ?risk .
+            ?risk skos:prefLabel ?riskLabel .
+        }
+        FILTER(?cumCases &gt; 0)
+    }
+    ORDER BY DESC(?cumCases)
+&quot;&quot;&quot;)
+
+adj_results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX lassa: &lt;http://example.org/lassa/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?n1 ?n2 WHERE {
+        ?s1 a lassa:State ;
+            rdfs:label ?n1 ;
+            lassa:adjacentTo ?s2 ;
+            lassa:cumulativeCases ?c1 .
+        ?s2 rdfs:label ?n2 ;
+            lassa:cumulativeCases ?c2 .
+        FILTER(?c1 &gt; 0 &amp;&amp; ?c2 &gt; 0)
+        FILTER(STR(?n1) &lt; STR(?n2))
+    }
+&quot;&quot;&quot;)
+
+# Build DOT
+dot = IOBuffer()
+println(dot, &quot;graph LassaRisk {&quot;)
+println(dot, &quot;  layout=neato;&quot;)
+println(dot, &quot;  overlap=false;&quot;)
+println(dot, &quot;  bgcolor=white;&quot;)
+println(dot, &quot;  node [style=filled, fontsize=10, fontname=\&quot;Helvetica\&quot;];&quot;)
+println(dot, &quot;  edge [color=gray70];&quot;)
+
+for row in results
+    name = val(row[&quot;name&quot;])
+    risk = haskey(row, &quot;riskLabel&quot;) &amp;&amp; row[&quot;riskLabel&quot;] !== nothing ? val(row[&quot;riskLabel&quot;]) : &quot;Unknown&quot;
+    cases = parse(Int, val(row[&quot;cumCases&quot;]))
+    color = risk == &quot;High&quot; ? &quot;\&quot;#ef5350\&quot;&quot; :
+            risk == &quot;Moderate&quot; ? &quot;\&quot;#ffa726\&quot;&quot; :
+            risk == &quot;Low&quot; ? &quot;\&quot;#66bb6a\&quot;&quot; : &quot;\&quot;#bdbdbd\&quot;&quot;
+    fontcolor = risk == &quot;High&quot; ? &quot;white&quot; : &quot;black&quot;
+    node_id = replace(name, &quot; &quot; =&gt; &quot;_&quot;)
+    println(dot, &quot;  $(node_id) [label=\&quot;$(name)\\n($(cases))\&quot;, fillcolor=$(color), fontcolor=$(fontcolor)];&quot;)
+end
+
+for row in adj_results
+    n1 = replace(val(row[&quot;n1&quot;]), &quot; &quot; =&gt; &quot;_&quot;)
+    n2 = replace(val(row[&quot;n2&quot;]), &quot; &quot; =&gt; &quot;_&quot;)
+    println(dot, &quot;  $(n1) -- $(n2);&quot;)
+end
+
+println(dot, &quot;}&quot;)
+dot_str = String(take!(dot))
+
+# Write DOT file and render to SVG for inline display
+dot_file = joinpath(@__DIR__, &quot;risk_network.dot&quot;)
+svg_file = joinpath(@__DIR__, &quot;risk_network.svg&quot;)
+write(dot_file, dot_str)
+run(`dot -Tsvg -o $svg_file $dot_file`)
+println(&quot;Risk network: $(length(results)) states, $(length(adj_results)) edges → risk_network.svg&quot;)</code></pre><pre><code class="nohighlight hljs">Risk network: 31 states, 65 edges → risk_network.svg</code></pre><p>&lt;div id=&quot;fig-risk-network&quot;&gt;</p><p><img src="../risk_network.svg" alt/></p><p>Figure 1: Lassa fever spatial risk network — red = high risk (endemic), orange = moderate, green = low. Edges show state adjacency.</p><p>&lt;/div&gt;</p><h2 id="Summary"><a class="docs-heading-anchor" href="#Summary">Summary</a><a id="Summary-1"></a><a class="docs-heading-anchor-permalink" href="#Summary" title="Permalink"></a></h2><p>This vignette demonstrated how RDFLib.jl can serve as a comprehensive platform for epidemiological data integration and analysis:</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right">Application</th></tr><tr><td style="text-align: right"><strong>OWL Ontology</strong></td><td style="text-align: right">Lassa fever domain model (states, observations, pathogens, risk levels)</td></tr><tr><td style="text-align: right"><strong>Tabular Mapping</strong></td><td style="text-align: right">Real NCDC surveillance data → RDF triples</td></tr><tr><td style="text-align: right"><strong>SPARQL</strong></td><td style="text-align: right">Aggregation queries, subqueries, seasonal patterns, environmental correlations</td></tr><tr><td style="text-align: right"><strong>GeoSPARQL</strong></td><td style="text-align: right">Spatial containment (endemic belt), inter-state distances</td></tr><tr><td style="text-align: right"><strong>SHACL</strong></td><td style="text-align: right">Data quality validation of surveillance observations</td></tr><tr><td style="text-align: right"><strong>N3 Reasoning</strong></td><td style="text-align: right">Risk classification rules, ecological proximity inference from adjacency</td></tr><tr><td style="text-align: right"><strong>Datalog</strong></td><td style="text-align: right">Transitive contiguous habitat zones from endemic areas</td></tr><tr><td style="text-align: right"><strong>ProbLog</strong></td><td style="text-align: right">Probabilistic zoonotic risk modeling (emergence × habitat × proximity)</td></tr><tr><td style="text-align: right"><strong>Named Graphs</strong></td><td style="text-align: right">Multi-year dataset organization</td></tr><tr><td style="text-align: right"><strong>Serialization</strong></td><td style="text-align: right">Turtle export of the knowledge graph</td></tr><tr><td style="text-align: right"><strong>Visualization</strong></td><td style="text-align: right">DOT risk network graph</td></tr></table><p>The knowledge graph approach unifies heterogeneous data (surveillance counts, environmental covariates, spatial relationships, domain expertise) into a single queryable structure, enabling both exploratory analysis and rule-based inference — all within Julia.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../epidemiology/">« Epidemiology</a><a class="docs-footer-nextpage" href="../../api/terms/">Terms »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

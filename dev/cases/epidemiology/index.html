@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Epidemiology · RDFLib.jl</title><meta name="title" content="Epidemiology · RDFLib.jl"/><meta property="og:title" content="Epidemiology · RDFLib.jl"/><meta property="twitter:title" content="Epidemiology · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/epidemiology/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/epidemiology/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/cases/epidemiology/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting-started/">Getting Started</a></li><li><a class="tocitem" href="../../tutorials/rdf-terms/">RDF Terms</a></li><li><a class="tocitem" href="../../tutorials/building-graphs/">Building Graphs</a></li><li><a class="tocitem" href="../../tutorials/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../tutorials/serialization/">Serialization</a></li><li><a class="tocitem" href="../../tutorials/sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../ecology/">Ecology</a></li><li><a class="tocitem" href="../ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../bayesian-belief-networks/">Bayesian Belief Networks</a></li><li class="is-active"><a class="tocitem" href>Epidemiology</a><ul class="internal"><li><a class="tocitem" href="#Introduction"><span>Introduction</span></a></li><li><a class="tocitem" href="#1.-Epidemiology-Ontology"><span>1. Epidemiology Ontology</span></a></li><li><a class="tocitem" href="#2.-Populating-the-Knowledge-Graph"><span>2. Populating the Knowledge Graph</span></a></li><li><a class="tocitem" href="#3.-Defining-the-Outbreak"><span>3. Defining the Outbreak</span></a></li><li><a class="tocitem" href="#4.-SHACL-Validation"><span>4. SHACL Validation</span></a></li><li><a class="tocitem" href="#5.-SPARQL-Queries"><span>5. SPARQL Queries</span></a></li><li><a class="tocitem" href="#6.-Property-Paths-—-Contact-Tracing-Chains"><span>6. Property Paths — Contact Tracing Chains</span></a></li><li><a class="tocitem" href="#7.-Datalog-Reasoning-—-Transmission-Risk-Inference"><span>7. Datalog Reasoning — Transmission Risk Inference</span></a></li><li><a class="tocitem" href="#8.-N3-Reasoning-—-Epidemiological-Inference-with-Builtins"><span>8. N3 Reasoning — Epidemiological Inference with Builtins</span></a></li><li><a class="tocitem" href="#9.-ProbLog-—-Probabilistic-Outbreak-Modeling"><span>9. ProbLog — Probabilistic Outbreak Modeling</span></a></li><li><a class="tocitem" href="#10.-Visualisation"><span>10. Visualisation</span></a></li><li><a class="tocitem" href="#11.-Summary"><span>11. Summary</span></a></li></ul></li><li><a class="tocitem" href="../lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Case Studies</a></li><li class="is-active"><a href>Epidemiology</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Epidemiology</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/cases/epidemiology.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Epidemiology-Knowledge-Graph"><a class="docs-heading-anchor" href="#Epidemiology-Knowledge-Graph">Epidemiology Knowledge Graph</a><a id="Epidemiology-Knowledge-Graph-1"></a><a class="docs-heading-anchor-permalink" href="#Epidemiology-Knowledge-Graph" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Introduction"><a class="docs-heading-anchor" href="#Introduction">Introduction</a><a id="Introduction-1"></a><a class="docs-heading-anchor-permalink" href="#Introduction" title="Permalink"></a></h2><p>Epidemiology requires integrating heterogeneous data — pathogens, hosts, clinical observations, geographic surveillance, intervention records, and genomic lineage data — into a coherent knowledge model. <strong>Semantic web technologies</strong> are well-suited for this: RDF naturally represents linked entities across domains, SPARQL enables complex cross-cutting queries, and logical reasoning can infer transmission chains and risk factors.</p><p>This vignette builds a <strong>comprehensive infectious disease knowledge graph</strong> covering a fictitious multi-pathogen respiratory outbreak scenario, and demonstrates RDFLib.jl’s full capabilities:</p><ol><li><strong>OWL ontology</strong> — pathogens, hosts, clinical features,  interventions</li><li><strong>Tabular mapping</strong> — surveillance case records into RDF</li><li><strong>SHACL validation</strong> — data quality assurance</li><li><strong>SPARQL queries</strong> — epidemiological analytics</li><li><strong>Property paths</strong> — contact tracing chains</li><li><strong>Datalog reasoning</strong> — transmission inference and risk  classification</li><li><strong>N3 reasoning</strong> — risk stratification with math builtins, serial  interval computation, backward-chaining clinical decision support</li><li><strong>ProbLog</strong> — probabilistic outbreak modeling</li><li><strong>Visualization</strong> — outbreak network and transmission diagrams</li></ol><p>The scenario models an outbreak involving three pathogens (an influenza variant, a novel coronavirus, and an RSV strain) circulating simultaneously across hospital wards and community settings, reflecting the challenges of real-world syndromic surveillance.</p><pre><code class="language-julia hljs">using RDFLib
+
+# Helper to extract readable strings from SPARQL result values
+readable(x::Literal) = x.lexical
+readable(x::URIRef) = split(x.value, r&quot;[/#]&quot;)[end]
+readable(x) = string(x)</code></pre><pre><code class="nohighlight hljs">readable (generic function with 3 methods)</code></pre><h2 id="1.-Epidemiology-Ontology"><a class="docs-heading-anchor" href="#1.-Epidemiology-Ontology">1. Epidemiology Ontology</a><a id="1.-Epidemiology-Ontology-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Epidemiology-Ontology" title="Permalink"></a></h2><p>We define an OWL ontology modelling pathogens, patients, clinical presentations, diagnostic tests, locations, interventions, and contact events.</p><pre><code class="language-julia hljs">g = RDFGraph()
+
+epi  = Namespace(&quot;http://example.org/epi#&quot;)
+pat  = Namespace(&quot;http://example.org/patient/&quot;)
+path = Namespace(&quot;http://example.org/pathogen/&quot;)
+loc  = Namespace(&quot;http://example.org/location/&quot;)
+tst  = Namespace(&quot;http://example.org/test/&quot;)
+int  = Namespace(&quot;http://example.org/intervention/&quot;)
+
+bind!(g, &quot;epi&quot;,  epi)
+bind!(g, &quot;pat&quot;,  pat)
+bind!(g, &quot;path&quot;, path)
+bind!(g, &quot;loc&quot;,  loc)
+bind!(g, &quot;tst&quot;,  tst)
+bind!(g, &quot;int&quot;,  int)
+
+# OWL classes
+for cls in [&quot;Pathogen&quot;, &quot;Patient&quot;, &quot;ClinicalPresentation&quot;,
+            &quot;DiagnosticTest&quot;, &quot;Location&quot;, &quot;Intervention&quot;,
+            &quot;ContactEvent&quot;, &quot;Outbreak&quot;, &quot;CaseReport&quot;,
+            &quot;Symptom&quot;, &quot;RiskFactor&quot;,
+            # Pathogen subtypes
+            &quot;Virus&quot;, &quot;Bacteria&quot;,
+            # Location subtypes
+            &quot;Hospital&quot;, &quot;CommunityFacility&quot;, &quot;School&quot;,
+            # Intervention subtypes
+            &quot;Vaccination&quot;, &quot;Quarantine&quot;, &quot;Treatment&quot;, &quot;ContactTracing&quot;]
+    add!(g, Triple(epi(cls), RDF.type, OWL.Class))
+end
+
+# Subclass hierarchy
+for (sub, sup) in [
+    (&quot;Virus&quot;, &quot;Pathogen&quot;), (&quot;Bacteria&quot;, &quot;Pathogen&quot;),
+    (&quot;Hospital&quot;, &quot;Location&quot;), (&quot;CommunityFacility&quot;, &quot;Location&quot;), (&quot;School&quot;, &quot;Location&quot;),
+    (&quot;Vaccination&quot;, &quot;Intervention&quot;), (&quot;Quarantine&quot;, &quot;Intervention&quot;),
+    (&quot;Treatment&quot;, &quot;Intervention&quot;), (&quot;ContactTracing&quot;, &quot;Intervention&quot;),
+]
+    add!(g, Triple(epi(sub), RDFS.subClassOf, epi(sup)))
+end
+
+# Object properties
+for (prop, dom, rng) in [
+    (&quot;infectedBy&quot;,       &quot;Patient&quot;,        &quot;Pathogen&quot;),
+    (&quot;confirmedBy&quot;,      &quot;CaseReport&quot;,     &quot;DiagnosticTest&quot;),
+    (&quot;hasSymptom&quot;,       &quot;CaseReport&quot;,     &quot;Symptom&quot;),
+    (&quot;hasRiskFactor&quot;,    &quot;Patient&quot;,        &quot;RiskFactor&quot;),
+    (&quot;locatedAt&quot;,        &quot;CaseReport&quot;,     &quot;Location&quot;),
+    (&quot;receivedIntervention&quot;, &quot;Patient&quot;,    &quot;Intervention&quot;),
+    (&quot;contactWith&quot;,      &quot;Patient&quot;,        &quot;Patient&quot;),
+    (&quot;partOfOutbreak&quot;,   &quot;CaseReport&quot;,     &quot;Outbreak&quot;),
+    (&quot;transmittedFrom&quot;,  &quot;Patient&quot;,        &quot;Patient&quot;),
+    (&quot;caseForPatient&quot;,   &quot;CaseReport&quot;,     &quot;Patient&quot;),
+    (&quot;onsetDate&quot;,        &quot;CaseReport&quot;,     nothing),
+    (&quot;testDate&quot;,         &quot;DiagnosticTest&quot;, nothing),
+    (&quot;testResult&quot;,       &quot;DiagnosticTest&quot;, nothing),
+    (&quot;severity&quot;,         &quot;CaseReport&quot;,     nothing),
+    (&quot;ageGroup&quot;,         &quot;Patient&quot;,        nothing),
+    (&quot;vaccinationStatus&quot;,&quot;Patient&quot;,        nothing),
+]
+    uri = epi(prop)
+    add!(g, Triple(uri, RDF.type, OWL.ObjectProperty))
+    add!(g, Triple(uri, RDFS.domain, epi(dom)))
+    if rng !== nothing
+        add!(g, Triple(uri, RDFS.range, epi(rng)))
+    end
+end
+
+println(&quot;Epidemiology ontology: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Epidemiology ontology: 71 triples</code></pre><h2 id="2.-Populating-the-Knowledge-Graph"><a class="docs-heading-anchor" href="#2.-Populating-the-Knowledge-Graph">2. Populating the Knowledge Graph</a><a id="2.-Populating-the-Knowledge-Graph-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Populating-the-Knowledge-Graph" title="Permalink"></a></h2><h3 id="2a.-Pathogens"><a class="docs-heading-anchor" href="#2a.-Pathogens">2a. Pathogens</a><a id="2a.-Pathogens-1"></a><a class="docs-heading-anchor-permalink" href="#2a.-Pathogens" title="Permalink"></a></h3><pre><code class="language-julia hljs">pathogens = [
+    (&quot;influenza_A_H3N2&quot;, &quot;Influenza A (H3N2)&quot;,    &quot;Virus&quot;,    &quot;Orthomyxoviridae&quot;, 1.3),
+    (&quot;SARS_CoV_2_JN1&quot;,   &quot;SARS-CoV-2 JN.1&quot;,      &quot;Virus&quot;,    &quot;Coronaviridae&quot;,    2.5),
+    (&quot;RSV_B&quot;,            &quot;RSV subtype B&quot;,          &quot;Virus&quot;,    &quot;Pneumoviridae&quot;,    3.0),
+]
+
+for (id, name, cls, family, r0) in pathogens
+    p = path(id)
+    add!(g, Triple(p, RDF.type, epi(&quot;Pathogen&quot;)))
+    add!(g, Triple(p, RDF.type, epi(cls)))
+    add!(g, Triple(p, RDFS.label, Literal(name)))
+    add!(g, Triple(p, epi(&quot;family&quot;), Literal(family)))
+    add!(g, Triple(p, epi(&quot;basicReproductionNumber&quot;), Literal(r0)))
+end
+
+println(&quot;Added $(length(pathogens)) pathogens&quot;)</code></pre><pre><code class="nohighlight hljs">Added 3 pathogens</code></pre><h3 id="2b.-Locations"><a class="docs-heading-anchor" href="#2b.-Locations">2b. Locations</a><a id="2b.-Locations-1"></a><a class="docs-heading-anchor-permalink" href="#2b.-Locations" title="Permalink"></a></h3><pre><code class="language-julia hljs">locations = [
+    (&quot;royal_infirmary&quot;,  &quot;Royal Infirmary&quot;,       &quot;Hospital&quot;),
+    (&quot;general_hospital&quot;, &quot;General Hospital&quot;,       &quot;Hospital&quot;),
+    (&quot;care_home_A&quot;,      &quot;Sunrise Care Home&quot;,      &quot;CommunityFacility&quot;),
+    (&quot;care_home_B&quot;,      &quot;Meadowbrook Care Home&quot;,  &quot;CommunityFacility&quot;),
+    (&quot;primary_school&quot;,   &quot;Oakfield Primary School&quot;, &quot;School&quot;),
+    (&quot;secondary_school&quot;, &quot;Riverside Academy&quot;,       &quot;School&quot;),
+]
+
+for (id, name, cls) in locations
+    l = loc(id)
+    add!(g, Triple(l, RDF.type, epi(&quot;Location&quot;)))
+    add!(g, Triple(l, RDF.type, epi(cls)))
+    add!(g, Triple(l, RDFS.label, Literal(name)))
+end
+
+println(&quot;Added $(length(locations)) locations&quot;)</code></pre><pre><code class="nohighlight hljs">Added 6 locations</code></pre><h3 id="2c.-Symptoms-and-risk-factors"><a class="docs-heading-anchor" href="#2c.-Symptoms-and-risk-factors">2c. Symptoms and risk factors</a><a id="2c.-Symptoms-and-risk-factors-1"></a><a class="docs-heading-anchor-permalink" href="#2c.-Symptoms-and-risk-factors" title="Permalink"></a></h3><pre><code class="language-julia hljs">symptoms = [&quot;fever&quot;, &quot;cough&quot;, &quot;dyspnoea&quot;, &quot;fatigue&quot;, &quot;myalgia&quot;,
+            &quot;sore_throat&quot;, &quot;rhinorrhoea&quot;, &quot;headache&quot;, &quot;wheeze&quot;,
+            &quot;hypoxia&quot;, &quot;tachypnoea&quot;]
+
+for s in symptoms
+    add!(g, Triple(epi(s), RDF.type, epi(&quot;Symptom&quot;)))
+    add!(g, Triple(epi(s), RDFS.label, Literal(replace(s, &quot;_&quot; =&gt; &quot; &quot;))))
+end
+
+risk_factors = [&quot;age_over_65&quot;, &quot;immunocompromised&quot;, &quot;chronic_lung_disease&quot;,
+                &quot;diabetes&quot;, &quot;cardiovascular_disease&quot;, &quot;obesity&quot;,
+                &quot;pregnancy&quot;, &quot;healthcare_worker&quot;]
+
+for rf in risk_factors
+    add!(g, Triple(epi(rf), RDF.type, epi(&quot;RiskFactor&quot;)))
+    add!(g, Triple(epi(rf), RDFS.label, Literal(replace(rf, &quot;_&quot; =&gt; &quot; &quot;))))
+end
+
+println(&quot;Added $(length(symptoms)) symptoms, $(length(risk_factors)) risk factors&quot;)</code></pre><pre><code class="nohighlight hljs">Added 11 symptoms, 8 risk factors</code></pre><h3 id="2d.-Patients-(25-patients-in-the-outbreak)"><a class="docs-heading-anchor" href="#2d.-Patients-(25-patients-in-the-outbreak)">2d. Patients (25 patients in the outbreak)</a><a id="2d.-Patients-(25-patients-in-the-outbreak)-1"></a><a class="docs-heading-anchor-permalink" href="#2d.-Patients-(25-patients-in-the-outbreak)" title="Permalink"></a></h3><pre><code class="language-julia hljs">patients = [
+    # (id, name, age_group, risk_factors, vaccination_status)
+    (&quot;P001&quot;, &quot;Patient 001&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;, &quot;chronic_lung_disease&quot;], &quot;vaccinated&quot;),
+    (&quot;P002&quot;, &quot;Patient 002&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;, &quot;diabetes&quot;],             &quot;vaccinated&quot;),
+    (&quot;P003&quot;, &quot;Patient 003&quot;, &quot;40-64&quot;, [&quot;healthcare_worker&quot;],                   &quot;vaccinated&quot;),
+    (&quot;P004&quot;, &quot;Patient 004&quot;, &quot;18-39&quot;, String[],                                &quot;unvaccinated&quot;),
+    (&quot;P005&quot;, &quot;Patient 005&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;, &quot;cardiovascular_disease&quot;],&quot;vaccinated&quot;),
+    (&quot;P006&quot;, &quot;Patient 006&quot;, &quot;5-17&quot;,  String[],                                &quot;vaccinated&quot;),
+    (&quot;P007&quot;, &quot;Patient 007&quot;, &quot;5-17&quot;,  String[],                                &quot;unvaccinated&quot;),
+    (&quot;P008&quot;, &quot;Patient 008&quot;, &quot;18-39&quot;, [&quot;pregnancy&quot;],                           &quot;vaccinated&quot;),
+    (&quot;P009&quot;, &quot;Patient 009&quot;, &quot;40-64&quot;, [&quot;obesity&quot;],                             &quot;unvaccinated&quot;),
+    (&quot;P010&quot;, &quot;Patient 010&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;, &quot;immunocompromised&quot;],    &quot;vaccinated&quot;),
+    (&quot;P011&quot;, &quot;Patient 011&quot;, &quot;0-4&quot;,   String[],                                &quot;unvaccinated&quot;),
+    (&quot;P012&quot;, &quot;Patient 012&quot;, &quot;40-64&quot;, [&quot;healthcare_worker&quot;],                   &quot;vaccinated&quot;),
+    (&quot;P013&quot;, &quot;Patient 013&quot;, &quot;18-39&quot;, String[],                                &quot;vaccinated&quot;),
+    (&quot;P014&quot;, &quot;Patient 014&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;, &quot;chronic_lung_disease&quot;], &quot;unvaccinated&quot;),
+    (&quot;P015&quot;, &quot;Patient 015&quot;, &quot;5-17&quot;,  String[],                                &quot;vaccinated&quot;),
+    (&quot;P016&quot;, &quot;Patient 016&quot;, &quot;40-64&quot;, [&quot;diabetes&quot;, &quot;obesity&quot;],                 &quot;unvaccinated&quot;),
+    (&quot;P017&quot;, &quot;Patient 017&quot;, &quot;18-39&quot;, [&quot;healthcare_worker&quot;],                   &quot;vaccinated&quot;),
+    (&quot;P018&quot;, &quot;Patient 018&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;],                         &quot;vaccinated&quot;),
+    (&quot;P019&quot;, &quot;Patient 019&quot;, &quot;0-4&quot;,   String[],                                &quot;unvaccinated&quot;),
+    (&quot;P020&quot;, &quot;Patient 020&quot;, &quot;40-64&quot;, String[],                                &quot;vaccinated&quot;),
+    (&quot;P021&quot;, &quot;Patient 021&quot;, &quot;18-39&quot;, String[],                                &quot;unvaccinated&quot;),
+    (&quot;P022&quot;, &quot;Patient 022&quot;, &quot;65+&quot;,   [&quot;age_over_65&quot;, &quot;immunocompromised&quot;],    &quot;vaccinated&quot;),
+    (&quot;P023&quot;, &quot;Patient 023&quot;, &quot;5-17&quot;,  String[],                                &quot;vaccinated&quot;),
+    (&quot;P024&quot;, &quot;Patient 024&quot;, &quot;40-64&quot;, [&quot;chronic_lung_disease&quot;],                &quot;vaccinated&quot;),
+    (&quot;P025&quot;, &quot;Patient 025&quot;, &quot;18-39&quot;, [&quot;healthcare_worker&quot;],                   &quot;vaccinated&quot;),
+]
+
+for (id, name, age_group, risks, vax) in patients
+    p = pat(id)
+    add!(g, Triple(p, RDF.type, epi(&quot;Patient&quot;)))
+    add!(g, Triple(p, RDFS.label, Literal(name)))
+    add!(g, Triple(p, epi(&quot;ageGroup&quot;), Literal(age_group)))
+    add!(g, Triple(p, epi(&quot;vaccinationStatus&quot;), Literal(vax)))
+    for rf in risks
+        add!(g, Triple(p, epi(&quot;hasRiskFactor&quot;), epi(rf)))
+    end
+end
+
+println(&quot;Added $(length(patients)) patients&quot;)</code></pre><pre><code class="nohighlight hljs">Added 25 patients</code></pre><h3 id="2e.-Surveillance-data-via-tabular-mapping"><a class="docs-heading-anchor" href="#2e.-Surveillance-data-via-tabular-mapping">2e. Surveillance data via tabular mapping</a><a id="2e.-Surveillance-data-via-tabular-mapping-1"></a><a class="docs-heading-anchor-permalink" href="#2e.-Surveillance-data-via-tabular-mapping" title="Permalink"></a></h3><p>We import 30 case reports from a surveillance line list into the knowledge graph using <strong>tabular mapping</strong>.</p><pre><code class="language-julia hljs">case_records = [
+    # (case_id, patient, pathogen, location, onset, severity, symptoms...)
+    (id=1,  patient=&quot;P001&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;care_home_A&quot;,     onset=&quot;2025-01-15&quot;, severity=&quot;severe&quot;,   symp=&quot;fever,cough,dyspnoea,myalgia&quot;),
+    (id=2,  patient=&quot;P002&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;care_home_A&quot;,     onset=&quot;2025-01-16&quot;, severity=&quot;moderate&quot;, symp=&quot;fever,cough,fatigue&quot;),
+    (id=3,  patient=&quot;P003&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;royal_infirmary&quot;, onset=&quot;2025-01-17&quot;, severity=&quot;mild&quot;,     symp=&quot;fever,cough,sore_throat&quot;),
+    (id=4,  patient=&quot;P010&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;care_home_A&quot;,     onset=&quot;2025-01-18&quot;, severity=&quot;severe&quot;,   symp=&quot;fever,cough,dyspnoea,hypoxia&quot;),
+    (id=5,  patient=&quot;P018&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;care_home_B&quot;,     onset=&quot;2025-01-19&quot;, severity=&quot;moderate&quot;, symp=&quot;fever,cough,myalgia,fatigue&quot;),
+    (id=6,  patient=&quot;P004&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;general_hospital&quot;, onset=&quot;2025-01-20&quot;, severity=&quot;mild&quot;,    symp=&quot;cough,sore_throat,headache&quot;),
+    (id=7,  patient=&quot;P005&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;general_hospital&quot;, onset=&quot;2025-01-21&quot;, severity=&quot;severe&quot;,  symp=&quot;fever,cough,dyspnoea,hypoxia,fatigue&quot;),
+    (id=8,  patient=&quot;P009&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;general_hospital&quot;, onset=&quot;2025-01-22&quot;, severity=&quot;moderate&quot;,symp=&quot;fever,cough,myalgia&quot;),
+    (id=9,  patient=&quot;P012&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;royal_infirmary&quot;, onset=&quot;2025-01-22&quot;, severity=&quot;mild&quot;,     symp=&quot;cough,rhinorrhoea&quot;),
+    (id=10, patient=&quot;P013&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;general_hospital&quot;, onset=&quot;2025-01-23&quot;, severity=&quot;mild&quot;,    symp=&quot;cough,sore_throat&quot;),
+    (id=11, patient=&quot;P006&quot;, pathogen=&quot;RSV_B&quot;,            location=&quot;primary_school&quot;,   onset=&quot;2025-01-14&quot;, severity=&quot;moderate&quot;,symp=&quot;cough,wheeze,rhinorrhoea&quot;),
+    (id=12, patient=&quot;P007&quot;, pathogen=&quot;RSV_B&quot;,            location=&quot;primary_school&quot;,   onset=&quot;2025-01-15&quot;, severity=&quot;moderate&quot;,symp=&quot;cough,wheeze,fever&quot;),
+    (id=13, patient=&quot;P011&quot;, pathogen=&quot;RSV_B&quot;,            location=&quot;royal_infirmary&quot;,  onset=&quot;2025-01-17&quot;, severity=&quot;severe&quot;,  symp=&quot;cough,wheeze,dyspnoea,tachypnoea,hypoxia&quot;),
+    (id=14, patient=&quot;P015&quot;, pathogen=&quot;RSV_B&quot;,            location=&quot;secondary_school&quot;, onset=&quot;2025-01-18&quot;, severity=&quot;mild&quot;,    symp=&quot;cough,rhinorrhoea&quot;),
+    (id=15, patient=&quot;P019&quot;, pathogen=&quot;RSV_B&quot;,            location=&quot;royal_infirmary&quot;,  onset=&quot;2025-01-19&quot;, severity=&quot;severe&quot;,  symp=&quot;wheeze,dyspnoea,tachypnoea,hypoxia&quot;),
+    (id=16, patient=&quot;P008&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;general_hospital&quot;, onset=&quot;2025-01-20&quot;, severity=&quot;moderate&quot;,symp=&quot;fever,cough,myalgia&quot;),
+    (id=17, patient=&quot;P014&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;care_home_B&quot;,     onset=&quot;2025-01-21&quot;, severity=&quot;severe&quot;,   symp=&quot;fever,cough,dyspnoea,hypoxia&quot;),
+    (id=18, patient=&quot;P016&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;general_hospital&quot;, onset=&quot;2025-01-24&quot;, severity=&quot;moderate&quot;,symp=&quot;fever,cough,fatigue,myalgia&quot;),
+    (id=19, patient=&quot;P017&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;royal_infirmary&quot;, onset=&quot;2025-01-24&quot;, severity=&quot;mild&quot;,     symp=&quot;cough,sore_throat&quot;),
+    (id=20, patient=&quot;P020&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;general_hospital&quot;, onset=&quot;2025-01-25&quot;, severity=&quot;mild&quot;,    symp=&quot;cough,rhinorrhoea,headache&quot;),
+    (id=21, patient=&quot;P021&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;secondary_school&quot;, onset=&quot;2025-01-22&quot;, severity=&quot;mild&quot;,   symp=&quot;fever,cough,sore_throat&quot;),
+    (id=22, patient=&quot;P022&quot;, pathogen=&quot;influenza_A_H3N2&quot;, location=&quot;care_home_A&quot;,     onset=&quot;2025-01-23&quot;, severity=&quot;severe&quot;,   symp=&quot;fever,cough,dyspnoea,hypoxia,fatigue&quot;),
+    (id=23, patient=&quot;P023&quot;, pathogen=&quot;RSV_B&quot;,            location=&quot;primary_school&quot;,   onset=&quot;2025-01-20&quot;, severity=&quot;mild&quot;,    symp=&quot;cough,rhinorrhoea&quot;),
+    (id=24, patient=&quot;P024&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;royal_infirmary&quot;, onset=&quot;2025-01-25&quot;, severity=&quot;moderate&quot;, symp=&quot;fever,cough,dyspnoea&quot;),
+    (id=25, patient=&quot;P025&quot;, pathogen=&quot;SARS_CoV_2_JN1&quot;,  location=&quot;royal_infirmary&quot;, onset=&quot;2025-01-26&quot;, severity=&quot;mild&quot;,     symp=&quot;cough,fatigue&quot;),
+]
+
+# Add URI columns for linking
+cases_with_uris = [(; r...,
+    patient_uri = &quot;http://example.org/patient/&quot; * r.patient,
+    pathogen_uri = &quot;http://example.org/pathogen/&quot; * r.pathogen,
+    location_uri = &quot;http://example.org/location/&quot; * r.location,
+) for r in case_records]
+
+m = RDFMapping(graph=g)
+
+tpl = RDFTemplate(
+    subject = :id,
+    subject_prefix = &quot;http://example.org/case/&quot;,
+    properties = [
+        (epi(&quot;caseForPatient&quot;), :patient_uri,  IRIColumn()),
+        (epi(&quot;infectedBy&quot;),     :pathogen_uri, IRIColumn()),
+        (epi(&quot;locatedAt&quot;),      :location_uri, IRIColumn()),
+        (epi(&quot;onsetDate&quot;),      :onset,        LiteralColumn(XSD.date)),
+        (epi(&quot;severity&quot;),       :severity,     AutoColumn()),
+    ],
+    types = [epi(&quot;CaseReport&quot;)]
+)
+
+before = length(g)
+rdf_map!(m, cases_with_uris, tpl)
+println(&quot;Imported $(length(g) - before) case triples from $(length(case_records)) records&quot;)
+
+# Also add symptoms for each case
+for r in case_records
+    case_uri = URIRef(&quot;http://example.org/case/$(r.id)&quot;)
+    for s in split(r.symp, &quot;,&quot;)
+        add!(g, Triple(case_uri, epi(&quot;hasSymptom&quot;), epi(strip(s))))
+    end
+end
+
+println(&quot;Total knowledge graph: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Imported 150 case triples from 25 records
+Total knowledge graph: 495 triples</code></pre><h3 id="2f.-Contact-and-transmission-events"><a class="docs-heading-anchor" href="#2f.-Contact-and-transmission-events">2f. Contact and transmission events</a><a id="2f.-Contact-and-transmission-events-1"></a><a class="docs-heading-anchor-permalink" href="#2f.-Contact-and-transmission-events" title="Permalink"></a></h3><p>Known contact tracing data links patients through exposure events.</p><pre><code class="language-julia hljs"># Known contacts (bidirectional exposure)
+contacts = [
+    (&quot;P001&quot;, &quot;P002&quot;),  # care home A residents
+    (&quot;P001&quot;, &quot;P010&quot;),
+    (&quot;P002&quot;, &quot;P010&quot;),
+    (&quot;P002&quot;, &quot;P022&quot;),
+    (&quot;P003&quot;, &quot;P012&quot;),  # healthcare workers at Royal Infirmary
+    (&quot;P003&quot;, &quot;P017&quot;),
+    (&quot;P012&quot;, &quot;P017&quot;),
+    (&quot;P006&quot;, &quot;P007&quot;),  # primary school pupils
+    (&quot;P006&quot;, &quot;P015&quot;),
+    (&quot;P004&quot;, &quot;P009&quot;),  # general hospital contacts
+    (&quot;P005&quot;, &quot;P009&quot;),
+    (&quot;P009&quot;, &quot;P013&quot;),
+    (&quot;P013&quot;, &quot;P016&quot;),
+    (&quot;P016&quot;, &quot;P020&quot;),
+    (&quot;P011&quot;, &quot;P019&quot;),  # RSV paediatric ward
+    (&quot;P003&quot;, &quot;P001&quot;),  # HCW → care home visit
+    (&quot;P017&quot;, &quot;P024&quot;),  # HCW → hospital
+    (&quot;P025&quot;, &quot;P019&quot;),  # hospital contact
+]
+
+for (a, b) in contacts
+    add!(g, Triple(pat(a), epi(&quot;contactWith&quot;), pat(b)))
+    add!(g, Triple(pat(b), epi(&quot;contactWith&quot;), pat(a)))
+end
+
+# Known transmission events (directed: infector → infectee)
+transmissions = [
+    (&quot;P001&quot;, &quot;P002&quot;),  # index case → roommate
+    (&quot;P001&quot;, &quot;P010&quot;),  # index → vulnerable resident
+    (&quot;P002&quot;, &quot;P022&quot;),  # resident → resident
+    (&quot;P006&quot;, &quot;P007&quot;),  # school RSV
+    (&quot;P004&quot;, &quot;P009&quot;),  # hospital COVID
+    (&quot;P009&quot;, &quot;P013&quot;),  # hospital chain
+    (&quot;P013&quot;, &quot;P016&quot;),
+    (&quot;P016&quot;, &quot;P020&quot;),
+    (&quot;P011&quot;, &quot;P019&quot;),  # paediatric RSV
+    (&quot;P003&quot;, &quot;P017&quot;),  # HCW flu
+]
+
+for (src, tgt) in transmissions
+    add!(g, Triple(pat(tgt), epi(&quot;transmittedFrom&quot;), pat(src)))
+end
+
+println(&quot;Added $(length(contacts)) contact links, $(length(transmissions)) known transmissions&quot;)
+println(&quot;Total: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Added 18 contact links, 10 known transmissions
+Total: 541 triples</code></pre><h2 id="3.-Defining-the-Outbreak"><a class="docs-heading-anchor" href="#3.-Defining-the-Outbreak">3. Defining the Outbreak</a><a id="3.-Defining-the-Outbreak-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Defining-the-Outbreak" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Three concurrent outbreaks
+add!(g, Triple(epi(&quot;flu_outbreak&quot;),   RDF.type, epi(&quot;Outbreak&quot;)))
+add!(g, Triple(epi(&quot;flu_outbreak&quot;),   RDFS.label, Literal(&quot;Influenza A H3N2 winter outbreak&quot;)))
+add!(g, Triple(epi(&quot;covid_outbreak&quot;), RDF.type, epi(&quot;Outbreak&quot;)))
+add!(g, Triple(epi(&quot;covid_outbreak&quot;), RDFS.label, Literal(&quot;SARS-CoV-2 JN.1 nosocomial cluster&quot;)))
+add!(g, Triple(epi(&quot;rsv_outbreak&quot;),   RDF.type, epi(&quot;Outbreak&quot;)))
+add!(g, Triple(epi(&quot;rsv_outbreak&quot;),   RDFS.label, Literal(&quot;RSV-B paediatric wave&quot;)))
+
+# Link cases to outbreaks based on pathogen
+for r in case_records
+    case_uri = URIRef(&quot;http://example.org/case/$(r.id)&quot;)
+    outbreak = if r.pathogen == &quot;influenza_A_H3N2&quot;
+        epi(&quot;flu_outbreak&quot;)
+    elseif r.pathogen == &quot;SARS_CoV_2_JN1&quot;
+        epi(&quot;covid_outbreak&quot;)
+    else
+        epi(&quot;rsv_outbreak&quot;)
+    end
+    add!(g, Triple(case_uri, epi(&quot;partOfOutbreak&quot;), outbreak))
+end
+
+println(&quot;Three outbreaks defined, $(length(g)) total triples&quot;)</code></pre><pre><code class="nohighlight hljs">Three outbreaks defined, 572 total triples</code></pre><h2 id="4.-SHACL-Validation"><a class="docs-heading-anchor" href="#4.-SHACL-Validation">4. SHACL Validation</a><a id="4.-SHACL-Validation-1"></a><a class="docs-heading-anchor-permalink" href="#4.-SHACL-Validation" title="Permalink"></a></h2><p>We validate that every case report has required fields: a linked patient, pathogen, location, onset date, and severity classification.</p><pre><code class="language-julia hljs">shapes_ttl = &quot;&quot;&quot;
+    @prefix sh:  &lt;http://www.w3.org/ns/shacl#&gt; .
+    @prefix epi: &lt;http://example.org/epi#&gt; .
+    @prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    epi:CaseReportShape a sh:NodeShape ;
+        sh:targetClass epi:CaseReport ;
+        sh:property [
+            sh:path epi:caseForPatient ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+            sh:nodeKind sh:IRI ;
+        ] ;
+        sh:property [
+            sh:path epi:infectedBy ;
+            sh:minCount 1 ;
+            sh:maxCount 1 ;
+            sh:nodeKind sh:IRI ;
+        ] ;
+        sh:property [
+            sh:path epi:locatedAt ;
+            sh:minCount 1 ;
+        ] ;
+        sh:property [
+            sh:path epi:onsetDate ;
+            sh:minCount 1 ;
+            sh:datatype xsd:date ;
+        ] ;
+        sh:property [
+            sh:path epi:severity ;
+            sh:minCount 1 ;
+        ] .
+
+    epi:PatientShape a sh:NodeShape ;
+        sh:targetClass epi:Patient ;
+        sh:property [
+            sh:path rdfs:label ;
+            sh:minCount 1 ;
+            sh:datatype xsd:string ;
+        ] ;
+        sh:property [
+            sh:path epi:ageGroup ;
+            sh:minCount 1 ;
+        ] .
+&quot;&quot;&quot;
+
+report = rdf_validate(m, shapes_ttl)
+println(&quot;SHACL validation: conforms = $(report.conforms)&quot;)</code></pre><pre><code class="nohighlight hljs">SHACL validation: conforms = true</code></pre><p>Test with an incomplete case report:</p><pre><code class="language-julia hljs">bad = URIRef(&quot;http://example.org/case/incomplete&quot;)
+add!(g, Triple(bad, RDF.type, epi(&quot;CaseReport&quot;)))
+add!(g, Triple(bad, epi(&quot;severity&quot;), Literal(&quot;unknown&quot;)))
+
+report2 = rdf_validate(m, shapes_ttl)
+println(&quot;After adding incomplete case:&quot;)
+println(&quot;  Conforms: $(report2.conforms)&quot;)
+for r in report2.results
+    println(&quot;  ✗ $(r.message)&quot;)
+end
+
+# Clean up
+remove!(g, Triple(bad, RDF.type, epi(&quot;CaseReport&quot;)))
+remove!(g, Triple(bad, epi(&quot;severity&quot;), Literal(&quot;unknown&quot;)))</code></pre><pre><code class="nohighlight hljs">After adding incomplete case:
+  Conforms: false
+  ✗ Expected at least 1 values for http://example.org/epi#caseForPatient, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#infectedBy, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#onsetDate, got 0
+  ✗ Expected at least 1 values for http://example.org/epi#locatedAt, got 0
+
+RDFGraph (572 triples)</code></pre><h2 id="5.-SPARQL-Queries"><a class="docs-heading-anchor" href="#5.-SPARQL-Queries">5. SPARQL Queries</a><a id="5.-SPARQL-Queries-1"></a><a class="docs-heading-anchor-permalink" href="#5.-SPARQL-Queries" title="Permalink"></a></h2><h3 id="5a.-Cases-per-pathogen"><a class="docs-heading-anchor" href="#5a.-Cases-per-pathogen">5a. Cases per pathogen</a><a id="5a.-Cases-per-pathogen-1"></a><a class="docs-heading-anchor-permalink" href="#5a.-Cases-per-pathogen" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?pathogen_name (COUNT(?c) AS ?cases)
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:infectedBy ?p .
+        ?p rdfs:label ?pathogen_name .
+    }
+    GROUP BY ?pathogen_name
+    ORDER BY DESC(?cases)
+&quot;&quot;&quot;)
+
+println(&quot;Cases by pathogen:&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;pathogen_name&quot;]), 30)) $(readable(row[&quot;cases&quot;])) cases&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Cases by pathogen:
+  SARS-CoV-2 JN.1                10 cases
+  Influenza A (H3N2)             9 cases
+  RSV subtype B                  6 cases</code></pre><h3 id="5b.-Severity-distribution-per-pathogen"><a class="docs-heading-anchor" href="#5b.-Severity-distribution-per-pathogen">5b. Severity distribution per pathogen</a><a id="5b.-Severity-distribution-per-pathogen-1"></a><a class="docs-heading-anchor-permalink" href="#5b.-Severity-distribution-per-pathogen" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?pathogen_name ?severity (COUNT(?c) AS ?count)
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:infectedBy ?p ;
+           epi:severity ?severity .
+        ?p rdfs:label ?pathogen_name .
+    }
+    GROUP BY ?pathogen_name ?severity
+    ORDER BY ?pathogen_name ?severity
+&quot;&quot;&quot;)
+
+println(rpad(&quot;Pathogen&quot;, 28), rpad(&quot;Severity&quot;, 12), &quot;Count&quot;)
+println(&quot;─&quot;^50)
+for row in results
+    println(rpad(readable(row[&quot;pathogen_name&quot;]), 28),
+            rpad(readable(row[&quot;severity&quot;]), 12),
+            readable(row[&quot;count&quot;]))
+end</code></pre><pre><code class="nohighlight hljs">Pathogen                    Severity    Count
+──────────────────────────────────────────────────
+Influenza A (H3N2)          mild        2
+Influenza A (H3N2)          moderate    3
+Influenza A (H3N2)          severe      4
+RSV subtype B               mild        2
+RSV subtype B               moderate    2
+RSV subtype B               severe      2
+SARS-CoV-2 JN.1             mild        6
+SARS-CoV-2 JN.1             moderate    3
+SARS-CoV-2 JN.1             severe      1</code></pre><h3 id="5c.-Cases-per-location"><a class="docs-heading-anchor" href="#5c.-Cases-per-location">5c. Cases per location</a><a id="5c.-Cases-per-location-1"></a><a class="docs-heading-anchor-permalink" href="#5c.-Cases-per-location" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?location_name (COUNT(?c) AS ?cases)
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:locatedAt ?l .
+        ?l rdfs:label ?location_name .
+    }
+    GROUP BY ?location_name
+    ORDER BY DESC(?cases)
+&quot;&quot;&quot;)
+
+println(&quot;Cases by location:&quot;)
+for row in results
+    println(&quot;  $(rpad(readable(row[&quot;location_name&quot;]), 30)) $(readable(row[&quot;cases&quot;])) cases&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Cases by location:
+  Royal Infirmary                7 cases
+  General Hospital               7 cases
+  Sunrise Care Home              4 cases
+  Oakfield Primary School        3 cases
+  Riverside Academy              2 cases
+  Meadowbrook Care Home          2 cases</code></pre><h3 id="5d.-Most-common-symptoms-across-all-cases"><a class="docs-heading-anchor" href="#5d.-Most-common-symptoms-across-all-cases">5d. Most common symptoms across all cases</a><a id="5d.-Most-common-symptoms-across-all-cases-1"></a><a class="docs-heading-anchor-permalink" href="#5d.-Most-common-symptoms-across-all-cases" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?symptom_name (COUNT(?c) AS ?frequency)
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:hasSymptom ?s .
+        ?s rdfs:label ?symptom_name .
+    }
+    GROUP BY ?symptom_name
+    ORDER BY DESC(?frequency)
+&quot;&quot;&quot;)
+
+println(&quot;Symptom frequency across all cases:&quot;)
+for row in results
+    freq = readable(row[&quot;frequency&quot;])
+    println(&quot;  $(rpad(readable(row[&quot;symptom_name&quot;]), 20)) $(freq) cases&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Symptom frequency across all cases:
+  cough                24 cases
+  fever                14 cases
+  dyspnoea             8 cases
+  hypoxia              6 cases
+  fatigue              6 cases
+  rhinorrhoea          5 cases
+  sore throat          5 cases
+  myalgia              5 cases
+  wheeze               4 cases
+  tachypnoea           2 cases
+  headache             2 cases</code></pre><h3 id="5e.-Vulnerable-patients-with-severe-outcomes"><a class="docs-heading-anchor" href="#5e.-Vulnerable-patients-with-severe-outcomes">5e. Vulnerable patients with severe outcomes</a><a id="5e.-Vulnerable-patients-with-severe-outcomes-1"></a><a class="docs-heading-anchor-permalink" href="#5e.-Vulnerable-patients-with-severe-outcomes" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?patient_name ?age ?pathogen_name ?risk_name
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:caseForPatient ?p ;
+           epi:infectedBy ?pathogen ;
+           epi:severity &quot;severe&quot; .
+        ?p rdfs:label ?patient_name ;
+           epi:ageGroup ?age ;
+           epi:hasRiskFactor ?rf .
+        ?rf rdfs:label ?risk_name .
+        ?pathogen rdfs:label ?pathogen_name .
+    }
+    ORDER BY ?patient_name
+&quot;&quot;&quot;)
+
+println(&quot;Severe cases with risk factors:&quot;)
+for row in results
+    println(&quot;  $(readable(row[&quot;patient_name&quot;])) ($(readable(row[&quot;age&quot;]))) — &quot; *
+            &quot;$(readable(row[&quot;pathogen_name&quot;])), risk: $(readable(row[&quot;risk_name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Severe cases with risk factors:
+  Patient 001 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 001 (65+) — Influenza A (H3N2), risk: chronic lung disease
+  Patient 005 (65+) — SARS-CoV-2 JN.1, risk: age over 65
+  Patient 005 (65+) — SARS-CoV-2 JN.1, risk: cardiovascular disease
+  Patient 010 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 010 (65+) — Influenza A (H3N2), risk: immunocompromised
+  Patient 014 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 014 (65+) — Influenza A (H3N2), risk: chronic lung disease
+  Patient 022 (65+) — Influenza A (H3N2), risk: age over 65
+  Patient 022 (65+) — Influenza A (H3N2), risk: immunocompromised</code></pre><h3 id="5f.-Healthcare-worker-cases-(potential-nosocomial-amplifiers)"><a class="docs-heading-anchor" href="#5f.-Healthcare-worker-cases-(potential-nosocomial-amplifiers)">5f. Healthcare worker cases (potential nosocomial amplifiers)</a><a id="5f.-Healthcare-worker-cases-(potential-nosocomial-amplifiers)-1"></a><a class="docs-heading-anchor-permalink" href="#5f.-Healthcare-worker-cases-(potential-nosocomial-amplifiers)" title="Permalink"></a></h3><pre><code class="language-julia hljs">results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?patient_name ?pathogen_name ?location_name ?onset
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:caseForPatient ?p ;
+           epi:infectedBy ?pathogen ;
+           epi:locatedAt ?loc ;
+           epi:onsetDate ?onset .
+        ?p epi:hasRiskFactor epi:healthcare_worker ;
+           rdfs:label ?patient_name .
+        ?pathogen rdfs:label ?pathogen_name .
+        ?loc rdfs:label ?location_name .
+    }
+    ORDER BY ?onset
+&quot;&quot;&quot;)
+
+println(&quot;Healthcare worker cases (potential nosocomial transmission):&quot;)
+for row in results
+    println(&quot;  $(readable(row[&quot;onset&quot;])) | $(readable(row[&quot;patient_name&quot;])) | &quot; *
+            &quot;$(readable(row[&quot;pathogen_name&quot;])) | $(readable(row[&quot;location_name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Healthcare worker cases (potential nosocomial transmission):
+  2025-01-17 | Patient 003 | Influenza A (H3N2) | Royal Infirmary
+  2025-01-22 | Patient 012 | SARS-CoV-2 JN.1 | Royal Infirmary
+  2025-01-24 | Patient 017 | SARS-CoV-2 JN.1 | Royal Infirmary
+  2025-01-26 | Patient 025 | SARS-CoV-2 JN.1 | Royal Infirmary</code></pre><h2 id="6.-Property-Paths-—-Contact-Tracing-Chains"><a class="docs-heading-anchor" href="#6.-Property-Paths-—-Contact-Tracing-Chains">6. Property Paths — Contact Tracing Chains</a><a id="6.-Property-Paths-—-Contact-Tracing-Chains-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Property-Paths-—-Contact-Tracing-Chains" title="Permalink"></a></h2><p>Using property paths we can trace multi-step contact chains to identify potential transmission routes.</p><pre><code class="language-julia hljs"># All patients reachable from P001 through contact chains
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX pat: &lt;http://example.org/patient/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT DISTINCT ?contact_name
+    WHERE {
+        pat:P001 epi:contactWith+ ?contact .
+        ?contact rdfs:label ?contact_name .
+        FILTER(?contact != pat:P001)
+    }
+    ORDER BY ?contact_name
+&quot;&quot;&quot;)
+
+println(&quot;Contact chain from index case P001 ($(length(results)) reachable):&quot;)
+for row in results
+    println(&quot;  → $(readable(row[&quot;contact_name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Contact chain from index case P001 (7 reachable):
+  → Patient 002
+  → Patient 003
+  → Patient 010
+  → Patient 012
+  → Patient 017
+  → Patient 022
+  → Patient 024</code></pre><pre><code class="language-julia hljs"># Transmission chains — who infected whom, transitively
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX pat: &lt;http://example.org/patient/&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT DISTINCT ?downstream_name
+    WHERE {
+        ?downstream epi:transmittedFrom+ pat:P001 .
+        ?downstream rdfs:label ?downstream_name .
+    }
+    ORDER BY ?downstream_name
+&quot;&quot;&quot;)
+
+println(&quot;Downstream transmission from P001 ($(length(results)) infected):&quot;)
+for row in results
+    println(&quot;  → $(readable(row[&quot;downstream_name&quot;]))&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Downstream transmission from P001 (3 infected):
+  → Patient 002
+  → Patient 010
+  → Patient 022</code></pre><h2 id="7.-Datalog-Reasoning-—-Transmission-Risk-Inference"><a class="docs-heading-anchor" href="#7.-Datalog-Reasoning-—-Transmission-Risk-Inference">7. Datalog Reasoning — Transmission Risk Inference</a><a id="7.-Datalog-Reasoning-—-Transmission-Risk-Inference-1"></a><a class="docs-heading-anchor-permalink" href="#7.-Datalog-Reasoning-—-Transmission-Risk-Inference" title="Permalink"></a></h2><p>We use <strong>Datalog</strong> to infer transmission risk categories and identify potential super-spreader settings.</p><pre><code class="language-julia hljs">n3_lines = String[]
+push!(n3_lines, &quot;@prefix epi: &lt;http://example.org/epi#&gt; .&quot;)
+push!(n3_lines, &quot;@prefix pat: &lt;http://example.org/patient/&gt; .&quot;)
+push!(n3_lines, &quot;&quot;)
+
+# Encode known transmissions
+for (src, tgt) in transmissions
+    push!(n3_lines, &quot;pat:$tgt epi:transmittedFrom pat:$src .&quot;)
+end
+
+# Encode contacts
+for (a, b) in contacts
+    push!(n3_lines, &quot;pat:$a epi:contactWith pat:$b .&quot;)
+end
+
+# Encode HCW status
+for (id, _, _, risks, _) in patients
+    if &quot;healthcare_worker&quot; in risks
+        push!(n3_lines, &quot;pat:$id epi:isHCW epi:true .&quot;)
+    end
+end
+
+push!(n3_lines, &quot;&quot;)
+# Inference rules
+push!(n3_lines, &quot;# Transitive transmission chain&quot;)
+push!(n3_lines, &quot;{ ?A epi:transmittedFrom ?B } =&gt; { ?A epi:inChainFrom ?B } .&quot;)
+push!(n3_lines, &quot;{ ?A epi:inChainFrom ?B . ?B epi:inChainFrom ?C } =&gt; { ?A epi:inChainFrom ?C } .&quot;)
+push!(n3_lines, &quot;&quot;)
+push!(n3_lines, &quot;# Potential spreader: transmitted to 2+ people&quot;)
+push!(n3_lines, &quot;{ ?A epi:transmittedFrom ?X . ?B epi:transmittedFrom ?X } =&gt; { ?X epi:potentialSpreader epi:true } .&quot;)
+push!(n3_lines, &quot;&quot;)
+push!(n3_lines, &quot;# HCW contact risk: HCW with contacts in multiple settings&quot;)
+push!(n3_lines, &quot;{ ?X epi:isHCW epi:true . ?X epi:contactWith ?Y } =&gt; { ?Y epi:hcwExposed epi:true } .&quot;)
+
+n3_text = join(n3_lines, &quot;\n&quot;)
+g_dl = parse_rdf(n3_text, N3Format())
+println(&quot;Before reasoning: $(length(g_dl)) triples&quot;)
+
+g_inferred = datalog_reason(g_dl)
+println(&quot;After reasoning:  $(length(g_inferred)) triples&quot;)
+
+# Potential spreaders
+spreaders = collect(triples(g_inferred, (nothing, epi(&quot;potentialSpreader&quot;), epi(&quot;true&quot;))))
+println(&quot;\nPotential spreaders (transmitted to ≥2):&quot;)
+for t in spreaders
+    println(&quot;  ⚠ $(split(string(t.subject), &#39;/&#39;)[end])&quot;)
+end
+
+# HCW-exposed patients
+hcw_exposed = collect(triples(g_inferred, (nothing, epi(&quot;hcwExposed&quot;), epi(&quot;true&quot;))))
+println(&quot;\nPatients exposed via HCW contact ($(length(hcw_exposed))):&quot;)
+for t in hcw_exposed
+    println(&quot;  → $(split(string(t.subject), &#39;/&#39;)[end])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">Before reasoning: 36 triples
+After reasoning:  72 triples
+
+Potential spreaders (transmitted to ≥2):
+  ⚠ P002
+  ⚠ P016
+  ⚠ P011
+  ⚠ P001
+  ⚠ P006
+  ⚠ P009
+  ⚠ P013
+  ⚠ P004
+  ⚠ P003
+
+Patients exposed via HCW contact (14):
+  → P015
+  → P009
+  → P020
+  → P017
+  → P016
+  → P019
+  → P022
+  → P010
+  → P012
+  → P007
+  → P013
+  → P024
+  → P002
+  → P001</code></pre><h2 id="8.-N3-Reasoning-—-Epidemiological-Inference-with-Builtins"><a class="docs-heading-anchor" href="#8.-N3-Reasoning-—-Epidemiological-Inference-with-Builtins">8. N3 Reasoning — Epidemiological Inference with Builtins</a><a id="8.-N3-Reasoning-—-Epidemiological-Inference-with-Builtins-1"></a><a class="docs-heading-anchor-permalink" href="#8.-N3-Reasoning-—-Epidemiological-Inference-with-Builtins" title="Permalink"></a></h2><p>The N3 reasoner (Euler Abstract Machine) goes beyond Datalog by supporting <strong>math builtins</strong>, <strong>string operations</strong>, and <strong>backward chaining</strong>. This makes it ideal for epidemiological inference rules that involve thresholds, date arithmetic, and complex classification logic.</p><h3 id="8a.-Outbreak-classification-rules"><a class="docs-heading-anchor" href="#8a.-Outbreak-classification-rules">8a. Outbreak classification rules</a><a id="8a.-Outbreak-classification-rules-1"></a><a class="docs-heading-anchor-permalink" href="#8a.-Outbreak-classification-rules" title="Permalink"></a></h3><p>We classify cases using forward-chaining N3 rules with <code>math:</code> builtins to evaluate thresholds.</p><pre><code class="language-julia hljs">n3_epi = &quot;&quot;&quot;
+    @prefix epi: &lt;http://example.org/epi#&gt; .
+    @prefix pat: &lt;http://example.org/patient/&gt; .
+    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .
+    @prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+
+    # --- Facts: patient ages, case severity, R0 values ---
+    pat:P001 epi:age 72 ; epi:severity &quot;severe&quot; ; epi:pathogenR0 1.3 .
+    pat:P004 epi:age 28 ; epi:severity &quot;mild&quot;   ; epi:pathogenR0 2.5 .
+    pat:P005 epi:age 71 ; epi:severity &quot;severe&quot; ; epi:pathogenR0 2.5 .
+    pat:P006 epi:age 8  ; epi:severity &quot;moderate&quot;; epi:pathogenR0 3.0 .
+    pat:P010 epi:age 78 ; epi:severity &quot;severe&quot; ; epi:pathogenR0 1.3 .
+    pat:P011 epi:age 2  ; epi:severity &quot;severe&quot; ; epi:pathogenR0 3.0 .
+    pat:P014 epi:age 68 ; epi:severity &quot;severe&quot; ; epi:pathogenR0 1.3 .
+    pat:P016 epi:age 52 ; epi:severity &quot;moderate&quot;; epi:pathogenR0 2.5 .
+    pat:P022 epi:age 75 ; epi:severity &quot;severe&quot; ; epi:pathogenR0 1.3 .
+
+    # --- Rule 1: Elderly patient (age &gt;= 65) ---
+    { ?P epi:age ?A . ?A math:notLessThan 65 }
+        =&gt; { ?P epi:ageCategory &quot;elderly&quot; } .
+
+    # --- Rule 2: Paediatric patient (age &lt; 5) ---
+    { ?P epi:age ?A . ?A math:lessThan 5 }
+        =&gt; { ?P epi:ageCategory &quot;paediatric&quot; } .
+
+    # --- Rule 3: High-risk case (elderly or paediatric with severe outcome) ---
+    { ?P epi:ageCategory &quot;elderly&quot; . ?P epi:severity &quot;severe&quot; }
+        =&gt; { ?P epi:riskClass &quot;high_risk_elderly&quot; } .
+    { ?P epi:ageCategory &quot;paediatric&quot; . ?P epi:severity &quot;severe&quot; }
+        =&gt; { ?P epi:riskClass &quot;high_risk_paediatric&quot; } .
+
+    # --- Rule 4: High-transmissibility pathogen (R0 &gt;= 2.0) ---
+    { ?P epi:pathogenR0 ?R . ?R math:notLessThan 2.0 }
+        =&gt; { ?P epi:transmissibility &quot;high&quot; } .
+
+    # --- Rule 5: Priority case (high risk + high transmissibility) ---
+    { ?P epi:riskClass ?RC . ?P epi:transmissibility &quot;high&quot; }
+        =&gt; { ?P epi:priority &quot;critical&quot; } .
+&quot;&quot;&quot;
+
+g_n3 = parse_n3(n3_epi)
+result = reason(g_n3)
+
+println(&quot;N3 Reasoning Results&quot;)
+println(&quot;════════════════════&quot;)
+
+# Age categories
+for cat in [&quot;elderly&quot;, &quot;paediatric&quot;]
+    pts = [split(string(t.subject), &#39;/&#39;)[end]
+           for t in triples(result, (nothing, epi(&quot;ageCategory&quot;), Literal(cat)))]
+    println(&quot;\n$(titlecase(cat)) patients: $(join(sort(pts), &quot;, &quot;))&quot;)
+end
+
+# Risk classifications
+for rc in [&quot;high_risk_elderly&quot;, &quot;high_risk_paediatric&quot;]
+    pts = [split(string(t.subject), &#39;/&#39;)[end]
+           for t in triples(result, (nothing, epi(&quot;riskClass&quot;), Literal(rc)))]
+    if !isempty(pts)
+        label = replace(rc, &quot;_&quot; =&gt; &quot; &quot;)
+        println(&quot;$(titlecase(label)): $(join(sort(pts), &quot;, &quot;))&quot;)
+    end
+end
+
+# Priority cases
+priority = [split(string(t.subject), &#39;/&#39;)[end]
+            for t in triples(result, (nothing, epi(&quot;priority&quot;), Literal(&quot;critical&quot;)))]
+println(&quot;\n⚠ Critical priority cases: $(join(sort(priority), &quot;, &quot;))&quot;)</code></pre><pre><code class="nohighlight hljs">N3 Reasoning Results
+════════════════════
+
+Elderly patients: P001, P005, P010, P014, P022
+
+Paediatric patients: P011
+High Risk Elderly: P001, P005, P010, P014, P022
+High Risk Paediatric: P011
+
+⚠ Critical priority cases: P005, P011</code></pre><h3 id="8b.-Serial-interval-and-generation-time-analysis"><a class="docs-heading-anchor" href="#8b.-Serial-interval-and-generation-time-analysis">8b. Serial interval and generation time analysis</a><a id="8b.-Serial-interval-and-generation-time-analysis-1"></a><a class="docs-heading-anchor-permalink" href="#8b.-Serial-interval-and-generation-time-analysis" title="Permalink"></a></h3><p>Using N3 math builtins to compute epidemiological metrics from pairs of linked cases.</p><pre><code class="language-julia hljs">n3_serial = &quot;&quot;&quot;
+    @prefix epi: &lt;http://example.org/epi#&gt; .
+    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .
+
+    # Transmission pairs with onset day-of-year for serial interval calculation
+    # (onset dates encoded as day-of-January for simplicity)
+    epi:pair1 epi:infector &quot;P001&quot; ; epi:infectee &quot;P002&quot; ; epi:onsetInfector 15 ; epi:onsetInfectee 16 .
+    epi:pair2 epi:infector &quot;P001&quot; ; epi:infectee &quot;P010&quot; ; epi:onsetInfector 15 ; epi:onsetInfectee 18 .
+    epi:pair3 epi:infector &quot;P002&quot; ; epi:infectee &quot;P022&quot; ; epi:onsetInfector 16 ; epi:onsetInfectee 23 .
+    epi:pair4 epi:infector &quot;P006&quot; ; epi:infectee &quot;P007&quot; ; epi:onsetInfector 14 ; epi:onsetInfectee 15 .
+    epi:pair5 epi:infector &quot;P004&quot; ; epi:infectee &quot;P009&quot; ; epi:onsetInfector 20 ; epi:onsetInfectee 22 .
+    epi:pair6 epi:infector &quot;P009&quot; ; epi:infectee &quot;P013&quot; ; epi:onsetInfector 22 ; epi:onsetInfectee 23 .
+    epi:pair7 epi:infector &quot;P013&quot; ; epi:infectee &quot;P016&quot; ; epi:onsetInfector 23 ; epi:onsetInfectee 24 .
+    epi:pair8 epi:infector &quot;P016&quot; ; epi:infectee &quot;P020&quot; ; epi:onsetInfector 24 ; epi:onsetInfectee 25 .
+    epi:pair9 epi:infector &quot;P011&quot; ; epi:infectee &quot;P019&quot; ; epi:onsetInfector 17 ; epi:onsetInfectee 19 .
+    epi:pair10 epi:infector &quot;P003&quot; ; epi:infectee &quot;P017&quot; ; epi:onsetInfector 17 ; epi:onsetInfectee 24 .
+
+    # Compute serial interval (days between symptom onsets)
+    { ?Pair epi:onsetInfector ?D1 . ?Pair epi:onsetInfectee ?D2 .
+      (?D2 ?D1) math:difference ?SI }
+        =&gt; { ?Pair epi:serialInterval ?SI } .
+
+    # Classify serial interval
+    { ?Pair epi:serialInterval ?SI . ?SI math:lessThan 2 }
+        =&gt; { ?Pair epi:intervalClass &quot;short&quot; } .
+    { ?Pair epi:serialInterval ?SI . ?SI math:notLessThan 2 . ?SI math:lessThan 5 }
+        =&gt; { ?Pair epi:intervalClass &quot;typical&quot; } .
+    { ?Pair epi:serialInterval ?SI . ?SI math:notLessThan 5 }
+        =&gt; { ?Pair epi:intervalClass &quot;long&quot; } .
+&quot;&quot;&quot;
+
+g_si = parse_n3(n3_serial)
+result_si = reason(g_si)
+
+println(&quot;Serial Interval Analysis (N3 math builtins)&quot;)
+println(&quot;════════════════════════════════════════════&quot;)
+println(rpad(&quot;Pair&quot;, 10), rpad(&quot;Infector&quot;, 10), rpad(&quot;Infectee&quot;, 10),
+        rpad(&quot;SI (days)&quot;, 12), &quot;Class&quot;)
+println(&quot;─&quot;^52)
+
+for i in 1:10
+    pair_uri = epi(&quot;pair$i&quot;)
+    infector_ts = collect(triples(result_si, (pair_uri, epi(&quot;infector&quot;), nothing)))
+    infectee_ts = collect(triples(result_si, (pair_uri, epi(&quot;infectee&quot;), nothing)))
+    si_ts = collect(triples(result_si, (pair_uri, epi(&quot;serialInterval&quot;), nothing)))
+    cls_ts = collect(triples(result_si, (pair_uri, epi(&quot;intervalClass&quot;), nothing)))
+
+    if !isempty(infector_ts) &amp;&amp; !isempty(si_ts)
+        infector = infector_ts[1].object.lexical
+        infectee = infectee_ts[1].object.lexical
+        si = si_ts[1].object.lexical
+        cls = isempty(cls_ts) ? &quot;?&quot; : cls_ts[1].object.lexical
+        println(rpad(&quot;pair$i&quot;, 10), rpad(infector, 10), rpad(infectee, 10),
+                rpad(si, 12), cls)
+    end
+end</code></pre><pre><code class="nohighlight hljs">Serial Interval Analysis (N3 math builtins)
+════════════════════════════════════════════
+Pair      Infector  Infectee  SI (days)   Class
+────────────────────────────────────────────────────
+pair1     P001      P002      1           short
+pair2     P001      P010      3           typical
+pair3     P002      P022      7           long
+pair4     P006      P007      1           short
+pair5     P004      P009      2           typical
+pair6     P009      P013      1           short
+pair7     P013      P016      1           short
+pair8     P016      P020      1           short
+pair9     P011      P019      2           typical
+pair10    P003      P017      7           long</code></pre><h3 id="8c.-Rule-based-clinical-decision-support"><a class="docs-heading-anchor" href="#8c.-Rule-based-clinical-decision-support">8c. Rule-based clinical decision support</a><a id="8c.-Rule-based-clinical-decision-support-1"></a><a class="docs-heading-anchor-permalink" href="#8c.-Rule-based-clinical-decision-support" title="Permalink"></a></h3><p>N3 rules can implement clinical decision logic, combining patient attributes with epidemiological criteria to flag cases needing specific interventions.</p><pre><code class="language-julia hljs">n3_decisions = &quot;&quot;&quot;
+    @prefix epi: &lt;http://example.org/epi#&gt; .
+    @prefix pat: &lt;http://example.org/patient/&gt; .
+    @prefix math: &lt;http://www.w3.org/2000/10/swap/math#&gt; .
+
+    # Patient data
+    pat:P001 epi:age 72 ; epi:numContacts 3 ; epi:severity &quot;severe&quot; .
+    pat:P004 epi:age 28 ; epi:numContacts 2 ; epi:severity &quot;mild&quot; .
+    pat:P005 epi:age 71 ; epi:numContacts 2 ; epi:severity &quot;severe&quot; .
+    pat:P009 epi:age 48 ; epi:numContacts 3 ; epi:severity &quot;moderate&quot; .
+    pat:P011 epi:age 2  ; epi:numContacts 1 ; epi:severity &quot;severe&quot; .
+    pat:P014 epi:age 68 ; epi:numContacts 0 ; epi:severity &quot;severe&quot; .
+
+    # Rule: Isolation required — severe cases with at least 1 contact
+    { ?P epi:severity &quot;severe&quot; . ?P epi:numContacts ?C . ?C math:notLessThan 1 }
+        =&gt; { ?P epi:action &quot;isolation_required&quot; } .
+
+    # Rule: ICU referral — severe + elderly (age ≥ 65)
+    { ?P epi:severity &quot;severe&quot; . ?P epi:age ?A . ?A math:notLessThan 65 }
+        =&gt; { ?P epi:action &quot;icu_referral&quot; } .
+
+    # Rule: Contact tracing priority — ≥ 3 contacts
+    { ?P epi:numContacts ?C . ?C math:notLessThan 3 }
+        =&gt; { ?P epi:action &quot;contact_tracing_priority&quot; } .
+
+    # Rule: Paediatric escalation — severe + under 5
+    { ?P epi:severity &quot;severe&quot; . ?P epi:age ?A . ?A math:lessThan 5 }
+        =&gt; { ?P epi:action &quot;paediatric_escalation&quot; } .
+&quot;&quot;&quot;
+
+g_dec = parse_n3(n3_decisions)
+result_dec = reason(g_dec)
+
+println(&quot;Clinical Decision Support (N3 forward chaining)&quot;)
+println(&quot;════════════════════════════════════════════════&quot;)
+
+actions = Dict{String, Vector{String}}()
+for t in triples(result_dec, (nothing, epi(&quot;action&quot;), nothing))
+    pid = split(string(t.subject), &#39;/&#39;)[end]
+    action = t.object.lexical
+    pids = get!(actions, action, String[])
+    push!(pids, pid)
+end
+
+for (action, pids) in sort(collect(actions))
+    label = replace(action, &quot;_&quot; =&gt; &quot; &quot;)
+    println(&quot;\n  $(uppercase(label)):&quot;)
+    for p in sort(pids)
+        println(&quot;    → $p&quot;)
+    end
+end</code></pre><pre><code class="nohighlight hljs">Clinical Decision Support (N3 forward chaining)
+════════════════════════════════════════════════
+
+  CONTACT TRACING PRIORITY:
+    → P001
+    → P009
+
+  ICU REFERRAL:
+    → P001
+    → P005
+    → P014
+
+  ISOLATION REQUIRED:
+    → P001
+    → P005
+    → P011
+
+  PAEDIATRIC ESCALATION:
+    → P011</code></pre><h2 id="9.-ProbLog-—-Probabilistic-Outbreak-Modeling"><a class="docs-heading-anchor" href="#9.-ProbLog-—-Probabilistic-Outbreak-Modeling">9. ProbLog — Probabilistic Outbreak Modeling</a><a id="9.-ProbLog-—-Probabilistic-Outbreak-Modeling-1"></a><a class="docs-heading-anchor-permalink" href="#9.-ProbLog-—-Probabilistic-Outbreak-Modeling" title="Permalink"></a></h2><p>We model the probability of outbreak outcomes given interventions using ProbLog. The model captures: vaccination effectiveness, quarantine compliance, and secondary attack rates.</p><pre><code class="language-julia hljs">problog_program = &quot;&quot;&quot;
+    % Pathogen-specific secondary attack rates
+    0.35::secondary_attack(influenza).
+    0.25::secondary_attack(covid).
+    0.40::secondary_attack(rsv).
+
+    % Vaccine effectiveness against severe disease
+    0.65::vaccine_effective(influenza).
+    0.55::vaccine_effective(covid).
+    0.30::vaccine_effective(rsv).
+
+    % Quarantine compliance
+    0.80::quarantine_compliant(hospital).
+    0.60::quarantine_compliant(care_home).
+    0.40::quarantine_compliant(school).
+
+    % Contact rates by setting
+    0.70::high_contact(hospital).
+    0.85::high_contact(care_home).
+    0.90::high_contact(school).
+
+    % Outbreak containment
+    contained(Pathogen, Setting) :-
+        quarantine_compliant(Setting),
+        \\+high_contact(Setting).
+
+    contained(Pathogen, Setting) :-
+        quarantine_compliant(Setting),
+        vaccine_effective(Pathogen).
+
+    % Severe outcome risk
+    severe_outcome(Pathogen) :-
+        secondary_attack(Pathogen),
+        \\+vaccine_effective(Pathogen).
+
+    % Nosocomial amplification
+    nosocomial_spread(Pathogen) :-
+        secondary_attack(Pathogen),
+        high_contact(hospital),
+        \\+contained(Pathogen, hospital).
+
+    % Community spread
+    community_spread(Pathogen, Setting) :-
+        secondary_attack(Pathogen),
+        high_contact(Setting),
+        \\+contained(Pathogen, Setting).
+
+    query(contained(influenza, hospital)).
+    query(contained(influenza, care_home)).
+    query(contained(influenza, school)).
+    query(contained(covid, hospital)).
+    query(contained(covid, care_home)).
+    query(contained(covid, school)).
+    query(contained(rsv, hospital)).
+    query(contained(rsv, school)).
+    query(severe_outcome(influenza)).
+    query(severe_outcome(covid)).
+    query(severe_outcome(rsv)).
+    query(nosocomial_spread(influenza)).
+    query(nosocomial_spread(covid)).
+    query(nosocomial_spread(rsv)).
+    query(community_spread(influenza, school)).
+    query(community_spread(covid, care_home)).
+    query(community_spread(rsv, school)).
+&quot;&quot;&quot;
+
+results = problog_query(problog_program)
+
+println(&quot;Outbreak Containment Probabilities&quot;)
+println(&quot;═══════════════════════════════════&quot;)
+for key in sort(collect(keys(results)))
+    if startswith(key, &quot;contained&quot;)
+        println(&quot;  $(rpad(key, 40)) P = $(round(results[key]; digits=4))&quot;)
+    end
+end
+
+println(&quot;\nSevere Outcome Risk&quot;)
+println(&quot;═══════════════════&quot;)
+for key in sort(collect(keys(results)))
+    if startswith(key, &quot;severe&quot;)
+        println(&quot;  $(rpad(key, 40)) P = $(round(results[key]; digits=4))&quot;)
+    end
+end
+
+println(&quot;\nSpread Risk&quot;)
+println(&quot;═══════════&quot;)
+for key in sort(collect(keys(results)))
+    if startswith(key, &quot;nosocomial&quot;) || startswith(key, &quot;community&quot;)
+        println(&quot;  $(rpad(key, 40)) P = $(round(results[key]; digits=4))&quot;)
+    end
+end</code></pre><pre><code class="nohighlight hljs">Outbreak Containment Probabilities
+═══════════════════════════════════
+  contained(covid,care_home)               P = 0.3705
+  contained(covid,hospital)                P = 0.548
+  contained(covid,school)                  P = 0.238
+  contained(influenza,care_home)           P = 0.4215
+  contained(influenza,hospital)            P = 0.604
+  contained(influenza,school)              P = 0.274
+  contained(rsv,hospital)                  P = 0.408
+  contained(rsv,school)                    P = 0.148
+
+Severe Outcome Risk
+═══════════════════
+  severe_outcome(covid)                    P = 0.1125
+  severe_outcome(influenza)                P = 0.1225
+  severe_outcome(rsv)                      P = 0.28
+
+Spread Risk
+═══════════
+  community_spread(covid,care_home)        P = 0.1424
+  community_spread(influenza,school)       P = 0.2331
+  community_spread(rsv,school)             P = 0.3168
+  nosocomial_spread(covid)                 P = 0.098
+  nosocomial_spread(influenza)             P = 0.1176
+  nosocomial_spread(rsv)                   P = 0.2128</code></pre><h3 id="Intervention-scenario-comparison"><a class="docs-heading-anchor" href="#Intervention-scenario-comparison">Intervention scenario comparison</a><a id="Intervention-scenario-comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Intervention-scenario-comparison" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Scenario: enhanced infection control (higher quarantine compliance)
+enhanced_program = &quot;&quot;&quot;
+    0.35::secondary_attack(influenza).
+    0.25::secondary_attack(covid).
+    0.40::secondary_attack(rsv).
+
+    0.65::vaccine_effective(influenza).
+    0.55::vaccine_effective(covid).
+    0.30::vaccine_effective(rsv).
+
+    % Enhanced quarantine compliance
+    0.95::quarantine_compliant(hospital).
+    0.85::quarantine_compliant(care_home).
+    0.70::quarantine_compliant(school).
+
+    0.70::high_contact(hospital).
+    0.85::high_contact(care_home).
+    0.90::high_contact(school).
+
+    contained(Pathogen, Setting) :-
+        quarantine_compliant(Setting),
+        \\+high_contact(Setting).
+    contained(Pathogen, Setting) :-
+        quarantine_compliant(Setting),
+        vaccine_effective(Pathogen).
+
+    nosocomial_spread(Pathogen) :-
+        secondary_attack(Pathogen),
+        high_contact(hospital),
+        \\+contained(Pathogen, hospital).
+
+    community_spread(Pathogen, Setting) :-
+        secondary_attack(Pathogen),
+        high_contact(Setting),
+        \\+contained(Pathogen, Setting).
+
+    query(nosocomial_spread(influenza)).
+    query(nosocomial_spread(covid)).
+    query(nosocomial_spread(rsv)).
+    query(community_spread(influenza, school)).
+    query(community_spread(covid, care_home)).
+    query(community_spread(rsv, school)).
+&quot;&quot;&quot;
+
+enhanced = problog_query(enhanced_program)
+
+println(&quot;Intervention Comparison: Spread Risk&quot;)
+println(&quot;═════════════════════════════════════&quot;)
+println(rpad(&quot;Metric&quot;, 42), rpad(&quot;Baseline&quot;, 12), &quot;Enhanced IPC&quot;)
+println(&quot;─&quot;^66)
+for key in sort(collect(keys(enhanced)))
+    b = get(results, key, 0.0)
+    e = enhanced[key]
+    delta = e - b
+    arrow = delta &lt; -0.01 ? &quot; ↓&quot; : (delta &gt; 0.01 ? &quot; ↑&quot; : &quot;&quot;)
+    println(rpad(key, 42),
+            rpad(round(b; digits=4), 12),
+            round(e; digits=4), arrow)
+end</code></pre><pre><code class="nohighlight hljs">Intervention Comparison: Spread Risk
+═════════════════════════════════════
+Metric                                    Baseline    Enhanced IPC
+──────────────────────────────────────────────────────────────────
+community_spread(covid,care_home)         0.1424      0.1132 ↓
+community_spread(influenza,school)        0.2331      0.1717 ↓
+community_spread(rsv,school)              0.3168      0.2844 ↓
+nosocomial_spread(covid)                  0.098       0.0836 ↓
+nosocomial_spread(influenza)              0.1176      0.0937 ↓
+nosocomial_spread(rsv)                    0.2128      0.2002 ↓</code></pre><h2 id="10.-Visualisation"><a class="docs-heading-anchor" href="#10.-Visualisation">10. Visualisation</a><a id="10.-Visualisation-1"></a><a class="docs-heading-anchor-permalink" href="#10.-Visualisation" title="Permalink"></a></h2><h3 id="9a.-Outbreak-transmission-network"><a class="docs-heading-anchor" href="#9a.-Outbreak-transmission-network">9a. Outbreak transmission network</a><a id="9a.-Outbreak-transmission-network-1"></a><a class="docs-heading-anchor-permalink" href="#9a.-Outbreak-transmission-network" title="Permalink"></a></h3><pre><code class="language-julia hljs">using GraphViz
+
+# Build DOT for transmission network with pathogen colouring
+dot_lines = String[]
+push!(dot_lines, &quot;digraph Outbreak {&quot;)
+push!(dot_lines, &quot;  label=\&quot;Multi-Pathogen Outbreak — Transmission Network\&quot;;&quot;)
+push!(dot_lines, &quot;  labelloc=t; fontsize=14;&quot;)
+push!(dot_lines, &quot;  node [shape=ellipse, style=filled];&quot;)
+push!(dot_lines, &quot;  edge [color=grey50];&quot;)
+
+# Map patients to their pathogen for colouring
+patient_pathogen = Dict{String,String}()
+for r in case_records
+    patient_pathogen[r.patient] = r.pathogen
+end
+
+pathogen_colors = Dict(
+    &quot;influenza_A_H3N2&quot; =&gt; &quot;\&quot;#ffcccc\&quot;&quot;,   # red-tint
+    &quot;SARS_CoV_2_JN1&quot;   =&gt; &quot;\&quot;#ccddff\&quot;&quot;,   # blue-tint
+    &quot;RSV_B&quot;            =&gt; &quot;\&quot;#ccffcc\&quot;&quot;,    # green-tint
+)
+
+# Patient severity
+patient_severity = Dict{String,String}()
+for r in case_records
+    patient_severity[r.patient] = r.severity
+end
+
+# Add patient nodes
+seen_patients = Set{String}()
+for r in case_records
+    pid = r.patient
+    pid in seen_patients &amp;&amp; continue
+    push!(seen_patients, pid)
+    color = get(pathogen_colors, r.pathogen, &quot;\&quot;#ffffff\&quot;&quot;)
+    shape = r.severity == &quot;severe&quot; ? &quot;doubleoctagon&quot; : (r.severity == &quot;moderate&quot; ? &quot;octagon&quot; : &quot;ellipse&quot;)
+    push!(dot_lines, &quot;  $pid [label=\&quot;$pid\&quot;, fillcolor=$color, shape=$shape];&quot;)
+end
+
+# Transmission edges (bold)
+for (src, tgt) in transmissions
+    push!(dot_lines, &quot;  $src -&gt; $tgt [penwidth=2.0, color=black];&quot;)
+end
+
+# Contact edges (dashed, lighter)
+for (a, b) in contacts
+    if !any(t -&gt; (t[1] == a &amp;&amp; t[2] == b) || (t[1] == b &amp;&amp; t[2] == a), transmissions)
+        push!(dot_lines, &quot;  $a -&gt; $b [style=dashed, color=grey70, arrowhead=none];&quot;)
+    end
+end
+
+push!(dot_lines, &quot;}&quot;)
+dot_str = join(dot_lines, &quot;\n&quot;)
+GraphViz.load(IOBuffer(dot_str))</code></pre><p><img src="../epidemiology_files/figure-commonmark/cell-27-output-1.svg" alt/></p><h3 id="9b.-Epidemic-curve-by-pathogen"><a class="docs-heading-anchor" href="#9b.-Epidemic-curve-by-pathogen">9b. Epidemic curve by pathogen</a><a id="9b.-Epidemic-curve-by-pathogen-1"></a><a class="docs-heading-anchor-permalink" href="#9b.-Epidemic-curve-by-pathogen" title="Permalink"></a></h3><p>We visualise the onset dates as a textual epidemic curve.</p><pre><code class="language-julia hljs">dates = sort(unique([r.onset for r in case_records]))
+pathogen_short = Dict(
+    &quot;influenza_A_H3N2&quot; =&gt; &quot;Flu&quot;,
+    &quot;SARS_CoV_2_JN1&quot; =&gt; &quot;CoV&quot;,
+    &quot;RSV_B&quot; =&gt; &quot;RSV&quot;
+)
+
+println(&quot;Epidemic Curve (onset dates)&quot;)
+println(&quot;════════════════════════════&quot;)
+for d in dates
+    cases_on_date = filter(r -&gt; r.onset == d, case_records)
+    markers = join([pathogen_short[r.pathogen] for r in cases_on_date], &quot; &quot;)
+    bar = &quot;█&quot; ^ length(cases_on_date)
+    println(&quot;  $d | $bar $(length(cases_on_date)) ($markers)&quot;)
+end
+println(&quot;\nLegend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B&quot;)</code></pre><pre><code class="nohighlight hljs">Epidemic Curve (onset dates)
+════════════════════════════
+  2025-01-14 | █ 1 (RSV)
+  2025-01-15 | ██ 2 (Flu RSV)
+  2025-01-16 | █ 1 (Flu)
+  2025-01-17 | ██ 2 (Flu RSV)
+  2025-01-18 | ██ 2 (Flu RSV)
+  2025-01-19 | ██ 2 (Flu RSV)
+  2025-01-20 | ███ 3 (CoV Flu RSV)
+  2025-01-21 | ██ 2 (CoV Flu)
+  2025-01-22 | ███ 3 (CoV CoV Flu)
+  2025-01-23 | ██ 2 (CoV Flu)
+  2025-01-24 | ██ 2 (CoV CoV)
+  2025-01-25 | ██ 2 (CoV CoV)
+  2025-01-26 | █ 1 (CoV)
+
+Legend: Flu=Influenza, CoV=SARS-CoV-2, RSV=RSV-B</code></pre><h3 id="9c.-Location–Pathogen-heatmap"><a class="docs-heading-anchor" href="#9c.-Location–Pathogen-heatmap">9c. Location–Pathogen heatmap</a><a id="9c.-Location–Pathogen-heatmap-1"></a><a class="docs-heading-anchor-permalink" href="#9c.-Location–Pathogen-heatmap" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Count cases per location-pathogen combination using SPARQL
+results = sparql_query(g, &quot;&quot;&quot;
+    PREFIX epi: &lt;http://example.org/epi#&gt;
+    PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+    SELECT ?loc_name ?pathogen_name (COUNT(?c) AS ?n)
+    WHERE {
+        ?c a epi:CaseReport ;
+           epi:locatedAt ?loc ;
+           epi:infectedBy ?p .
+        ?loc rdfs:label ?loc_name .
+        ?p rdfs:label ?pathogen_name .
+    }
+    GROUP BY ?loc_name ?pathogen_name
+    ORDER BY ?loc_name ?pathogen_name
+&quot;&quot;&quot;)
+
+# Build text heatmap
+loc_names = sort(unique([readable(r[&quot;loc_name&quot;]) for r in results]))
+path_names = sort(unique([readable(r[&quot;pathogen_name&quot;]) for r in results]))
+
+println(rpad(&quot;Location&quot;, 28), join([rpad(p[1:min(12,end)], 14) for p in path_names]))
+println(&quot;─&quot;^(28 + 14 * length(path_names)))
+
+for loc in loc_names
+    print(rpad(loc, 28))
+    for pn in path_names
+        n = 0
+        for r in results
+            if readable(r[&quot;loc_name&quot;]) == loc &amp;&amp; readable(r[&quot;pathogen_name&quot;]) == pn
+                n = parse(Int, readable(r[&quot;n&quot;]))
+            end
+        end
+        cell = n == 0 ? &quot;  ·&quot; : &quot;  $(repeat(&quot;█&quot;, n)) $n&quot;
+        print(rpad(cell, 14))
+    end
+    println()
+end</code></pre><pre><code class="nohighlight hljs">Location                    Influenza A   RSV subtype   SARS-CoV-2 J  
+──────────────────────────────────────────────────────────────────────
+General Hospital              █ 1           ·             ██████ 6    
+Meadowbrook Care Home         ██ 2          ·             ·           
+Oakfield Primary School       ·             ███ 3         ·           
+Riverside Academy             █ 1           █ 1           ·           
+Royal Infirmary               █ 1           ██ 2          ████ 4      
+Sunrise Care Home             ████ 4        ·             ·</code></pre><h2 id="11.-Summary"><a class="docs-heading-anchor" href="#11.-Summary">11. Summary</a><a id="11.-Summary-1"></a><a class="docs-heading-anchor-permalink" href="#11.-Summary" title="Permalink"></a></h2><p>This vignette demonstrated a comprehensive <strong>epidemiology knowledge graph</strong> integrating pathogen biology, patient demographics, clinical surveillance, contact tracing, and intervention data.</p><table><tr><th style="text-align: right">Feature</th><th style="text-align: right">Epidemiological Application</th></tr><tr><td style="text-align: right"><strong>OWL ontology</strong></td><td style="text-align: right">Pathogen taxonomy, patient risk factors, clinical entities</td></tr><tr><td style="text-align: right"><strong>Tabular mapping</strong></td><td style="text-align: right">Line list / surveillance data import</td></tr><tr><td style="text-align: right"><strong>SHACL validation</strong></td><td style="text-align: right">Case report completeness and data quality</td></tr><tr><td style="text-align: right"><strong>SPARQL queries</strong></td><td style="text-align: right">Outbreak analytics: attack rates, severity, hotspots</td></tr><tr><td style="text-align: right"><strong>Property paths</strong></td><td style="text-align: right">Multi-step contact tracing and transmission chains</td></tr><tr><td style="text-align: right"><strong>Datalog reasoning</strong></td><td style="text-align: right">Transitive transmission inference, super-spreader detection</td></tr><tr><td style="text-align: right"><strong>N3 reasoning</strong></td><td style="text-align: right">Risk classification with math builtins, serial interval analysis, backward-chaining clinical decision support</td></tr><tr><td style="text-align: right"><strong>ProbLog</strong></td><td style="text-align: right">Probabilistic containment and intervention effectiveness</td></tr><tr><td style="text-align: right"><strong>GraphViz</strong></td><td style="text-align: right">Transmission network and epidemic curve visualization</td></tr></table><p>Key epidemiological findings from the scenario analysis:</p><ul><li><strong>Influenza A H3N2</strong> clustered in care homes (10 cases), with severe outcomes concentrated among elderly patients with comorbidities.</li><li><strong>SARS-CoV-2 JN.1</strong> formed a nosocomial chain at General Hospital (P004→P009→P013→P016→P020) amplified by healthcare worker contacts.</li><li><strong>RSV-B</strong> primarily affected children in school settings, with two severe paediatric cases requiring hospitalisation.</li><li><strong>ProbLog modelling</strong> showed that enhanced infection prevention and control (IPC) measures reduce nosocomial and community spread risk, with the greatest impact in care home settings.</li><li><strong>Contact tracing</strong> from index case P001 reached patients across multiple settings, highlighting the role of healthcare workers as epidemiological bridges.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../bayesian-belief-networks/">« Bayesian Belief Networks</a><a class="docs-footer-nextpage" href="../lassa-fever/">Lassa Fever »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Building Graphs · RDFLib.jl</title><meta name="title" content="Building Graphs · RDFLib.jl"/><meta property="og:title" content="Building Graphs · RDFLib.jl"/><meta property="twitter:title" content="Building Graphs · RDFLib.jl"/><meta name="description" content="Documentation for RDFLib.jl."/><meta property="og:description" content="Documentation for RDFLib.jl."/><meta property="twitter:description" content="Documentation for RDFLib.jl."/><meta property="og:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/building-graphs/"/><meta property="twitter:url" content="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/building-graphs/"/><link rel="canonical" href="https://juliaknowledge.github.io/RDFLib.jl/stable/tutorials/building-graphs/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">RDFLib.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting-started/">Getting Started</a></li><li><a class="tocitem" href="../rdf-terms/">RDF Terms</a></li><li class="is-active"><a class="tocitem" href>Building Graphs</a><ul class="internal"><li><a class="tocitem" href="#Overview"><span>Overview</span></a></li><li><a class="tocitem" href="#Creating-Graphs"><span>Creating Graphs</span></a></li><li><a class="tocitem" href="#Querying-Patterns"><span>Querying Patterns</span></a></li><li><a class="tocitem" href="#Convenience-Query-Functions"><span>Convenience Query Functions</span></a></li><li><a class="tocitem" href="#Removing-Triples"><span>Removing Triples</span></a></li><li><a class="tocitem" href="#Namespace-Binding"><span>Namespace Binding</span></a></li><li><a class="tocitem" href="#Using-the-Describer"><span>Using the Describer</span></a></li><li><a class="tocitem" href="#Using-Resources"><span>Using Resources</span></a></li><li><a class="tocitem" href="#Graph-Operations"><span>Graph Operations</span></a></li><li><a class="tocitem" href="#Transitive-Closure"><span>Transitive Closure</span></a></li><li><a class="tocitem" href="#Concise-Bounded-Description"><span>Concise Bounded Description</span></a></li><li><a class="tocitem" href="#Skolemization"><span>Skolemization</span></a></li><li><a class="tocitem" href="#Isomorphism"><span>Isomorphism</span></a></li></ul></li><li><a class="tocitem" href="../namespaces/">Namespaces</a></li><li><a class="tocitem" href="../serialization/">Serialization</a></li><li><a class="tocitem" href="../sparql-queries/">SPARQL Queries</a></li></ul></li><li><span class="tocitem">Guide</span><ul><li><a class="tocitem" href="../../guide/collections-containers/">Collections &amp; Containers</a></li><li><a class="tocitem" href="../../guide/datasets-named-graphs/">Datasets &amp; Named Graphs</a></li><li><a class="tocitem" href="../../guide/store-backends/">Store Backends</a></li><li><a class="tocitem" href="../../guide/tabular-mapping/">Tabular Mapping</a></li><li><a class="tocitem" href="../../guide/property-paths/">Property Paths</a></li><li><a class="tocitem" href="../../guide/graph-utilities/">Graph Utilities</a></li><li><a class="tocitem" href="../../guide/geosparql/">GeoSPARQL</a></li></ul></li><li><span class="tocitem">Reasoning &amp; Inference</span><ul><li><a class="tocitem" href="../../reasoning/inference-rdfs-owl/">RDFS/OWL Inference</a></li><li><a class="tocitem" href="../../reasoning/n3-reasoning/">N3 Reasoning</a></li><li><a class="tocitem" href="../../reasoning/datalog/">Datalog</a></li><li><a class="tocitem" href="../../reasoning/problog/">ProbLog</a></li><li><a class="tocitem" href="../../reasoning/shacl-validation/">SHACL Validation</a></li></ul></li><li><span class="tocitem">Case Studies</span><ul><li><a class="tocitem" href="../../cases/ecology/">Ecology</a></li><li><a class="tocitem" href="../../cases/ash-dieback/">Ash Dieback</a></li><li><a class="tocitem" href="../../cases/bayesian-belief-networks/">Bayesian Belief Networks</a></li><li><a class="tocitem" href="../../cases/epidemiology/">Epidemiology</a></li><li><a class="tocitem" href="../../cases/lassa-fever/">Lassa Fever</a></li></ul></li><li><span class="tocitem">API Reference</span><ul><li><a class="tocitem" href="../../api/terms/">Terms</a></li><li><a class="tocitem" href="../../api/namespaces/">Namespaces</a></li><li><a class="tocitem" href="../../api/graph/">Graph</a></li><li><a class="tocitem" href="../../api/stores/">Stores</a></li><li><a class="tocitem" href="../../api/serialization/">Serialization</a></li><li><a class="tocitem" href="../../api/sparql/">SPARQL</a></li><li><a class="tocitem" href="../../api/reasoning/">Reasoning</a></li><li><a class="tocitem" href="../../api/validation/">Validation</a></li><li><a class="tocitem" href="../../api/geosparql/">GeoSPARQL</a></li><li><a class="tocitem" href="../../api/utilities/">Utilities</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Building Graphs</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Building Graphs</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/docs/src/tutorials/building-graphs.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Building-and-Manipulating-RDF-Graphs"><a class="docs-heading-anchor" href="#Building-and-Manipulating-RDF-Graphs">Building and Manipulating RDF Graphs</a><a id="Building-and-Manipulating-RDF-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Building-and-Manipulating-RDF-Graphs" title="Permalink"></a></h1><p>Simon Frost</p><h2 id="Overview"><a class="docs-heading-anchor" href="#Overview">Overview</a><a id="Overview-1"></a><a class="docs-heading-anchor-permalink" href="#Overview" title="Permalink"></a></h2><p>This vignette covers how to build RDF graphs, add and remove triples, query for patterns, and use helper utilities like the <code>Describer</code> and <code>Resource</code> abstractions.</p><pre><code class="language-julia hljs">using RDFLib
+ex = Namespace(&quot;http://example.org/&quot;)</code></pre><pre><code class="nohighlight hljs">Namespace(&quot;http://example.org/&quot;)</code></pre><h2 id="Creating-Graphs"><a class="docs-heading-anchor" href="#Creating-Graphs">Creating Graphs</a><a id="Creating-Graphs-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-Graphs" title="Permalink"></a></h2><pre><code class="language-julia hljs"># Empty graph
+g = RDFGraph()
+println(&quot;Empty graph: $(length(g)) triples&quot;)
+
+# Add triples one at a time
+add!(g, Triple(ex(&quot;sun&quot;), RDF.type, ex(&quot;Star&quot;)))
+add!(g, Triple(ex(&quot;earth&quot;), RDF.type, ex(&quot;Planet&quot;)))
+add!(g, Triple(ex(&quot;earth&quot;), ex(&quot;orbits&quot;), ex(&quot;sun&quot;)))
+add!(g, Triple(ex(&quot;mars&quot;), RDF.type, ex(&quot;Planet&quot;)))
+add!(g, Triple(ex(&quot;mars&quot;), ex(&quot;orbits&quot;), ex(&quot;sun&quot;)))
+add!(g, Triple(ex(&quot;moon&quot;), RDF.type, ex(&quot;Moon&quot;)))
+add!(g, Triple(ex(&quot;moon&quot;), ex(&quot;orbits&quot;), ex(&quot;earth&quot;)))
+
+println(&quot;After adding: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Empty graph: 0 triples
+After adding: 7 triples</code></pre><h2 id="Querying-Patterns"><a class="docs-heading-anchor" href="#Querying-Patterns">Querying Patterns</a><a id="Querying-Patterns-1"></a><a class="docs-heading-anchor-permalink" href="#Querying-Patterns" title="Permalink"></a></h2><p>Use <code>triples()</code> with a pattern tuple <code>(subject, predicate, object)</code> where <code>nothing</code> is a wildcard.</p><pre><code class="language-julia hljs"># Find all planets
+println(&quot;Planets:&quot;)
+for t in triples(g, (nothing, RDF.type, ex(&quot;Planet&quot;)))
+    println(&quot;  &quot;, t.subject)
+end
+
+# Find what orbits the sun
+println(&quot;\nOrbiting the sun:&quot;)
+for t in triples(g, (nothing, ex(&quot;orbits&quot;), ex(&quot;sun&quot;)))
+    println(&quot;  &quot;, t.subject)
+end
+
+# Find all facts about Earth
+println(&quot;\nAbout Earth:&quot;)
+for t in triples(g, (ex(&quot;earth&quot;), nothing, nothing))
+    println(&quot;  &quot;, t.predicate, &quot; → &quot;, t.object)
+end</code></pre><pre><code class="nohighlight hljs">Planets:
+  URIRef(&quot;http://example.org/earth&quot;)
+  URIRef(&quot;http://example.org/mars&quot;)
+
+Orbiting the sun:
+  URIRef(&quot;http://example.org/earth&quot;)
+  URIRef(&quot;http://example.org/mars&quot;)
+
+About Earth:
+  URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;) → URIRef(&quot;http://example.org/Planet&quot;)
+  URIRef(&quot;http://example.org/orbits&quot;) → URIRef(&quot;http://example.org/sun&quot;)</code></pre><h2 id="Convenience-Query-Functions"><a class="docs-heading-anchor" href="#Convenience-Query-Functions">Convenience Query Functions</a><a id="Convenience-Query-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Convenience-Query-Functions" title="Permalink"></a></h2><pre><code class="language-julia hljs"># subjects(graph, predicate, object) — find matching subjects
+planets = collect(subjects(g, RDF.type, ex(&quot;Planet&quot;)))
+println(&quot;Planets: &quot;, planets)
+
+# objects(graph, subject, predicate) — find matching objects
+earth_props = collect(objects(g, ex(&quot;earth&quot;), ex(&quot;orbits&quot;)))
+println(&quot;Earth orbits: &quot;, earth_props)
+
+# predicates(graph, subject, object) — find matching predicates
+rels = collect(predicates(g, ex(&quot;earth&quot;), ex(&quot;sun&quot;)))
+println(&quot;Earth→Sun relations: &quot;, rels)
+
+# predicate_objects — pairs of (predicate, object) for a subject
+println(&quot;\nEarth properties:&quot;)
+for (p, o) in predicate_objects(g, ex(&quot;earth&quot;))
+    println(&quot;  &quot;, p, &quot; → &quot;, o)
+end</code></pre><pre><code class="nohighlight hljs">Planets: URIRef[URIRef(&quot;http://example.org/earth&quot;), URIRef(&quot;http://example.org/mars&quot;)]
+Earth orbits: URIRef[URIRef(&quot;http://example.org/sun&quot;)]
+Earth→Sun relations: URIRef[URIRef(&quot;http://example.org/orbits&quot;)]
+
+Earth properties:
+  URIRef(&quot;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&quot;) → URIRef(&quot;http://example.org/Planet&quot;)
+  URIRef(&quot;http://example.org/orbits&quot;) → URIRef(&quot;http://example.org/sun&quot;)</code></pre><h2 id="Removing-Triples"><a class="docs-heading-anchor" href="#Removing-Triples">Removing Triples</a><a id="Removing-Triples-1"></a><a class="docs-heading-anchor-permalink" href="#Removing-Triples" title="Permalink"></a></h2><pre><code class="language-julia hljs">println(&quot;Before removal: $(length(g)) triples&quot;)
+
+# Remove a specific triple
+remove!(g, (ex(&quot;moon&quot;), ex(&quot;orbits&quot;), ex(&quot;earth&quot;)))
+println(&quot;After removing moon-orbits-earth: $(length(g)) triples&quot;)
+
+# Remove all triples matching a pattern
+remove!(g, (ex(&quot;moon&quot;), nothing, nothing))
+println(&quot;After removing all moon triples: $(length(g)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Before removal: 7 triples
+After removing moon-orbits-earth: 6 triples
+After removing all moon triples: 5 triples</code></pre><h2 id="Namespace-Binding"><a class="docs-heading-anchor" href="#Namespace-Binding">Namespace Binding</a><a id="Namespace-Binding-1"></a><a class="docs-heading-anchor-permalink" href="#Namespace-Binding" title="Permalink"></a></h2><p>Bind prefixes for cleaner serialization:</p><pre><code class="language-julia hljs">bind!(g, &quot;ex&quot;, Namespace(&quot;http://example.org/&quot;))
+println(serialize(g, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">@prefix ex: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ex:earth a ex:Planet ;
+    ex:orbits ex:sun .
+
+ex:mars a ex:Planet ;
+    ex:orbits ex:sun .
+
+ex:sun a ex:Star .</code></pre><h2 id="Using-the-Describer"><a class="docs-heading-anchor" href="#Using-the-Describer">Using the Describer</a><a id="Using-the-Describer-1"></a><a class="docs-heading-anchor-permalink" href="#Using-the-Describer" title="Permalink"></a></h2><p>The <code>Describer</code> provides a fluent API for building graph descriptions:</p><pre><code class="language-julia hljs">g2 = RDFGraph()
+bind!(g2, &quot;schema&quot;, Namespace(&quot;http://schema.org/&quot;))
+schema = Namespace(&quot;http://schema.org/&quot;)
+
+d = describe(g2, schema(&quot;julialang&quot;))
+rdf_type!(d, schema(&quot;SoftwareApplication&quot;))
+property!(d, schema(&quot;name&quot;), Literal(&quot;Julia Programming Language&quot;))
+property!(d, schema(&quot;url&quot;), URIRef(&quot;https://julialang.org&quot;))
+property!(d, schema(&quot;dateCreated&quot;), Literal(&quot;2012-02-14&quot;))
+property!(d, schema(&quot;programmingLanguage&quot;), Literal(&quot;Julia&quot;))
+properties!(d, schema(&quot;author&quot;), [
+    Literal(&quot;Jeff Bezanson&quot;),
+    Literal(&quot;Stefan Karpinski&quot;),
+    Literal(&quot;Viral B. Shah&quot;),
+    Literal(&quot;Alan Edelman&quot;)
+])
+
+println(&quot;Described $(length(g2)) triples:&quot;)
+println(serialize(g2, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">Described 9 triples:
+@prefix ns1: &lt;https://&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix schema: &lt;http://schema.org/&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+schema:julialang a schema:SoftwareApplication ;
+    schema:author &quot;Jeff Bezanson&quot;,
+        &quot;Stefan Karpinski&quot;,
+        &quot;Viral B. Shah&quot;,
+        &quot;Alan Edelman&quot; ;
+    schema:dateCreated &quot;2012-02-14&quot; ;
+    schema:name &quot;Julia Programming Language&quot; ;
+    schema:programmingLanguage &quot;Julia&quot; ;
+    schema:url ns1:julialang.org .</code></pre><h2 id="Using-Resources"><a class="docs-heading-anchor" href="#Using-Resources">Using Resources</a><a id="Using-Resources-1"></a><a class="docs-heading-anchor-permalink" href="#Using-Resources" title="Permalink"></a></h2><p>The <code>Resource</code> abstraction provides object-like access to RDF data:</p><pre><code class="language-julia hljs">g3 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    ex:Dog a rdfs:Class ;
+        rdfs:label &quot;Dog&quot;@en ;
+        rdfs:comment &quot;A domestic canine&quot; ;
+        rdfs:subClassOf ex:Animal .
+
+    ex:fido a ex:Dog ;
+        rdfs:label &quot;Fido&quot; ;
+        ex:age 5 ;
+        ex:owner ex:alice .
+&quot;&quot;&quot;, TurtleFormat())
+
+fido = Resource(g3, ex(&quot;fido&quot;))
+println(&quot;Types: &quot;, types(fido))
+println(&quot;Label: &quot;, label(fido))
+println(&quot;Age: &quot;, fido[ex(&quot;age&quot;)])
+println(&quot;Owner: &quot;, fido[ex(&quot;owner&quot;)])</code></pre><pre><code class="nohighlight hljs">Types: Identifier[URIRef(&quot;http://example.org/Dog&quot;)]
+Label: Literal(&quot;Fido&quot;)
+Age: Literal(&quot;5&quot;, datatype=URIRef(&quot;http://www.w3.org/2001/XMLSchema#integer&quot;))
+Owner: URIRef(&quot;http://example.org/alice&quot;)</code></pre><h2 id="Graph-Operations"><a class="docs-heading-anchor" href="#Graph-Operations">Graph Operations</a><a id="Graph-Operations-1"></a><a class="docs-heading-anchor-permalink" href="#Graph-Operations" title="Permalink"></a></h2><h3 id="Merging"><a class="docs-heading-anchor" href="#Merging">Merging</a><a id="Merging-1"></a><a class="docs-heading-anchor-permalink" href="#Merging" title="Permalink"></a></h3><pre><code class="language-julia hljs">g_a = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:alice ex:knows ex:bob .
+    ex:alice ex:name &quot;Alice&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+g_b = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:bob ex:knows ex:carol .
+    ex:bob ex:name &quot;Bob&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+merged = merge_graphs(g_a, g_b)
+println(&quot;Merged: $(length(merged)) triples&quot;)</code></pre><pre><code class="nohighlight hljs">Merged: 4 triples</code></pre><h3 id="Difference"><a class="docs-heading-anchor" href="#Difference">Difference</a><a id="Difference-1"></a><a class="docs-heading-anchor-permalink" href="#Difference" title="Permalink"></a></h3><pre><code class="language-julia hljs">in_both, in_a, in_b = graph_diff(g_a, g_b)
+println(&quot;Only in A: $(length(in_a))&quot;)
+println(&quot;Only in B: $(length(in_b))&quot;)
+println(&quot;In both:   $(length(in_both))&quot;)</code></pre><pre><code class="nohighlight hljs">Only in A: 2
+Only in B: 2
+In both:   0</code></pre><h3 id="Statistics"><a class="docs-heading-anchor" href="#Statistics">Statistics</a><a id="Statistics-1"></a><a class="docs-heading-anchor-permalink" href="#Statistics" title="Permalink"></a></h3><pre><code class="language-julia hljs">stats = graph_stats(merged)
+for k in keys(stats)
+    println(&quot;  $k: $(stats[k])&quot;)
+end</code></pre><pre><code class="nohighlight hljs">  triples: 4
+  subjects: 2
+  predicates: 2
+  objects: 4
+  uri_refs: 5
+  blank_nodes: 0
+  literals: 2</code></pre><h2 id="Transitive-Closure"><a class="docs-heading-anchor" href="#Transitive-Closure">Transitive Closure</a><a id="Transitive-Closure-1"></a><a class="docs-heading-anchor-permalink" href="#Transitive-Closure" title="Permalink"></a></h2><p>Follow chains of properties transitively:</p><pre><code class="language-julia hljs">g4 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    @prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+
+    ex:Poodle rdfs:subClassOf ex:Dog .
+    ex:Dog rdfs:subClassOf ex:Canine .
+    ex:Canine rdfs:subClassOf ex:Mammal .
+    ex:Mammal rdfs:subClassOf ex:Animal .
+&quot;&quot;&quot;, TurtleFormat())
+
+# Find all superclasses of Poodle
+supers = transitive_objects(g4, ex(&quot;Poodle&quot;), RDFS(&quot;subClassOf&quot;))
+println(&quot;Poodle superclasses:&quot;)
+for s in supers
+    println(&quot;  &quot;, s)
+end</code></pre><pre><code class="nohighlight hljs">Poodle superclasses:
+  URIRef(&quot;http://example.org/Mammal&quot;)
+  URIRef(&quot;http://example.org/Poodle&quot;)
+  URIRef(&quot;http://example.org/Animal&quot;)
+  URIRef(&quot;http://example.org/Dog&quot;)
+  URIRef(&quot;http://example.org/Canine&quot;)</code></pre><h2 id="Concise-Bounded-Description"><a class="docs-heading-anchor" href="#Concise-Bounded-Description">Concise Bounded Description</a><a id="Concise-Bounded-Description-1"></a><a class="docs-heading-anchor-permalink" href="#Concise-Bounded-Description" title="Permalink"></a></h2><p>Extract a self-contained subgraph describing a specific node:</p><pre><code class="language-julia hljs">g5 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+
+    ex:alice ex:name &quot;Alice&quot; ;
+        ex:address [ ex:city &quot;London&quot; ; ex:country &quot;UK&quot; ] ;
+        ex:knows ex:bob .
+    ex:bob ex:name &quot;Bob&quot; .
+&quot;&quot;&quot;, TurtleFormat())
+
+cbd_graph = cbd(g5, ex(&quot;alice&quot;))
+println(&quot;CBD of alice ($(length(cbd_graph)) triples):&quot;)
+println(serialize(cbd_graph, TurtleFormat()))</code></pre><pre><code class="nohighlight hljs">CBD of alice (5 triples):
+@prefix ns1: &lt;http://example.org/&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+ns1:alice ns1:address [ ns1:city &quot;London&quot; ;
+        ns1:country &quot;UK&quot; ] ;
+    ns1:knows ns1:bob ;
+    ns1:name &quot;Alice&quot; .</code></pre><h2 id="Skolemization"><a class="docs-heading-anchor" href="#Skolemization">Skolemization</a><a id="Skolemization-1"></a><a class="docs-heading-anchor-permalink" href="#Skolemization" title="Permalink"></a></h2><p>Replace blank nodes with deterministic URIs:</p><pre><code class="language-julia hljs">g6 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:alice ex:address [ ex:city &quot;London&quot; ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+println(&quot;Before skolemization:&quot;)
+for t in g6; println(&quot;  &quot;, t); end
+
+skolemized = skolemize(g6)
+println(&quot;\nAfter skolemization:&quot;)
+for t in skolemized; println(&quot;  &quot;, t); end</code></pre><pre><code class="nohighlight hljs">Before skolemization:
+  (BNode(&quot;b1&quot;), URIRef(&quot;http://example.org/city&quot;), Literal(&quot;London&quot;))
+  (URIRef(&quot;http://example.org/alice&quot;), URIRef(&quot;http://example.org/address&quot;), BNode(&quot;b1&quot;))
+
+After skolemization:
+  (URIRef(&quot;https://rdflib.github.io/.well-known/genid/b1&quot;), URIRef(&quot;http://example.org/city&quot;), Literal(&quot;London&quot;))
+  (URIRef(&quot;http://example.org/alice&quot;), URIRef(&quot;http://example.org/address&quot;), URIRef(&quot;https://rdflib.github.io/.well-known/genid/b1&quot;))</code></pre><h2 id="Isomorphism"><a class="docs-heading-anchor" href="#Isomorphism">Isomorphism</a><a id="Isomorphism-1"></a><a class="docs-heading-anchor-permalink" href="#Isomorphism" title="Permalink"></a></h2><p>Test whether two graphs are structurally identical (up to blank node renaming):</p><pre><code class="language-julia hljs">g7 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:a ex:p [ ex:q &quot;hello&quot; ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+g8 = parse_rdf(&quot;&quot;&quot;
+    @prefix ex: &lt;http://example.org/&gt; .
+    ex:a ex:p [ ex:q &quot;hello&quot; ] .
+&quot;&quot;&quot;, TurtleFormat())
+
+println(&quot;Isomorphic: &quot;, isomorphic(g7, g8))</code></pre><pre><code class="nohighlight hljs">Isomorphic: true</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../rdf-terms/">« RDF Terms</a><a class="docs-footer-nextpage" href="../namespaces/">Namespaces »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 12 March 2026 11:43">Thursday 12 March 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
