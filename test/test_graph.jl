@@ -32,6 +32,14 @@ using RDFLib
 
         remove!(g, (EX("s"), RDFS.label, Literal("Alice")))
         @test length(g) == 1
+        @test collect(g) == [Triple(EX("s"), RDF.type, EX("Person"))]
+        @test !(Triple(EX("s"), RDFS.label, Literal("Alice")) in g)
+    end
+
+    @testset "reject invalid triples" begin
+        g = RDFGraph()
+        @test_throws ArgumentError add!(g, Triple(Literal("bad"), EX("p"), Literal("ok")))
+        @test_throws ArgumentError add!(g, Triple(EX("s"), Literal("bad"), Literal("ok")))
     end
 
     @testset "convenience accessors" begin
@@ -82,5 +90,12 @@ using RDFLib
         g = RDFGraph()
         bind!(g, "ex", Namespace("http://example.org/"))
         @test expand_curie(g.namespace_manager, "ex:Person") == EX("Person")
+    end
+
+    @testset "serialization rejects invalid stored RDF triples" begin
+        g = RDFGraph()
+        add!(g.store, Triple(EX("s"), Literal("bad"), Literal("ok")))
+        @test_throws ArgumentError serialize(g, NTriplesFormat())
+        @test_throws ArgumentError serialize(g, TurtleFormat())
     end
 end

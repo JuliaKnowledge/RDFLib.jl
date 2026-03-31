@@ -1,7 +1,7 @@
 using Test
 using RDFLib
 
-include("../src/infixowl.jl")
+@isdefined(OWLClass) || include("../src/infixowl.jl")
 
 const EX = Namespace("http://example.org/")
 

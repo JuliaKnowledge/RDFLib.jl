@@ -75,10 +75,11 @@ function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
     bindings = start <= length(bindings) ? bindings[start:stop] : Dict{String,Identifier}[]
     result = RDFGraph()
     for b in bindings
+        template_bnodes = Dict{String,BNode}()
         for pt in q.template
-            s = _ast_resolve_term(pt.subject, b)
-            p = _ast_resolve_term(pt.predicate, b)
-            o = _ast_resolve_term(pt.object, b)
+            s = _resolve_template_term(pt.subject, b, template_bnodes)
+            p = _resolve_template_term(pt.predicate, b, template_bnodes)
+            o = _resolve_template_term(pt.object, b, template_bnodes)
             (isnothing(s) || isnothing(p) || isnothing(o)) && continue
             s isa Node || continue
             p isa URIRef || continue
@@ -755,6 +756,21 @@ function _ast_resolve_term(term, binding::Dict{String,Identifier})
         return term.value
     end
     nothing
+end
+
+function _resolve_template_term(term, binding::Dict{String,Identifier},
+                                template_bnodes::Dict{String,BNode})
+    if term isa BNode
+        return get!(template_bnodes, term.id) do
+            BNode()
+        end
+    end
+    if term isa ExprBNode
+        return get!(template_bnodes, term.node.id) do
+            BNode()
+        end
+    end
+    return _ast_resolve_term(term, binding)
 end
 
 # ─── Property path evaluation ─────────────────────────────────────

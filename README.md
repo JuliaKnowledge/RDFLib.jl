@@ -18,6 +18,32 @@ Or from the Pkg REPL:
 pkg> add https://github.com/JuliaKnowledge/RDFLib.jl
 ```
 
+## Testing
+
+Run the full suite with:
+
+```julia
+using Pkg
+Pkg.test()
+```
+
+The repository now includes hermetic fixtures for the previously skipped
+ProbLog and Jelly interoperability coverage, so the default suite does not need
+external files or a local Python `pyjelly` environment.
+
+Optional integration dependencies are still useful for extra parity checks:
+
+- **Fuseki** — if a live endpoint is available at `http://localhost:3030/test`
+  (or `SPARQL_TEST_ENDPOINT` is set), `test/test_sparql_remote.jl` compares the
+  local engine against a live remote store. Without Fuseki, the same file runs a
+  local smoke fallback instead of skipping.
+- **SWI-Prolog + `eye.pl`** — enables external EYE comparison in
+  `test/test_n3_examples.jl`. Without it, the Julia reasoner assertions still
+  run.
+- **Python + `pyjelly` in `.venv/`** — enables a live Julia↔Python Jelly
+  roundtrip in `test/test_jelly.jl`. Without it, the suite uses the checked-in
+  `pyjelly` fixture under `benchmarks/results/jelly/`.
+
 ## Quick Start
 
 ```julia

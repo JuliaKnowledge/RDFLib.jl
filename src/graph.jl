@@ -33,7 +33,24 @@ end
 
 Add a triple to the graph.
 """
+function _validate_graph_insert(t::Triple)
+    t.subject isa Literal &&
+        throw(ArgumentError("Triple subjects cannot be literals"))
+    (t.predicate isa URIRef || t.predicate isa Variable) ||
+        throw(ArgumentError("Triple predicates must be URIRefs or Variables"))
+    nothing
+end
+
+function _validate_rdf_serializable(t::Triple)
+    t.subject isa Node ||
+        throw(ArgumentError("RDF serialization requires triple subjects to be RDF nodes"))
+    t.predicate isa URIRef ||
+        throw(ArgumentError("RDF serialization requires triple predicates to be URIRefs"))
+    nothing
+end
+
 function add!(g::RDFGraph, t::Triple)
+    _validate_graph_insert(t)
     add!(g.store, t)
     g
 end

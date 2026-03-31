@@ -120,7 +120,17 @@ default namespace (empty prefix) before parsing. This mirrors Python rdflib's
 """
 function parse_rdf_with_base!(g::RDFGraph, source, fmt::SerializationFormat, base_uri::AbstractString)
     bind!(g, "", base_uri)
-    parse_rdf!(g, source, fmt)
+    if fmt isa TurtleFormat
+        parse_turtle!(g, source; base=String(base_uri))
+    elseif fmt isa N3Format
+        if source isa IO || source isa IOBuffer
+            parse_n3!(g, read(source, String); base=String(base_uri))
+        else
+            parse_n3!(g, String(source); base=String(base_uri))
+        end
+    else
+        parse_rdf!(g, source, fmt)
+    end
     g
 end
 

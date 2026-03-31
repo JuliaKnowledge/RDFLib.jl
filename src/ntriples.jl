@@ -11,6 +11,7 @@ Write graph as N-Triples to an IO stream.
 """
 function serialize_ntriples(io::IO, g::RDFGraph)
     for t in g
+        _validate_rdf_serializable(t)
         write(io, _nt_term(t.subject))
         write(io, " ")
         write(io, _nt_term(t.predicate))

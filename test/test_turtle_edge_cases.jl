@@ -159,6 +159,18 @@ using RDFLib
             t = first(g)
             @test t.subject == URIRef("http://example.org/doc#frag")
         end
+
+        @testset "base normalizes parent segments" begin
+            ttl = """
+            @base <http://example.org/dir/file> .
+            <../x> <p> <q> .
+            """
+            g = parse_rdf(ttl, TurtleFormat())
+            t = first(g)
+            @test t.subject == URIRef("http://example.org/x")
+            @test t.predicate == URIRef("http://example.org/dir/p")
+            @test t.object == URIRef("http://example.org/dir/q")
+        end
     end
 
     # ── 5. Boolean literals ──────────────────────────────────────────

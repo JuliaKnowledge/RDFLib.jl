@@ -183,23 +183,23 @@
         eye = get(ENV, "EYE_PATH", joinpath(dirname(@__DIR__), "..", "eye", "eye.pl"))
         tmpdir = mktempdir()
 
+        data_n3 = """
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+        @prefix : <http://example.org/socrates#>.
+
+        :Socrates a :Human.
+        :Human rdfs:subClassOf :Mortal.
+
+        {?A rdfs:subClassOf ?B. ?S a ?A} => {?S a ?B}.
+        """
+
+        query_n3 = """
+        @prefix : <http://example.org/socrates#>.
+        {?S a :Mortal} => {?S a :Mortal}.
+        """
+
         if swipl !== nothing && isfile(swipl) && isfile(eye)
             mkpath(tmpdir)
-
-            data_n3 = """
-            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
-            @prefix : <http://example.org/socrates#>.
-
-            :Socrates a :Human.
-            :Human rdfs:subClassOf :Mortal.
-
-            {?A rdfs:subClassOf ?B. ?S a ?A} => {?S a ?B}.
-            """
-
-            query_n3 = """
-            @prefix : <http://example.org/socrates#>.
-            {?S a :Mortal} => {?S a :Mortal}.
-            """
 
             data_file = joinpath(tmpdir, "test_socrates.n3")
             query_file = joinpath(tmpdir, "test_socrates_query.n3")
@@ -213,23 +213,29 @@
                 # EYE should produce :Socrates a :Mortal
                 @test occursin("Socrates", eye_output)
                 @test occursin("Mortal", eye_output)
-
-                # Julia reasoner should agree
-                EX = Namespace("http://example.org/socrates#")
-                g = parse_n3(data_n3)
-                qg = parse_n3(query_n3)
-                julia_result = reason(g; query=qg)
-
-                @test Triple(EX("Socrates"), RDF_TYPE, EX("Mortal")) in julia_result
             catch e
                 @warn "EYE comparison failed" exception=e
-                @test_skip "EYE comparison skipped"
             finally
                 rm(data_file; force=true)
                 rm(query_file; force=true)
             end
+
+            # Julia reasoner should agree even when external EYE tooling is absent or fails.
+            EX = Namespace("http://example.org/socrates#")
+            g = parse_n3(data_n3)
+            qg = parse_n3(query_n3)
+            julia_result = reason(g; query=qg)
+
+            @test Triple(EX("Socrates"), RDF_TYPE, EX("Mortal")) in julia_result
         else
             @info "Skipping EYE comparison — swipl or eye.pl not found"
+
+            EX = Namespace("http://example.org/socrates#")
+            g = parse_n3(data_n3)
+            qg = parse_n3(query_n3)
+            julia_result = reason(g; query=qg)
+
+            @test Triple(EX("Socrates"), RDF_TYPE, EX("Mortal")) in julia_result
         end
     end
 

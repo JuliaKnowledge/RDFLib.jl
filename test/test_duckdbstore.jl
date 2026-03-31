@@ -1,3 +1,4 @@
+Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
 @testset "DuckDBStore" begin
     @testset "basic add and length" begin
         store = DuckDBStore()
@@ -187,4 +188,5 @@
         names = sort([r["name"].lexical for r in results])
         @test names == ["Alice", "Bob"]
     end
+end
 end

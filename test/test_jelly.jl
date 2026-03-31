@@ -1,4 +1,23 @@
 @testset "Jelly RDF Format" begin
+    function benchmark_fixture_graph(n::Int)
+        g = RDFGraph()
+        for i in 1:n
+            s = URIRef("http://example.org/node$i")
+            add!(g, Triple(s, URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                           URIRef("http://xmlns.com/foaf/0.1/Person")))
+            add!(g, Triple(s, URIRef("http://xmlns.com/foaf/0.1/name"),
+                           Literal("Person $i")))
+            add!(g, Triple(s, URIRef("http://xmlns.com/foaf/0.1/age"),
+                           Literal(string(20 + i % 60),
+                                   datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))))
+            if i > 1
+                add!(g, Triple(s, URIRef("http://xmlns.com/foaf/0.1/knows"),
+                               URIRef("http://example.org/node$(i-1)")))
+            end
+        end
+        g
+    end
+
     @testset "Basic round-trip" begin
         g = RDFGraph()
         add!(g, Triple(URIRef("http://example.org/alice"), URIRef("http://xmlns.com/foaf/0.1/name"), Literal("Alice")))
@@ -211,11 +230,20 @@
         @test length(g2) == 10
     end
 
-    @testset "Cross-language interop with pyjelly" begin
+    @testset "Cross-language interop fixture from pyjelly" begin
+        fixture = joinpath(@__DIR__, "..", "benchmarks", "results", "jelly", "python_n100.jelly")
+        @test isfile(fixture)
+        expected = benchmark_fixture_graph(100)
+        g_from_py = parse_jelly_file(fixture)
+        @test length(g_from_py) == length(expected)
+        for t in triples(expected)
+            @test t in g_from_py
+        end
+    end
+
+    @testset "Cross-language interop with live pyjelly" begin
         python = joinpath(@__DIR__, "..", ".venv", "bin", "python3")
-        if !isfile(python)
-            @test_skip "pyjelly venv not available"
-        else
+        if isfile(python)
             # Generate Jelly from Python
             tmpdir = mktempdir()
             py_file = joinpath(tmpdir, "py_out.jelly")
@@ -266,6 +294,8 @@ print(len(g))
             @test py_parsed == length(g_jl)
 
             rm(tmpdir, recursive=true)
+        else
+            @info "Skipping live pyjelly roundtrip; checked-in pyjelly fixture covers interoperability"
         end
     end
 end

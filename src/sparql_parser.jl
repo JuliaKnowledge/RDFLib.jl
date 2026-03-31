@@ -1492,7 +1492,7 @@ function _parse_solution_modifiers(tz::_SparqlTokenizer, prefixes)
             elseif _check(tz, TOK_VAR)
                 push!(order_by, (ExprVar(_advance!(tz).value[2:end]), :asc))
             else
-                break
+                push!(order_by, (_parse_expr(tz, prefixes), :asc))
             end
         end
     end

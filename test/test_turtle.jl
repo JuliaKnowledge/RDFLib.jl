@@ -60,6 +60,22 @@ using RDFLib
         @test contains(ttl, "true")
     end
 
+    @testset "serialization - preserve xsd:double lexical form" begin
+        g = RDFGraph()
+        bind!(g, "ex", EX)
+        double_dt = URIRef("http://www.w3.org/2001/XMLSchema#double")
+        original = Literal("88.0", datatype=double_dt)
+        add!(g, EX("alice"), EX("score"), original)
+
+        ttl = serialize(g, TurtleFormat())
+        @test contains(ttl, "\"88.0\"")
+        @test !contains(ttl, "88.0e0")
+
+        roundtrip = parse_rdf(ttl, TurtleFormat())
+        parsed = first(objects(roundtrip, EX("alice"), EX("score")))
+        @test parsed == original
+    end
+
     @testset "serialization - language tag" begin
         g = RDFGraph()
         bind!(g, "ex", EX)

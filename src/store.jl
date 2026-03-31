@@ -175,20 +175,20 @@ end
 
 function remove!(store::MemoryStore, pattern::TriplePattern)
     to_remove = collect(triples(store, pattern))  # triples() ensures all indices
+    isempty(to_remove) && return store
     for t in to_remove
         _remove_from_indices!(store, t)
     end
-    # Use === for insertion_order to avoid expensive == on Formulas
-    id_set = IdDict{Triple,Nothing}(t => nothing for t in to_remove)
-    filter!(t -> !haskey(id_set, t), store.insertion_order)
+    remove_set = Set{Triple}(to_remove)
+    filter!(t -> !(t in remove_set), store.insertion_order)
     store
 end
 
-# Remove a single exact triple (by identity) from the store
+# Remove a single exact triple from the store
 function _remove_exact!(store::MemoryStore, t::Triple)
     _ensure_indexed!(store)
     _remove_from_indices!(store, t)
-    filter!(x -> x !== t, store.insertion_order)
+    filter!(x -> x != t, store.insertion_order)
     store
 end
 
@@ -219,10 +219,10 @@ function _remove_from_indices!(store::MemoryStore, t::Triple)
 
         # Flat indices: remove from pred_flat and subj_flat
         if haskey(store.pred_flat, p)
-            filter!(x -> x !== t, store.pred_flat[p])
+            filter!(x -> x != t, store.pred_flat[p])
         end
         if haskey(store.subj_flat, s)
-            filter!(x -> x !== t, store.subj_flat[s])
+            filter!(x -> x != t, store.subj_flat[s])
         end
     end
 

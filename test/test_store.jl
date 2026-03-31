@@ -45,10 +45,14 @@ using RDFLib
     @testset "remove" begin
         remove!(store, (s, p, o))
         @test length(store) == 1
+        @test isempty(collect(triples(store, (s, p, o))))
+        @test length(collect(triples(store, (s, nothing, nothing)))) == 1
+        @test collect(triples(store, (nothing, p, nothing))) == Triple[]
 
         # Remove by wildcard
         remove!(store, (s, nothing, nothing))
         @test length(store) == 0
         @test isempty(store)
+        @test collect(triples(store, (nothing, nothing, nothing))) == Triple[]
     end
 end

@@ -398,6 +398,13 @@ end
     @test !isnothing(q.order_by) && !isempty(q.order_by)
 end
 
+@testset "ORDER BY expression" begin
+    q = RDFLib.sparql_parse("SELECT ?s ?n WHERE { ?s <http://ex.org/n> ?n } ORDER BY STRLEN(?n)")
+    @test length(q.order_by) == 1
+    @test q.order_by[1][1] isa RDFLib.ExprFunctionCall
+    @test q.order_by[1][2] == :asc
+end
+
 @testset "LIMIT and OFFSET" begin
     q = RDFLib.sparql_parse("SELECT ?s WHERE { ?s ?p ?o } LIMIT 10 OFFSET 5")
     @test q.limit == 10

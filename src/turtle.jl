@@ -56,6 +56,7 @@ function _turtle_preprocess!(ctx::_TurtleSerContext)
 
     # Group triples by subject → predicate → [objects]
     for t in g
+        _validate_rdf_serializable(t)
         s, p, o = t.subject, t.predicate, t.object
         if !haskey(ctx.subject_props, s)
             ctx.subject_props[s] = Dict{URIRef, Vector{Identifier}}()
@@ -239,13 +240,7 @@ function _turtle_format_node(ctx::_TurtleSerContext, lit::Literal)
         elseif dt.value == xsd_uri * "decimal"
             return lit.lexical
         elseif dt.value == xsd_uri * "double"
-            # Ensure scientific notation or has decimal point
-            s = lit.lexical
-            if 'e' in s || 'E' in s
-                return s
-            else
-                return s * "e0"  # Force double notation
-            end
+            # Preserve the exact lexical form by using explicit typed-literal syntax.
         elseif dt.value == xsd_uri * "boolean"
             return lit.lexical
         else
@@ -269,9 +264,9 @@ end
 
 Parse Turtle format from an IO stream and add triples to the graph.
 """
-function parse_turtle!(g::RDFGraph, io::IO)
+function parse_turtle!(g::RDFGraph, io::IO; base::Union{String,Nothing}=nothing)
     input = read(io, String)
-    parse_turtle!(g, input)
+    parse_turtle!(g, input; base=base)
 end
 
 """
@@ -279,8 +274,9 @@ end
 
 Parse Turtle format from a string and add triples to the graph.
 """
-function parse_turtle!(g::RDFGraph, input::AbstractString)
+function parse_turtle!(g::RDFGraph, input::AbstractString; base::Union{String,Nothing}=nothing)
     parser = _TurtleParser(g, String(input))
+    parser.base = base
     _turtle_parse_document!(parser)
     g
 end
@@ -491,14 +487,10 @@ function _parse_iriref!(p::_TurtleParser)
     throw(ArgumentError("Unterminated IRI reference"))
 end
 
-_is_absolute_uri(uri::AbstractString) = occursin("://", uri) || startswith(uri, "urn:")
+_is_absolute_uri(uri::AbstractString) = occursin(r"^[A-Za-z][A-Za-z0-9+.-]*:", uri)
 
 function _resolve_uri(base::AbstractString, relative::AbstractString)
-    isempty(relative) && return base
-    startswith(relative, '#') && return string(base, relative)
-    # Simple resolution: replace everything after last /
-    idx = findlast('/', base)
-    isnothing(idx) ? relative : string(base[1:idx], relative)
+    string(URIs.resolvereference(URIs.URI(base), URIs.URI(relative)))
 end
 
 # ─── Triple parsing ─────────────────────────────────────────────────
