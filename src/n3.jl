@@ -23,7 +23,7 @@ mutable struct Formula <: Node
     _hash::UInt  # cached hash (0 = not yet computed)
 end
 
-Formula() = Formula(RDFGraph(), "F" * replace(string(uuid4()), "-" => ""), UInt(0))
+Formula() = Formula(RDFGraph(strict=false), "F" * replace(string(uuid4()), "-" => ""), UInt(0))
 
 function Base.:(==)(a::Formula, b::Formula)
     a === b && return true

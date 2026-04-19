@@ -213,16 +213,11 @@ end
 
 ## Cryptographic Builtins
 
-::: {.callout-warning}
 The N3 cryptographic builtins (`crypto:md5`, `crypto:sha`) require literals
-as triple subjects, which RDFLib.jl currently rejects via strict RDF
-semantics enforcement (`Triple subjects cannot be literals`). The cell
-below is shown for reference but is not executed pending a parser update
-that supports literal subjects inside N3 formulas.
-:::
+as triple subjects. RDFLib.jl permits this inside N3 formula contexts
+(`{ ... }`) while still enforcing strict RDF semantics for top-level graphs.
 
 ```{julia}
-#| eval: false
 n3 = """
 @prefix : <urn:example:> .
 @prefix crypto: <http://www.w3.org/2000/10/swap/crypto#> .

@@ -81,7 +81,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../../n3-reasoning.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="n3-reasoning.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="n3-reasoning.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="n3-reasoning.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></div>
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
@@ -340,6 +340,7 @@ last: Literal("2", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))<
 </section>
 <section id="cryptographic-builtins" class="level2">
 <h2 class="anchored" data-anchor-id="cryptographic-builtins">Cryptographic Builtins</h2>
+<p>The N3 cryptographic builtins (<code>crypto:md5</code>, <code>crypto:sha</code>) require literals as triple subjects. RDFLib.jl permits this inside N3 formula contexts (<code>{ ... }</code>) while still enforcing strict RDF semantics for top-level graphs.</p>
 <div id="16" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>n3 <span class="op">=</span> <span class="st">"""</span></span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="st">@prefix : &lt;urn:example:&gt; .</span></span>
