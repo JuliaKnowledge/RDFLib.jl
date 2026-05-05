@@ -182,6 +182,11 @@ function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
     end
     # Star-join optimization for MemoryStore
     if g.store isa MemoryStore && length(patterns) >= 2
+        # Reorder star groups by selectivity (only when no bindings yet — i.e.,
+        # this is the top-level BGP). Filters travel with their preceding star.
+        if length(bindings) == 1 && isempty(bindings[1])
+            patterns = _reorder_star_groups(g.store::MemoryStore, patterns)
+        end
         return _ast_eval_patterns_star(g, patterns, bindings, limit)
     end
     for pattern in patterns
@@ -189,6 +194,130 @@ function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
         isempty(bindings) && return bindings
     end
     bindings
+end
+
+# Reorder star groups (with their trailing PatFilters) by estimated selectivity.
+# Star groups with bound objects are usually highly selective. Only reorders
+# contiguous prefix made of (star group + optional PatFilters)*. Stops at the
+# first pattern that's not a recognizable star-group head or PatFilter.
+function _reorder_star_groups(store::MemoryStore, patterns::Vector{SparqlPattern})
+    n = length(patterns)
+    groups = Tuple{Int,Int,Int,Int,Set{String},Set{String}}[]
+    i = 1
+    while i <= n
+        send = _star_group_end(patterns, i)
+        if send == i
+            break
+        end
+        # Subject variable + all object variables produced
+        produced = Set{String}()
+        consumed = Set{String}()  # all vars referenced; if any is already bound,
+                                   # this group acts as a join (no cartesian)
+        @inbounds for k in i:send
+            pat = patterns[k]::PatTriple
+            s = pat.subject; s isa String && (push!(produced, s); push!(consumed, s))
+            o = pat.object;  o isa String && (push!(produced, o); push!(consumed, o))
+        end
+        fend = send
+        j = send + 1
+        ok = true
+        while j <= n && patterns[j] isa PatFilter
+            fvars = String[]
+            _collect_vars_in_expr!(fvars, (patterns[j]::PatFilter).expr)
+            if !issubset(Set(fvars), produced)
+                ok = false; break
+            end
+            fend = j; j += 1
+        end
+        if !ok
+            break
+        end
+        score = _estimate_star_selectivity(store, patterns, i, send)
+        push!(groups, (i, send, fend, score, produced, consumed))
+        i = fend + 1
+    end
+    length(groups) < 2 && return patterns
+
+    # Greedy join-aware planner: pick the most-selective group whose required
+    # variables are all already produced (or that introduces no join constraint).
+    # First group can be any (start with most selective).
+    remaining = collect(eachindex(groups))
+    available = Set{String}()
+    order = Int[]
+    while !isempty(remaining)
+        best_idx = -1
+        best_score = typemax(Int)
+        # Prefer groups whose subject var is already in `available` (joins existing)
+        for ri in remaining
+            (_, _, _, sc, prod, cons) = groups[ri]
+            connected = isempty(available) || !isempty(intersect(cons, available))
+            connected || continue
+            if sc < best_score
+                best_score = sc; best_idx = ri
+            end
+        end
+        if best_idx == -1
+            # No connected group; fall back to most selective overall
+            for ri in remaining
+                sc = groups[ri][4]
+                if sc < best_score
+                    best_score = sc; best_idx = ri
+                end
+            end
+        end
+        push!(order, best_idx)
+        union!(available, groups[best_idx][5])
+        deleteat!(remaining, findfirst(==(best_idx), remaining))
+    end
+
+    # If the chosen order matches the original order, no-op
+    order == collect(eachindex(groups)) && return patterns
+
+    new_patterns = SparqlPattern[]
+    for oi in order
+        s, _, fe, _, _, _ = groups[oi]
+        for k in s:fe
+            push!(new_patterns, patterns[k])
+        end
+    end
+    for k in i:n
+        push!(new_patterns, patterns[k])
+    end
+    new_patterns
+end
+
+# Estimate selectivity of a star group (lower = more selective).
+# If any pattern has a bound object, returns size of pos[p][o] for the smallest one.
+# Otherwise returns total triples for the smallest predicate's POS (fewer subjects).
+function _estimate_star_selectivity(store::MemoryStore, patterns::Vector{SparqlPattern},
+                                    s::Int, e::Int)
+    best_bound = typemax(Int)
+    best_pred = typemax(Int)
+    @inbounds for k in s:e
+        pat = patterns[k]::PatTriple
+        p = pat.predicate::URIRef
+        po = get(store.pos, p, nothing)
+        po === nothing && return 0  # empty result
+        # Predicate cardinality
+        psize = 0
+        for (_, ss) in po
+            psize += length(ss)
+        end
+        if psize < best_pred
+            best_pred = psize
+        end
+        # Bound object?
+        obj = pat.object
+        if obj isa Identifier
+            subjs = get(po, obj, nothing)
+            sz = subjs === nothing ? 0 : length(subjs)
+            if sz < best_bound
+                best_bound = sz
+            end
+        end
+    end
+    # Bound-object selectivity beats any unbound predicate
+    return best_bound < typemax(Int) ? best_bound : best_pred
 end
 
 # Detect end index of a "star group" starting at `start`.
@@ -296,23 +425,85 @@ function _ast_eval_star_memory(store::MemoryStore, pats,
     results = Dict{String,Identifier}[]
     obj_sets = Vector{Set{Identifier}}(undef, n)
 
+    # Pre-resolve POS buckets and statically-bound objects
+    _ensure_all_indexed!(store)
+    pos_buckets = Vector{Dict{Identifier,Set{Identifier}}}(undef, n)
+    static_bound_subjects = nothing  # Set{Identifier} or nothing
+    @inbounds for i in 1:n
+        po = get(store.pos, pred_uris[i], nothing)
+        po === nothing && return results
+        pos_buckets[i] = po
+        obj = pats[i].object
+        if obj isa Identifier
+            subjs = get(po, obj, nothing)
+            subjs === nothing && return results
+            if static_bound_subjects === nothing || length(subjs) < length(static_bound_subjects)
+                static_bound_subjects = subjs
+            end
+        end
+    end
+
     for b in bindings
         s_val = get(b, subj_var, nothing)
         if s_val isa Identifier
-            # Subject already bound — check this one subject
             _star_check!(results, store.spo, b, s_val, subj_var, pats, pred_uris,
                          obj_sets, n, limit)
         else
-            # Subject unbound — iterate all subjects from SPO index
-            for (s, _) in store.spo
-                _star_check!(results, store.spo, b, s, subj_var, pats, pred_uris,
-                             obj_sets, n, limit)
-                limit > 0 && length(results) >= limit && break
+            # Find smallest driver from: static-bound objects in patterns,
+            # or runtime-bound object vars in `b` (post-reorder joins).
+            driver = static_bound_subjects
+            @inbounds for i in 1:n
+                obj = pats[i].object
+                if obj isa String
+                    bv = get(b, obj, nothing)
+                    if bv isa Identifier
+                        subjs = get(pos_buckets[i], bv, nothing)
+                        if subjs === nothing
+                            driver = nothing  # signal: no match for this binding
+                            @goto no_driver
+                        end
+                        if driver === nothing || length(subjs) < length(driver)
+                            driver = subjs
+                        end
+                    end
+                end
+            end
+            @label no_driver
+
+            if driver isa Set{Identifier}
+                for s in driver
+                    _star_check!(results, store.spo, b, s, subj_var, pats, pred_uris,
+                                 obj_sets, n, limit)
+                    limit > 0 && length(results) >= limit && break
+                end
+            elseif driver === nothing && (
+                # Distinguish "no match found" (skip this binding) from
+                # "no constraint at all" (fall back to full scan).
+                any_bound_obj_var(pats, n, b)
+            )
+                # Some object var was bound but had no matches → skip this binding
+            else
+                # No bound objects anywhere → iterate all subjects in store
+                for (s, _) in store.spo
+                    _star_check!(results, store.spo, b, s, subj_var, pats, pred_uris,
+                                 obj_sets, n, limit)
+                    limit > 0 && length(results) >= limit && break
+                end
             end
         end
         limit > 0 && length(results) >= limit && break
     end
     results
+end
+
+@inline function any_bound_obj_var(pats, n::Int, b::Dict{String,Identifier})
+    @inbounds for i in 1:n
+        o = pats[i].object
+        if o isa String && haskey(b, o)
+            return true
+        end
+    end
+    return false
 end
 
 # Check one subject against all star-group predicates, emit matching bindings
