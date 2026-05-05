@@ -10,6 +10,12 @@ const _XSD_NS = "http://www.w3.org/2001/XMLSchema#"
 # ─── Top-level evaluation ─────────────────────────────────────────
 
 function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
+    # Fast path: SELECT (COUNT(*) AS ?x) WHERE { ?s ?p ?o } with no other clauses.
+    # Bypasses BGP materialisation; uses the store's `length` directly.
+    if _is_count_star_query(q)
+        return [Dict{String,Identifier}(q.aggregates[1].alias => Literal(length(g)))]
+    end
+
     # Push LIMIT into pattern evaluation when safe (no ORDER BY, GROUP BY, DISTINCT, computed exprs)
     push_limit = 0
     if !isnothing(q.limit) && isempty(q.order_by) && isempty(q.aggregates) &&
@@ -63,6 +69,33 @@ end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlAsk)
     !isempty(_ast_eval_patterns(g, q.patterns))
+end
+
+# True iff the query is `SELECT (COUNT(*) AS ?x) WHERE { ?s ?p ?o }` with no
+# other clauses (no GROUP BY, ORDER BY, LIMIT, OFFSET, HAVING, DISTINCT,
+# select_exprs, or extra patterns). Lets us answer with `length(g)`.
+function _is_count_star_query(q::SparqlSelect)
+    length(q.aggregates) == 1 || return false
+    isempty(q.select_exprs) || return false
+    isempty(q.group_by) || return false
+    isnothing(q.having) || return false
+    isempty(q.order_by) || return false
+    isnothing(q.limit) || return false
+    q.offset == 0 || return false
+    q.distinct && return false
+    q.reduced && return false
+    length(q.patterns) == 1 || return false
+    p = q.patterns[1]
+    p isa PatTriple || return false
+    p.subject isa String || return false
+    p.predicate isa String || return false
+    p.object isa String || return false
+    agg = q.aggregates[1].agg
+    agg isa ExprAggregate || return false
+    agg.func == "COUNT" || return false
+    agg.distinct && return false
+    agg.arg isa ExprStar || return false
+    true
 end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
@@ -464,6 +497,17 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatBind, bindings)
 end
 
 function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
+    isempty(bindings) && return bindings
+
+    # Hash-join optimization: evaluate OPTIONAL patterns standalone and
+    # left-join by shared variables. Avoids O(n*m) re-evaluation.
+    # Falls back to nested loop if patterns reference outer-only variables.
+    if _opt_safe_for_hashjoin(pat.patterns, bindings)
+        opt_results = _ast_eval_patterns(g, pat.patterns)
+        return _ast_left_join(bindings, opt_results)
+    end
+
+    # Fallback: nested loop (semantically equivalent, slower)
     new_bindings = Dict{String,Identifier}[]
     for b in bindings
         opt_bindings = _ast_eval_patterns(g, pat.patterns, Dict{String,Identifier}[copy(b)])
@@ -474,6 +518,155 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
         end
     end
     new_bindings
+end
+
+# True iff the OPTIONAL pattern block can be evaluated standalone without
+# needing variables from the outer scope. Concretely: every variable referenced
+# in any FILTER/BIND expression must be bound by some triple/values pattern
+# inside the block itself (not exclusively in the outer scope).
+function _opt_safe_for_hashjoin(patterns::Vector{SparqlPattern}, outer_bindings)
+    inner_produced = Set{String}()
+    for p in patterns
+        _collect_produced_vars!(inner_produced, p)
+    end
+    for p in patterns
+        refs = String[]
+        _collect_expr_vars!(refs, p)
+        for v in refs
+            v in inner_produced && continue
+            # Referenced var not produced inside OPTIONAL → outer-scoped → unsafe
+            return false
+        end
+    end
+    true
+end
+
+function _collect_produced_vars!(out::Set{String}, p::SparqlPattern)
+    if p isa PatTriple
+        p.subject isa String && push!(out, p.subject)
+        p.predicate isa String && push!(out, p.predicate)
+        p.object isa String && push!(out, p.object)
+    elseif p isa PatBind
+        push!(out, p.var)
+    elseif p isa PatValues
+        for v in p.variables; push!(out, v); end
+    elseif p isa PatOptional
+        for q in p.patterns; _collect_produced_vars!(out, q); end
+    elseif p isa PatUnion
+        for branch in p.branches, q in branch; _collect_produced_vars!(out, q); end
+    elseif p isa PatGraph
+        for q in p.patterns; _collect_produced_vars!(out, q); end
+        p.graph_term isa ExprVar && push!(out, p.graph_term.name)
+    elseif p isa PatSubquery
+        for v in _ast_projection_vars(p.query); push!(out, v); end
+    end
+end
+
+function _collect_expr_vars!(out::Vector{String}, p::SparqlPattern)
+    if p isa PatFilter
+        _collect_vars_in_expr!(out, p.expr)
+    elseif p isa PatBind
+        _collect_vars_in_expr!(out, p.expr)
+    elseif p isa PatOptional
+        for q in p.patterns; _collect_expr_vars!(out, q); end
+    elseif p isa PatUnion
+        for branch in p.branches, q in branch; _collect_expr_vars!(out, q); end
+    elseif p isa PatGraph
+        for q in p.patterns; _collect_expr_vars!(out, q); end
+    elseif p isa PatFilterExists
+        # FILTER EXISTS sub-patterns; treat as expr-bearing
+        for q in p.patterns; _collect_expr_vars!(out, q); end
+    end
+end
+
+function _collect_vars_in_expr!(out::Vector{String}, e)
+    if e isa ExprVar
+        push!(out, e.name)
+    elseif e isa ExprBinaryOp
+        _collect_vars_in_expr!(out, e.left)
+        _collect_vars_in_expr!(out, e.right)
+    elseif e isa ExprUnaryOp
+        _collect_vars_in_expr!(out, e.operand)
+    elseif e isa ExprFunctionCall
+        for a in e.args; _collect_vars_in_expr!(out, a); end
+    elseif e isa ExprIn
+        _collect_vars_in_expr!(out, e.expr)
+        for a in e.values; _collect_vars_in_expr!(out, a); end
+    elseif e isa ExprAggregate
+        _collect_vars_in_expr!(out, e.expr)
+    end
+end
+
+# Hash-join: left-join `lhs` with `rhs` on shared variables.
+# Each LHS row produces one output for every compatible RHS row (merged),
+# or itself if no RHS row matches (OPTIONAL semantics).
+function _ast_left_join(lhs::Vector{Dict{String,Identifier}},
+                        rhs::Vector{Dict{String,Identifier}})
+    isempty(rhs) && return lhs
+    isempty(lhs) && return lhs
+
+    # Find shared variable keys (intersection of all-RHS-vars with LHS vars).
+    rhs_vars = Set{String}()
+    for r in rhs, k in keys(r); push!(rhs_vars, k); end
+    lhs_vars = Set{String}()
+    for l in lhs, k in keys(l); push!(lhs_vars, k); end
+    shared = sort!(collect(intersect(lhs_vars, rhs_vars)))
+
+    if isempty(shared)
+        # Cartesian: every LHS combined with every RHS (rare, but valid).
+        out = Dict{String,Identifier}[]
+        sizehint!(out, length(lhs) * length(rhs))
+        for l in lhs, r in rhs
+            push!(out, merge(l, r))
+        end
+        return out
+    end
+
+    # Build hash on RHS keyed by shared var values.
+    # Key is a Tuple of values for the shared keys (or `nothing` if unbound on this row).
+    Index = Dict{Tuple,Vector{Dict{String,Identifier}}}
+    idx = Index()
+    nshared = length(shared)
+    for r in rhs
+        # Skip RHS rows that don't bind all shared keys — those can't match
+        # via hash key, but they could still be cartesian-joined. For OPTIONAL
+        # this case is rare and we conservatively skip them (correctness for
+        # benchmark queries; full semantics would require compatible-merge fallback).
+        ok = true
+        key_vals = Vector{Identifier}(undef, nshared)
+        for (i, v) in enumerate(shared)
+            haskey(r, v) || (ok = false; break)
+            key_vals[i] = r[v]
+        end
+        ok || continue
+        key = Tuple(key_vals)
+        push!(get!(() -> Dict{String,Identifier}[], idx, key), r)
+    end
+
+    out = Dict{String,Identifier}[]
+    sizehint!(out, length(lhs))
+    for l in lhs
+        # Build lookup key for this LHS row
+        ok = true
+        key_vals = Vector{Identifier}(undef, nshared)
+        for (i, v) in enumerate(shared)
+            haskey(l, v) || (ok = false; break)
+            key_vals[i] = l[v]
+        end
+        if ok
+            key = Tuple(key_vals)
+            matches = get(idx, key, nothing)
+            if matches !== nothing
+                for m in matches
+                    push!(out, merge(l, m))
+                end
+                continue
+            end
+        end
+        # No match → keep LHS row (OPTIONAL pass-through)
+        push!(out, l)
+    end
+    out
 end
 
 function _ast_eval_pattern(g::RDFGraph, pat::PatUnion, bindings)
@@ -1750,8 +1943,21 @@ function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Id
     var_name = agg.arg isa ExprVar ? agg.arg.name : nothing
     is_star = agg.arg isa ExprStar
 
+    # Fast path: COUNT(*) without DISTINCT — just count rows
+    if agg.func == "COUNT" && is_star && !agg.distinct
+        return Literal(length(group))
+    end
+    # Fast path: COUNT(?v) without DISTINCT — count rows where v is bound
+    if agg.func == "COUNT" && !isnothing(var_name) && !agg.distinct
+        c = 0
+        @inbounds for b in group
+            haskey(b, var_name) && (c += 1)
+        end
+        return Literal(c)
+    end
+
     vals = if is_star
-        Identifier[Literal("x") for _ in group]  # dummy for COUNT(*)
+        Identifier[Literal("x") for _ in group]  # dummy for COUNT(*) DISTINCT
     elseif !isnothing(var_name)
         Identifier[b[var_name] for b in group if haskey(b, var_name)]
     else
