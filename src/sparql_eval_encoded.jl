@@ -18,6 +18,69 @@
     return get(store.term_to_id, t, UInt32(0))
 end
 
+# ─── Encoded-Binding (EB) pipeline ──────────────────────────────────
+#
+# An EncBinding is a Dict{String, UInt32} where each entry is a variable
+# name -> store-interned UInt32 id. Bindings flow through the encoded
+# BGP pipeline as Vector{EncBinding} so that join inner loops operate
+# on UInt32 throughout, never paying full Identifier hash/eq.
+#
+# Decoding to Dict{String, Identifier} happens only when:
+#   * Filter / BIND / expression evaluation needs Identifier values
+#   * Returning final results to the SPARQL evaluator caller
+#
+# Sentinel: an entry with id 0 means "value bound but not present in
+# store dict" — such bindings will fail any subsequent join, but may be
+# valid in projection (handled by tracking the original Identifier in
+# `extras_of(eb)` only when needed; in BGP-only runs this never arises
+# because all bound values come from store matches, hence have id > 0).
+
+const EncBinding = Dict{String, UInt32}
+
+"""Encode a single Identifier-binding to an EncBinding. Returns
+`nothing` if any value is not in the store dict (binding cannot match
+anything in subsequent joins)."""
+function _encode_one_binding(store::EncodedStore, b::Dict{String,Identifier})
+    eb = EncBinding()
+    sizehint!(eb, length(b))
+    for (k, v) in b
+        id = get(store.term_to_id, v, UInt32(0))
+        id == 0 && return nothing
+        eb[k] = id
+    end
+    return eb
+end
+
+"""Encode a vector of Identifier-bindings, dropping infeasible ones."""
+function _encode_bindings(store::EncodedStore, bs::Vector{Dict{String,Identifier}})
+    out = EncBinding[]
+    sizehint!(out, length(bs))
+    for b in bs
+        eb = _encode_one_binding(store, b)
+        eb === nothing || push!(out, eb)
+    end
+    out
+end
+
+"""Decode a single EncBinding back to a Dict{String, Identifier}."""
+@inline function _decode_one_binding(store::EncodedStore, eb::EncBinding)
+    b = Dict{String,Identifier}()
+    sizehint!(b, length(eb))
+    @inbounds for (k, id) in eb
+        b[k] = store.id_to_term[id]
+    end
+    b
+end
+
+"""Decode a vector of EncBindings back."""
+function _decode_bindings(store::EncodedStore, ebs::Vector{EncBinding})
+    out = Vector{Dict{String,Identifier}}(undef, length(ebs))
+    @inbounds for i in eachindex(ebs)
+        out[i] = _decode_one_binding(store, ebs[i])
+    end
+    out
+end
+
 # ─── Single-pattern BGP on EncodedStore ─────────────────────────────
 
 function _ast_eval_bgp_encoded(store::EncodedStore, pat::PatTriple,
@@ -433,6 +496,221 @@ function _star_cross_filter_enc!(results, g, store::EncodedStore, b, obj_sets, p
     end
 end
 
+# ─── EB star evaluator (encoded bindings end-to-end) ────────────────
+#
+# Mirrors `_ast_eval_star_encoded` but uses Vector{EncBinding} for both
+# input and output. All inner-loop joins are pure UInt32; no Identifier
+# hash/eq is paid per binding.
+
+function _ast_eval_star_eb(store::EncodedStore, pats,
+                            ebs::Vector{EncBinding}, limit::Int)
+    subj_var = pats[1].subject::String
+    n = length(pats)
+    pred_uris = URIRef[pats[i].predicate::URIRef for i in 1:n]
+    results = EncBinding[]
+
+    pred_ids = Vector{UInt32}(undef, n)
+    @inbounds for i in 1:n
+        pid = _enc_id(store, pred_uris[i])
+        pid == 0 && return results
+        pred_ids[i] = pid
+    end
+
+    # Pre-resolve POS buckets (one per pattern) and statically-bound subjects.
+    pos_buckets_enc = Vector{Dict{UInt32, Set{UInt32}}}(undef, n)
+    static_bound_subjects = nothing  # Set{UInt32} or nothing
+    @inbounds for i in 1:n
+        po = get(store.pos_enc, pred_ids[i], nothing)
+        po === nothing && return results
+        pos_buckets_enc[i] = po
+        obj = pats[i].object
+        if obj isa Identifier
+            obj_id = _enc_id(store, obj)
+            obj_id == 0 && return results
+            subjs = get(po, obj_id, nothing)
+            subjs === nothing && return results
+            if static_bound_subjects === nothing || length(subjs) < length(static_bound_subjects)
+                static_bound_subjects = subjs
+            end
+        end
+    end
+
+    obj_sets_enc = Vector{Set{UInt32}}(undef, n)
+    obj_firsts_enc = Vector{UInt32}(undef, n)
+
+    # Pre-compute static (Identifier) object ids for fast pattern-vs-store check.
+    static_obj_ids = Vector{UInt32}(undef, n)
+    @inbounds for i in 1:n
+        obj = pats[i].object
+        if obj isa Identifier
+            static_obj_ids[i] = _enc_id(store, obj)  # already > 0 (checked above)
+        else
+            static_obj_ids[i] = UInt32(0)
+        end
+    end
+
+    for eb in ebs
+        s_id = get(eb, subj_var, UInt32(0))
+        if s_id != 0
+            _star_check_eb!(results, store, eb, s_id, subj_var, pats, pred_ids,
+                            obj_sets_enc, obj_firsts_enc, static_obj_ids, n, limit)
+        else
+            # Subject not yet bound — find driver via most selective constraint.
+            driver = static_bound_subjects
+            skip_binding = false
+            @inbounds for i in 1:n
+                obj = pats[i].object
+                if obj isa String
+                    bv_id = get(eb, obj, UInt32(0))
+                    if bv_id != 0
+                        subjs = get(pos_buckets_enc[i], bv_id, nothing)
+                        if subjs === nothing
+                            skip_binding = true; break
+                        end
+                        if driver === nothing || length(subjs) < length(driver)
+                            driver = subjs
+                        end
+                    end
+                end
+            end
+            skip_binding && continue
+
+            if driver isa Set{UInt32}
+                for s_id in driver
+                    _star_check_eb!(results, store, eb, s_id, subj_var, pats, pred_ids,
+                                    obj_sets_enc, obj_firsts_enc, static_obj_ids, n, limit)
+                    limit > 0 && length(results) >= limit && break
+                end
+            else
+                # Full subject scan
+                for (s_id, _) in store.spo_enc
+                    _star_check_eb!(results, store, eb, s_id, subj_var, pats, pred_ids,
+                                    obj_sets_enc, obj_firsts_enc, static_obj_ids, n, limit)
+                    limit > 0 && length(results) >= limit && break
+                end
+            end
+        end
+        limit > 0 && length(results) >= limit && break
+    end
+    results
+end
+
+@inline function _star_check_eb!(results, store::EncodedStore, eb::EncBinding,
+                                  s_id::UInt32, subj_var, pats, pred_ids,
+                                  obj_sets, obj_firsts, static_obj_ids, n, limit)
+    sp = get(store.spo_enc, s_id, nothing)
+    sp === nothing && return
+    @inbounds for i in 1:n
+        os = get(sp, pred_ids[i], nothing)
+        os === nothing && return
+        obj_sets[i] = os
+    end
+    all_single = true
+    @inbounds for i in 1:n
+        length(obj_sets[i]) != 1 && (all_single = false; break)
+    end
+    if all_single
+        @inbounds for i in 1:n
+            obj_firsts[i] = first(obj_sets[i])
+        end
+        # Pre-validate objects against bound vars / static patterns.
+        @inbounds for i in 1:n
+            obj_id = obj_firsts[i]
+            pat_obj = pats[i].object
+            if pat_obj isa String
+                bv_id = get(eb, pat_obj, UInt32(0))
+                bv_id != 0 && bv_id != obj_id && return
+            elseif pat_obj isa Identifier
+                static_obj_ids[i] != obj_id && return
+            else
+                # Triple-term or rare path: decode and resolve via legacy helper.
+                # (Falls back to one-time decoded check.)
+                bdec = _decode_one_binding(store, eb)
+                resolved = _ast_resolve_term(pat_obj, bdec)
+                resolved === nothing && return
+                _enc_id(store, resolved) != obj_id && return
+            end
+        end
+        # Emit row — push EncBinding directly, no decode.
+        new_eb = copy(eb)
+        get(new_eb, subj_var, UInt32(0)) == 0 && (new_eb[subj_var] = s_id)
+        @inbounds for i in 1:n
+            pat_obj = pats[i].object
+            if pat_obj isa String
+                get(new_eb, pat_obj, UInt32(0)) == 0 && (new_eb[pat_obj] = obj_firsts[i])
+            end
+        end
+        push!(results, new_eb)
+    else
+        # Multi-valued: cross-product
+        new_eb = copy(eb)
+        get(new_eb, subj_var, UInt32(0)) == 0 && (new_eb[subj_var] = s_id)
+        _star_cross_eb!(results, store, new_eb, obj_sets, pats, static_obj_ids, 1, n, limit)
+    end
+end
+
+function _star_cross_eb!(results, store::EncodedStore, eb::EncBinding, obj_sets, pats,
+                          static_obj_ids, idx, n, limit)
+    if idx > n
+        push!(results, copy(eb))
+        return
+    end
+    pat_obj = pats[idx].object
+    for obj_id in obj_sets[idx]
+        if pat_obj isa String
+            existing = get(eb, pat_obj, UInt32(0))
+            if existing != 0
+                existing == obj_id || continue
+                _star_cross_eb!(results, store, eb, obj_sets, pats, static_obj_ids,
+                                idx + 1, n, limit)
+            else
+                eb[pat_obj] = obj_id
+                _star_cross_eb!(results, store, eb, obj_sets, pats, static_obj_ids,
+                                idx + 1, n, limit)
+                delete!(eb, pat_obj)
+            end
+        elseif pat_obj isa Identifier
+            static_obj_ids[idx] == obj_id || continue
+            _star_cross_eb!(results, store, eb, obj_sets, pats, static_obj_ids,
+                            idx + 1, n, limit)
+        else
+            bdec = _decode_one_binding(store, eb)
+            resolved = _ast_resolve_term(pat_obj, bdec)
+            resolved === nothing && continue
+            _enc_id(store, resolved) == obj_id || continue
+            _star_cross_eb!(results, store, eb, obj_sets, pats, static_obj_ids,
+                            idx + 1, n, limit)
+        end
+        limit > 0 && length(results) >= limit && return
+    end
+end
+
+# ─── EB star + filter ───────────────────────────────────────────────
+# When filters are present, decode binding only inside the filter call.
+
+function _ast_eval_star_filter_eb(g::RDFGraph, store::EncodedStore, pats,
+                                   filters::Vector{SparqlExpr},
+                                   ebs::Vector{EncBinding}, limit::Int)
+    # Run the no-filter star first (cheaper), then filter.
+    candidates = _ast_eval_star_eb(store, pats, ebs, 0)
+    isempty(candidates) && return candidates
+    out = EncBinding[]
+    for eb in candidates
+        bdec = _decode_one_binding(store, eb)
+        ok = true
+        for f in filters
+            if !_ast_eval_expr_bool(f, bdec, g)
+                ok = false; break
+            end
+        end
+        if ok
+            push!(out, eb)
+            limit > 0 && length(out) >= limit && break
+        end
+    end
+    out
+end
+
 # ─── Patterns dispatch for EncodedStore ─────────────────────────────
 
 function _ast_eval_patterns_star_encoded(g::RDFGraph, patterns::Vector{SparqlPattern},
@@ -440,6 +718,12 @@ function _ast_eval_patterns_star_encoded(g::RDFGraph, patterns::Vector{SparqlPat
     store = g.store::EncodedStore
     i = 1
     n = length(patterns)
+    # EB pipeline state: when `ebs` is non-empty the rowset lives in
+    # encoded space; we materialize back to `bindings` only at handoff
+    # boundaries (non-PatTriple patterns) and at the end.
+    ebs = EncBinding[]
+    using_eb = false
+
     while i <= n
         star_end = _star_group_end(patterns, i)
         if star_end > i
@@ -452,14 +736,28 @@ function _ast_eval_patterns_star_encoded(g::RDFGraph, patterns::Vector{SparqlPat
             star_pats = @view patterns[i:star_end]
             is_last = (j > n)
             eff_limit = is_last ? limit : 0
+            if !using_eb
+                ebs = _encode_bindings(store, bindings)
+                using_eb = true
+            end
+            if isempty(ebs)
+                return Dict{String,Identifier}[]
+            end
             if isempty(filters)
-                bindings = _ast_eval_star_encoded(store, star_pats, bindings, eff_limit)
+                ebs = _ast_eval_star_eb(store, star_pats, ebs, eff_limit)
             else
-                bindings = _ast_eval_star_filter_encoded(g, store, star_pats, filters,
-                                                         bindings, eff_limit)
+                ebs = _ast_eval_star_filter_eb(g, store, star_pats, filters,
+                                                ebs, eff_limit)
             end
             i = j
+            isempty(ebs) && return Dict{String,Identifier}[]
         else
+            # Non-star or single PatTriple: hand back to generic per-pattern eval.
+            if using_eb
+                bindings = _decode_bindings(store, ebs)
+                ebs = EncBinding[]
+                using_eb = false
+            end
             is_last = (i == n)
             if is_last && limit > 0
                 bindings = _ast_eval_pattern_limited(g, patterns[i], bindings, limit)
@@ -467,8 +765,11 @@ function _ast_eval_patterns_star_encoded(g::RDFGraph, patterns::Vector{SparqlPat
                 bindings = _ast_eval_pattern(g, patterns[i], bindings)
             end
             i += 1
+            isempty(bindings) && return bindings
         end
-        isempty(bindings) && return bindings
+    end
+    if using_eb
+        return _decode_bindings(store, ebs)
     end
     bindings
 end
@@ -499,69 +800,63 @@ function _reorder_star_groups_encoded(store::EncodedStore, patterns::Vector{Spar
         while j <= n && patterns[j] isa PatFilter
             fvars = String[]
             _collect_vars_in_expr!(fvars, (patterns[j]::PatFilter).expr)
-            for fv in fvars
-                if !(fv in consumed)
-                    ok = false; break
-                end
+            if !issubset(Set(fvars), produced)
+                ok = false; break
             end
-            ok || break
-            fend = j
-            j += 1
+            fend = j; j += 1
         end
         if !ok
-            push!(groups, (i, send, fend, _star_size_encoded(store, patterns, i, send),
-                           produced, consumed))
-            i = fend + 1
             break
         end
-        push!(groups, (i, send, fend, _star_size_encoded(store, patterns, i, send),
-                       produced, consumed))
+        score = _star_size_encoded(store, patterns, i, send)
+        push!(groups, (i, send, fend, score, produced, consumed))
         i = fend + 1
     end
-    if length(groups) <= 1 || i <= n
-        # If we broke out, append remaining patterns unchanged
-        return patterns
-    end
-    # Sort groups: bound objects (smaller estimate) first; ties broken by index.
-    # But preserve join-feasibility: a group can come earlier only if its
-    # consumed vars are produced by groups already placed.
-    placed = Set{String}()
-    remaining = collect(1:length(groups))
-    out_idx = Int[]
+    length(groups) < 2 && return patterns
+
+    # Greedy join-aware planner mirroring _reorder_star_groups (memory):
+    # the first group may be any (start with most selective), subsequent
+    # groups must share a variable with already-placed groups.
+    remaining = collect(eachindex(groups))
+    available = Set{String}()
+    order = Int[]
     while !isempty(remaining)
-        # Find min-size group whose consumed vars ⊆ placed (or has no consumed).
-        best = 0; best_size = typemax(Int)
-        for k in remaining
-            consumed = groups[k][6]
-            # The subject var of a star group is always consumed AND produced
-            # by itself; only object vars must be already placed.
-            obj_consumed = setdiff(consumed, [patterns[groups[k][1]].subject::String])
-            if all(v -> v in placed, obj_consumed)
-                if groups[k][4] < best_size
-                    best = k; best_size = groups[k][4]
+        best_idx = -1
+        best_score = typemax(Int)
+        for ri in remaining
+            (_, _, _, sc, _, cons) = groups[ri]
+            connected = isempty(available) || !isempty(intersect(cons, available))
+            connected || continue
+            if sc < best_score
+                best_score = sc; best_idx = ri
+            end
+        end
+        if best_idx == -1
+            for ri in remaining
+                sc = groups[ri][4]
+                if sc < best_score
+                    best_score = sc; best_idx = ri
                 end
             end
         end
-        if best == 0
-            # No feasible group; fall back to original order
-            return patterns
-        end
-        push!(out_idx, best)
-        union!(placed, groups[best][5])
-        deleteat!(remaining, findfirst(==(best), remaining))
+        push!(order, best_idx)
+        union!(available, groups[best_idx][5])
+        deleteat!(remaining, findfirst(==(best_idx), remaining))
     end
-    if out_idx == collect(1:length(groups))
-        return patterns
-    end
-    # Materialize new order
-    new_pats = SparqlPattern[]
-    for k in out_idx
-        gst, gend, fend = groups[k][1], groups[k][2], groups[k][3]
-        for q in gst:fend
-            push!(new_pats, patterns[q])
+
+    order == collect(eachindex(groups)) && return patterns
+
+    new_patterns = SparqlPattern[]
+    for oi in order
+        s, _, fe, _, _, _ = groups[oi]
+        for k in s:fe
+            push!(new_patterns, patterns[k])
         end
     end
-    return new_pats
+    for k in i:n
+        push!(new_patterns, patterns[k])
+    end
+    new_patterns
 end
 
 # Estimate the "driver" size of a star group on EncodedStore: smallest POS
