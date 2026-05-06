@@ -205,18 +205,21 @@ function _reorder_star_groups(store::MemoryStore, patterns::Vector{SparqlPattern
     groups = Tuple{Int,Int,Int,Int,Set{String},Set{String}}[]
     i = 1
     while i <= n
-        send = _star_group_end(patterns, i)
-        if send == i
+        # Recognise both multi-triple star groups AND single PatTriples as
+        # reorderable units (a single triple is a 1-predicate star group).
+        pat = patterns[i]
+        if !(pat isa PatTriple) || !(pat.subject isa String) ||
+           !(pat.predicate isa URIRef)
             break
         end
+        send = _star_group_end(patterns, i)
         # Subject variable + all object variables produced
         produced = Set{String}()
-        consumed = Set{String}()  # all vars referenced; if any is already bound,
-                                   # this group acts as a join (no cartesian)
+        consumed = Set{String}()
         @inbounds for k in i:send
-            pat = patterns[k]::PatTriple
-            s = pat.subject; s isa String && (push!(produced, s); push!(consumed, s))
-            o = pat.object;  o isa String && (push!(produced, o); push!(consumed, o))
+            p = patterns[k]::PatTriple
+            s = p.subject; s isa String && (push!(produced, s); push!(consumed, s))
+            o = p.object;  o isa String && (push!(produced, o); push!(consumed, o))
         end
         fend = send
         j = send + 1
@@ -751,12 +754,29 @@ function _opt_shared_vars(patterns::Vector{SparqlPattern}, bindings)
     sort!(collect(intersect(inner_vars, outer_vars)))
 end
 
+# True iff every pattern in `patterns` only reads its input bindings (does not
+# mutate them in place). PatTriple/PatFilter are read-only; PatBind/PatValues
+# can write, and nested PatOptional/PatGraph etc. could too — be conservative.
+function _patterns_readonly(patterns::Vector{SparqlPattern})
+    for p in patterns
+        (p isa PatTriple || p isa PatFilter) || return false
+    end
+    return true
+end
+
 # Bound-join: evaluate inner with outer bindings as constraints, then add
 # unmatched outer rows back (LEFT JOIN semantics).
 function _opt_bound_join(g::RDFGraph, patterns::Vector{SparqlPattern},
                           outer::Vector{Dict{String,Identifier}},
                           shared::Vector{String})
-    matched = _ast_eval_patterns(g, patterns, [copy(b) for b in outer])
+    # If inner patterns are read-only w.r.t. bindings (no PatBind/PatValues),
+    # we can pass outer directly; otherwise copy to avoid mutating outer rows.
+    inner_input = if _patterns_readonly(patterns)
+        outer
+    else
+        [copy(b) for b in outer]
+    end
+    matched = _ast_eval_patterns(g, patterns, inner_input)
 
     # Build a set of (shared-var-tuple) values that appear in matched.
     # For length-1 shared, use Set{Identifier}; otherwise Set{Tuple}.
@@ -2258,8 +2278,6 @@ function _streaming_aggregate_safe(q::SparqlSelect)
     return true
 end
 
-# Streaming GROUP BY + aggregate. Maintains accumulators per group as we walk
-# bindings. Skips materialising the per-group binding lists.
 function _ast_eval_group_aggregate_streaming(q::SparqlSelect, bindings, g)
     n_agg = length(q.aggregates)
     n_gb = length(q.group_by)
@@ -2274,6 +2292,18 @@ function _ast_eval_group_aggregate_streaming(q::SparqlSelect, bindings, g)
             result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
         end
         return Dict{String,Identifier}[result]
+    end
+    # Pre-classify aggregate plan once: avoids string compares + ExprAggregate
+    # field lookups on the hot path. Tuple = (func_id, distinct, var_name, is_star).
+    # func_id: 1=COUNT, 2=SUM, 3=AVG, 4=MIN, 5=MAX, 6=SAMPLE
+    agg_plan = Vector{Tuple{Int,Bool,String,Bool}}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        a = q.aggregates[i].agg
+        fi = a.func == "COUNT" ? 1 : a.func == "SUM" ? 2 : a.func == "AVG" ? 3 :
+             a.func == "MIN" ? 4 : a.func == "MAX" ? 5 : a.func == "SAMPLE" ? 6 : 0
+        is_star = a.arg isa ExprStar
+        var = a.arg isa ExprVar ? (a.arg::ExprVar).name : ""
+        agg_plan[i] = (fi, a.distinct, var, is_star)
     end
     for b in bindings
         key = if n_gb == 0
@@ -2291,15 +2321,15 @@ function _ast_eval_group_aggregate_streaming(q::SparqlSelect, bindings, g)
                 push!(gvals, get(b, (gb::ExprVar).name, Literal("")))
             end
             accs = Any[_agg_init(q.aggregates[i].agg) for i in 1:n_agg]
-            for i in 1:n_agg
-                accs[i] = _agg_update(accs[i], q.aggregates[i].agg, b)
+            @inbounds for i in 1:n_agg
+                accs[i] = _agg_update_fast(accs[i], agg_plan[i], b)
             end
             groups[key] = (gvals, accs)
             push!(group_order, key)
         else
             _, accs = st
-            for i in 1:n_agg
-                accs[i] = _agg_update(accs[i], q.aggregates[i].agg, b)
+            @inbounds for i in 1:n_agg
+                accs[i] = _agg_update_fast(accs[i], agg_plan[i], b)
             end
         end
     end
@@ -2397,6 +2427,60 @@ end
     elseif f == "SAMPLE"
         if acc === nothing
             v = _ast_extract_value_for_agg(arg, b)
+            return v === nothing ? acc : v
+        end
+        return acc
+    end
+    return acc
+end
+
+# Faster aggregate update: dispatches on pre-classified plan tuple, avoiding
+# string compares and ExprAggregate field lookups on the hot path.
+@inline function _agg_update_fast(acc, plan::Tuple{Int,Bool,String,Bool},
+                                   b::Dict{String,Identifier})
+    f, distinct, var, is_star = plan
+    if distinct
+        s = acc::Set{Identifier}
+        if is_star
+            push!(s, Literal(string(hash(b))))
+        else
+            v = get(b, var, nothing)
+            v !== nothing && push!(s, v)
+        end
+        return s
+    end
+    if f == 1  # COUNT
+        if is_star
+            return (acc::Int) + 1
+        end
+        return haskey(b, var) ? (acc::Int) + 1 : acc
+    elseif f == 2  # SUM
+        v = isempty(var) ? nothing : get(b, var, nothing)
+        v === nothing && return acc
+        nv = _ast_to_numeric(v)
+        nv === nothing && return acc
+        s, ai = acc::Tuple{Float64,Bool}
+        return (s + Float64(nv), ai)
+    elseif f == 3  # AVG
+        v = isempty(var) ? nothing : get(b, var, nothing)
+        v === nothing && return acc
+        nv = _ast_to_numeric(v)
+        nv === nothing && return acc
+        s, c = acc::Tuple{Float64,Int}
+        return (s + Float64(nv), c + 1)
+    elseif f == 4  # MIN
+        v = isempty(var) ? nothing : get(b, var, nothing)
+        v === nothing && return acc
+        acc === nothing && return v
+        return _agg_lt(v, acc::Identifier) ? v : acc
+    elseif f == 5  # MAX
+        v = isempty(var) ? nothing : get(b, var, nothing)
+        v === nothing && return acc
+        acc === nothing && return v
+        return _agg_lt(acc::Identifier, v) ? v : acc
+    elseif f == 6  # SAMPLE
+        if acc === nothing
+            v = isempty(var) ? nothing : get(b, var, nothing)
             return v === nothing ? acc : v
         end
         return acc
