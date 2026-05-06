@@ -1173,10 +1173,480 @@ end
 function _try_fused_bgp_agg(q::SparqlSelect, g::RDFGraph)
     g.store isa EncodedStore || return nothing
     !_enc_streaming_agg_eligible(q, g) && return nothing
+    # Try the deep two-star fusion first (avoids ALL Dict allocs)
+    deep = _try_full_fused_bgp_agg(q, g)
+    deep !== nothing && return deep
     split = _split_last_star(q.patterns)
     split === nothing && return nothing
     outer_pats, last_pats, last_subj = split
     return _exec_fused_bgp_agg_eb(q, g, outer_pats, last_pats, last_subj)
+end
+
+# ─── Deep two-star fusion ─────────────────────────────────────────────
+# When the BGP is exactly TWO star groups (outer + last) where last_subj
+# is an object var of one of the outer patterns, we can do BOTH joins
+# inline with aggregate accumulation — zero Dict allocation per row.
+
+function _split_two_star(patterns)
+    n = length(patterns)
+    n < 2 && return nothing
+    p1 = patterns[1]
+    p1 isa PatTriple || return nothing
+    p1.subject isa String || return nothing
+    p1.predicate isa URIRef || return nothing
+    first_subj = p1.subject
+    first_end = 1
+    @inbounds for i in 2:n
+        p = patterns[i]
+        p isa PatTriple || return nothing
+        p.subject isa String || return nothing
+        p.predicate isa URIRef || return nothing
+        if p.subject == first_subj
+            first_end = i
+        else
+            break
+        end
+    end
+    first_end == n && return nothing
+    last_start = first_end + 1
+    last_subj = (patterns[last_start]::PatTriple).subject
+    last_subj isa String || return nothing
+    @inbounds for i in (last_start+1):n
+        p = patterns[i]
+        p isa PatTriple || return nothing
+        p.subject isa String || return nothing
+        p.predicate isa URIRef || return nothing
+        p.subject == last_subj || return nothing
+    end
+    outer = SparqlPattern[patterns[i] for i in 1:first_end]
+    last  = SparqlPattern[patterns[i] for i in last_start:n]
+    return (outer, first_subj, last, last_subj)
+end
+
+function _try_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph)
+    split = _split_two_star(q.patterns)
+    split === nothing && return nothing
+    outer_pats, outer_subj, last_pats, last_subj = split
+    # last_subj must be an object var of outer (so we get it from outer_obj_firsts)
+    last_subj_outer_idx = 0
+    for (i, p) in enumerate(outer_pats)
+        po = (p::PatTriple).object
+        if po isa String && po == last_subj
+            last_subj_outer_idx = i; break
+        end
+    end
+    last_subj_outer_idx == 0 && return nothing
+    return _exec_full_fused_bgp_agg(q, g, outer_pats, outer_subj,
+                                     last_pats, last_subj, last_subj_outer_idx)
+end
+
+# Slot encoding for source resolution:
+#   -1 = outer_subj id (s_outer)
+#   1..n_outer = outer_obj_firsts[i]
+#   n_outer+1..n_outer+n_last = last_obj_firsts[j-n_outer]
+@inline function _resolve_slot_id(slot::Int, s_outer::UInt32,
+                                   outer_obj_firsts::Vector{UInt32},
+                                   last_obj_firsts::Vector{UInt32},
+                                   n_outer::Int)
+    if slot == -1
+        return s_outer
+    elseif slot >= 1 && slot <= n_outer
+        return @inbounds outer_obj_firsts[slot]
+    elseif slot > n_outer
+        return @inbounds last_obj_firsts[slot - n_outer]
+    end
+    return UInt32(0)
+end
+
+function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
+                                    outer_pats::Vector{SparqlPattern}, outer_subj::String,
+                                    last_pats::Vector{SparqlPattern}, last_subj::String,
+                                    last_subj_outer_idx::Int)
+    store = g.store::EncodedStore
+    _ensure_all_indexed!(store)
+    n_outer = length(outer_pats)
+    n_last  = length(last_pats)
+    n_agg = length(q.aggregates)
+    n_gb = length(q.group_by)
+
+    # Pre-resolve outer star
+    outer_pred_ids = Vector{UInt32}(undef, n_outer)
+    outer_obj_var = Vector{String}(undef, n_outer)  # "" if constant
+    outer_obj_const_id = Vector{UInt32}(undef, n_outer)
+    @inbounds for i in 1:n_outer
+        pat = outer_pats[i]::PatTriple
+        pid = _enc_id(store, pat.predicate::URIRef)
+        pid == 0 && return Dict{String,Identifier}[]
+        outer_pred_ids[i] = pid
+        obj = pat.object
+        if obj isa String
+            outer_obj_var[i] = obj
+            outer_obj_const_id[i] = 0
+        elseif obj isa Identifier
+            oid = _enc_id(store, obj)
+            oid == 0 && return Dict{String,Identifier}[]
+            outer_obj_var[i] = ""
+            outer_obj_const_id[i] = oid
+        else
+            return nothing
+        end
+    end
+
+    # Pre-resolve last star
+    last_pred_ids = Vector{UInt32}(undef, n_last)
+    last_obj_var = Vector{String}(undef, n_last)
+    last_obj_const_id = Vector{UInt32}(undef, n_last)
+    @inbounds for i in 1:n_last
+        pat = last_pats[i]::PatTriple
+        pid = _enc_id(store, pat.predicate::URIRef)
+        pid == 0 && return Dict{String,Identifier}[]
+        last_pred_ids[i] = pid
+        obj = pat.object
+        if obj isa String
+            last_obj_var[i] = obj
+            last_obj_const_id[i] = 0
+        elseif obj isa Identifier
+            oid = _enc_id(store, obj)
+            oid == 0 && return Dict{String,Identifier}[]
+            last_obj_var[i] = ""
+            last_obj_const_id[i] = oid
+        else
+            return nothing
+        end
+    end
+
+    # Aggregate plan
+    agg_plan = Vector{Tuple{Int,Bool,String,Bool}}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        a = q.aggregates[i].agg
+        fi = a.func == "COUNT" ? 1 : a.func == "SUM" ? 2 : a.func == "AVG" ? 3 :
+             a.func == "MIN" ? 4 : a.func == "MAX" ? 5 : a.func == "SAMPLE" ? 6 : 0
+        is_star = a.arg isa ExprStar
+        var = a.arg isa ExprVar ? (a.arg::ExprVar).name : ""
+        agg_plan[i] = (fi, a.distinct, var, is_star)
+    end
+    gb_vars = String[(q.group_by[i]::ExprVar).name for i in 1:n_gb]
+
+    # Resolve gb_src + agg_src into slot ids
+    function _resolve_var_slot(v::String)
+        v == outer_subj && return -1
+        @inbounds for i in 1:n_outer
+            outer_obj_var[i] == v && return i
+        end
+        @inbounds for j in 1:n_last
+            last_obj_var[j] == v && return n_outer + j
+        end
+        return 0  # not bound — invalid
+    end
+
+    gb_src = Vector{Int}(undef, n_gb)
+    @inbounds for i in 1:n_gb
+        s = _resolve_var_slot(gb_vars[i])
+        s == 0 && return nothing  # gb var not bound by BGP — bail
+        gb_src[i] = s
+    end
+    agg_src = Vector{Int}(undef, n_agg)
+    agg_is_star = Vector{Bool}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        if agg_plan[i][4] || isempty(agg_plan[i][3])
+            agg_src[i] = 0
+            agg_is_star[i] = true
+        else
+            s = _resolve_var_slot(agg_plan[i][3])
+            s == 0 && return nothing
+            agg_src[i] = s
+            agg_is_star[i] = false
+        end
+    end
+
+    # Driver: find smallest pos bucket among outer patterns with const obj, else
+    # fall back to scanning subjects with outer_pred_ids[1] (POS pivot on first pred).
+    # Most general & cheap: iterate keys of POS bucket for first outer pred.
+    po1 = get(store.pos_enc, outer_pred_ids[1], nothing)
+    po1 === nothing && return _empty_fused_groups(q)
+
+    # Build subject-driver: union of subjects covering pred[1] across all objs.
+    # For full-scan we can iterate keys of spo_enc and filter to those with pred[1].
+    # Simpler: iterate spo_enc subjects, check each.
+    # Cheaper: pick the smallest static-bound pos bucket if any; else scan SPO.
+    static_driver = nothing
+    @inbounds for i in 1:n_outer
+        if outer_obj_const_id[i] != 0
+            po = get(store.pos_enc, outer_pred_ids[i], nothing)
+            po === nothing && return _empty_fused_groups(q)
+            subjs = get(po, outer_obj_const_id[i], nothing)
+            subjs === nothing && return _empty_fused_groups(q)
+            if static_driver === nothing || length(subjs) < length(static_driver)
+                static_driver = subjs
+            end
+        end
+    end
+
+    # Aggregate kind classification:
+    #   1 COUNT, 2 SUM, 3 AVG, 4 MIN, 5 MAX, 6 SAMPLE
+    # When all aggs are non-distinct + (COUNT or SUM/AVG of numeric var), use
+    # typed parallel vectors per group (no per-row Any boxing).
+    fast_agg = true
+    @inbounds for i in 1:n_agg
+        p = agg_plan[i]
+        if p[2]  # distinct
+            fast_agg = false; break
+        end
+        f = p[1]
+        if f == 0 || f >= 4
+            fast_agg = false; break
+        end
+    end
+
+    group_index = Dict{NTuple, Int}()
+    group_keys = NTuple[]
+    group_gvals = Vector{Vector{UInt32}}()
+
+    count_accs = Vector{Vector{Int64}}(undef, n_agg)
+    sum_accs   = Vector{Vector{Float64}}(undef, n_agg)
+    avg_count  = Vector{Vector{Int64}}(undef, n_agg)
+    if fast_agg
+        @inbounds for i in 1:n_agg
+            f = agg_plan[i][1]
+            if f == 1
+                count_accs[i] = Int64[]
+            elseif f == 2
+                sum_accs[i] = Float64[]
+            elseif f == 3
+                sum_accs[i] = Float64[]
+                avg_count[i] = Int64[]
+            end
+        end
+    end
+
+    fallback_accs = Vector{Vector{Any}}()
+
+    outer_obj_firsts = Vector{UInt32}(undef, n_outer)
+    last_obj_firsts = Vector{UInt32}(undef, n_last)
+    gkey_buf = Vector{UInt32}(undef, max(n_gb, 1))
+
+    # Iterate driver: prefer static_driver Set; else scan all spo_enc subjects.
+    # In q2 case (no const objs in outer), we scan all subjects — but we filter
+    # to those with all outer pred ids present, so misses are cheap.
+    function process_subject(s_outer::UInt32)
+        sp = get(store.spo_enc, s_outer, nothing)
+        sp === nothing && return
+        # Validate outer star + collect outer_obj_firsts
+        @inbounds for i in 1:n_outer
+            os = get(sp, outer_pred_ids[i], nothing)
+            os === nothing && return
+            length(os) == 1 || return  # multi-valued — bail (fallback path)
+            o = first(os)
+            cid = outer_obj_const_id[i]
+            if cid != 0 && cid != o
+                return
+            end
+            outer_obj_firsts[i] = o
+        end
+        # Inter-pattern var consistency on outer
+        @inbounds for i in 1:n_outer
+            ov = outer_obj_var[i]
+            isempty(ov) && continue
+            for j in (i+1):n_outer
+                if outer_obj_var[j] == ov && outer_obj_firsts[i] != outer_obj_firsts[j]
+                    return
+                end
+            end
+        end
+
+        # Now last star: subject = outer_obj_firsts[last_subj_outer_idx]
+        s_last = outer_obj_firsts[last_subj_outer_idx]
+        sp_last = get(store.spo_enc, s_last, nothing)
+        sp_last === nothing && return
+        @inbounds for j in 1:n_last
+            os = get(sp_last, last_pred_ids[j], nothing)
+            os === nothing && return
+            length(os) == 1 || return
+            o = first(os)
+            cid = last_obj_const_id[j]
+            if cid != 0 && cid != o
+                return
+            end
+            last_obj_firsts[j] = o
+        end
+        # Validate last_obj vars against outer_obj vars (cross-star consistency)
+        @inbounds for j in 1:n_last
+            lv = last_obj_var[j]
+            isempty(lv) && continue
+            for i in 1:n_outer
+                if outer_obj_var[i] == lv && outer_obj_firsts[i] != last_obj_firsts[j]
+                    return
+                end
+            end
+        end
+
+        # Build group key (manual loop — no closure)
+        @inbounds for i in 1:n_gb
+            gkey_buf[i] = _resolve_slot_id(gb_src[i], s_outer, outer_obj_firsts, last_obj_firsts, n_outer)
+        end
+        key::NTuple = if n_gb == 0
+            ()
+        elseif n_gb == 1
+            (gkey_buf[1],)
+        elseif n_gb == 2
+            (gkey_buf[1], gkey_buf[2])
+        elseif n_gb == 3
+            (gkey_buf[1], gkey_buf[2], gkey_buf[3])
+        else
+            Tuple(gkey_buf)
+        end
+
+        st = get(group_index, key, 0)
+        local gi::Int
+        if st == 0
+            gvals = Vector{UInt32}(undef, n_gb)
+            @inbounds for i in 1:n_gb
+                gvals[i] = key[i]
+            end
+            push!(group_keys, key)
+            push!(group_gvals, gvals)
+            gi = length(group_keys)
+            group_index[key] = gi
+            if fast_agg
+                @inbounds for i in 1:n_agg
+                    f = agg_plan[i][1]
+                    if f == 1
+                        push!(count_accs[i], 0)
+                    elseif f == 2
+                        push!(sum_accs[i], 0.0)
+                    elseif f == 3
+                        push!(sum_accs[i], 0.0)
+                        push!(avg_count[i], 0)
+                    end
+                end
+            else
+                push!(fallback_accs, Any[_agg_init_eb(q.aggregates[i].agg) for i in 1:n_agg])
+            end
+        else
+            gi = st
+        end
+
+        if fast_agg
+            @inbounds for i in 1:n_agg
+                f = agg_plan[i][1]
+                if agg_is_star[i]
+                    if f == 1
+                        count_accs[i][gi] += 1
+                    end
+                    continue
+                end
+                id = _resolve_slot_id(agg_src[i], s_outer, outer_obj_firsts, last_obj_firsts, n_outer)
+                id == 0 && continue
+                if f == 1
+                    count_accs[i][gi] += 1
+                elseif f == 2
+                    nv = _enc_numeric(store, id)
+                    nv === nothing && continue
+                    sum_accs[i][gi] += nv
+                elseif f == 3
+                    nv = _enc_numeric(store, id)
+                    nv === nothing && continue
+                    sum_accs[i][gi] += nv
+                    avg_count[i][gi] += 1
+                end
+            end
+        else
+            local accs = fallback_accs[gi]
+            @inbounds for i in 1:n_agg
+                if agg_is_star[i]
+                    accs[i] = (agg_plan[i][1] == 1) ? (accs[i]::Int) + 1 : accs[i]
+                    continue
+                end
+                id = _resolve_slot_id(agg_src[i], s_outer, outer_obj_firsts, last_obj_firsts, n_outer)
+                id != 0 && (accs[i] = _agg_update_uint32(accs[i], agg_plan[i], id, store))
+            end
+        end
+    end
+
+    if static_driver !== nothing
+        for s in static_driver
+            process_subject(s)
+        end
+    else
+        # Predicate-pivot driver: pick the outer predicate with the smallest
+        # total subject footprint and iterate its POS bucket. Avoids scanning
+        # all subjects in the store (a big win when many subject types exist).
+        best_p = UInt32(0)
+        best_total = typemax(Int)
+        @inbounds for i in 1:n_outer
+            po = get(store.pos_enc, outer_pred_ids[i], nothing)
+            po === nothing && continue
+            tot = 0
+            for (_, ss) in po
+                tot += length(ss)
+            end
+            if tot < best_total
+                best_total = tot
+                best_p = outer_pred_ids[i]
+            end
+        end
+        if best_p != 0 && best_total < length(store.spo_enc)
+            po = store.pos_enc[best_p]
+            seen = Set{UInt32}()
+            for (_, ss) in po
+                for s in ss
+                    if s in seen
+                        continue
+                    end
+                    push!(seen, s)
+                    process_subject(s)
+                end
+            end
+        else
+            for (s, _) in store.spo_enc
+                process_subject(s)
+            end
+        end
+    end
+
+    # Finalize
+    new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_keys))
+    @inbounds for gi in eachindex(group_keys)
+        gvals = group_gvals[gi]
+        result = Dict{String,Identifier}()
+        for (i, name) in enumerate(gb_vars)
+            id = gvals[i]
+            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+        end
+        for i in 1:n_agg
+            agg = q.aggregates[i].agg
+            if fast_agg
+                f = agg_plan[i][1]
+                local v::Identifier
+                if f == 1
+                    v = Literal(string(count_accs[i][gi]); datatype=XSD.integer)
+                elseif f == 2
+                    s = sum_accs[i][gi]
+                    v = (s == round(s)) ?
+                        Literal(string(Int(s)); datatype=XSD.integer) :
+                        Literal(string(s); datatype=XSD.double)
+                elseif f == 3
+                    c = avg_count[i][gi]
+                    v = c == 0 ? Literal("0"; datatype=XSD.double) :
+                        Literal(string(sum_accs[i][gi] / c); datatype=XSD.double)
+                else
+                    v = Literal("")
+                end
+                result[q.aggregates[i].alias] = v
+            elseif agg.distinct
+                s_id_set = fallback_accs[gi][i]::Set{UInt32}
+                s_ident = Set{Identifier}()
+                for id in s_id_set
+                    push!(s_ident, store.id_to_term[id])
+                end
+                result[q.aggregates[i].alias] = _agg_finalize(s_ident, agg)
+            else
+                result[q.aggregates[i].alias] = _agg_finalize(fallback_accs[gi][i], agg)
+            end
+        end
+        new_bindings[gi] = result
+    end
+    new_bindings
 end
 
 function _exec_fused_bgp_agg_eb(q::SparqlSelect, g::RDFGraph,
