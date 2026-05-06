@@ -78,6 +78,7 @@ include("sparql_ast.jl")
 include("sparql_parser.jl")
 include("sparql_eval.jl")
 include("sparql_eval_encoded.jl")
+include("sparql_eval_duckdb.jl")
 include("sparql.jl")
 
 # DOT visualization
