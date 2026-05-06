@@ -190,15 +190,22 @@ function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
     # Ensure store indices are built before querying
     if g.store isa MemoryStore
         _ensure_all_indexed!(g.store)
+    elseif g.store isa EncodedStore
+        _ensure_all_indexed!(g.store)
     end
     # Star-join optimization for MemoryStore
     if g.store isa MemoryStore && length(patterns) >= 2
-        # Reorder star groups by selectivity (only when no bindings yet — i.e.,
-        # this is the top-level BGP). Filters travel with their preceding star.
         if length(bindings) == 1 && isempty(bindings[1])
             patterns = _reorder_star_groups(g.store::MemoryStore, patterns)
         end
         return _ast_eval_patterns_star(g, patterns, bindings, limit)
+    end
+    # Star-join optimization for EncodedStore (encoded fast path)
+    if g.store isa EncodedStore && length(patterns) >= 2
+        if length(bindings) == 1 && isempty(bindings[1])
+            patterns = _reorder_star_groups_encoded(g.store::EncodedStore, patterns)
+        end
+        return _ast_eval_patterns_star_encoded(g, patterns, bindings, limit)
     end
     for pattern in patterns
         bindings = _ast_eval_pattern(g, pattern, bindings)
@@ -1143,6 +1150,9 @@ function _ast_eval_bgp(g::RDFGraph, pat::PatTriple, binding::Dict{String,Identif
     # Fast path: direct index access for MemoryStore
     if g.store isa MemoryStore
         return _ast_eval_bgp_memory(g.store, pat, binding, s_val, p_val, o_val)
+    end
+    if g.store isa EncodedStore
+        return _ast_eval_bgp_encoded(g.store, pat, binding, s_val, p_val, o_val)
     end
 
     # Generic path: use indexed triples() for other stores
