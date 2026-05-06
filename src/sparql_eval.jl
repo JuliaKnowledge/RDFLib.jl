@@ -39,6 +39,13 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
     # streaming-friendly aggregates). Operates on Vector{EncBinding}
     # directly, eliminating the BGP-exit decode boundary (Q2-shape).
     if _enc_streaming_agg_eligible(q, g)
+        # Try fused last-star+aggregate (Q2-shape) first — avoids
+        # materializing the joined eb for the last star group.
+        fused = _try_fused_bgp_agg(q, g)
+        if fused !== nothing
+            bindings = fused
+            @goto post_aggregate
+        end
         # Push LIMIT into BGP only if no ORDER BY / DISTINCT
         push_limit_eb = 0
         pats = q.patterns
