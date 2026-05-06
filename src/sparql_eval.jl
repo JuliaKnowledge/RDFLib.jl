@@ -92,8 +92,20 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         end
     end
 
-    # Project variables — skip if bindings already match projection
     proj_vars = _ast_projection_vars(q)
+
+    # When OFFSET+LIMIT is set and we don't need DISTINCT (which requires
+    # comparing post-projection rows), slice first so projection only runs
+    # on the rows we'll actually return. Saves O(N) Dict construction when
+    # N >> limit (e.g. ORDER BY + LIMIT 50 over 30K rows).
+    can_slice_first = !isnothing(q.limit) && !q.distinct && !q.reduced
+    if can_slice_first
+        start = q.offset + 1
+        stop = min(start + q.limit - 1, length(bindings))
+        bindings = start <= length(bindings) ? bindings[start:stop] : Dict{String,Identifier}[]
+    end
+
+    # Project variables — skip if bindings already match projection
     if !isempty(proj_vars) && !isempty(bindings)
         b1 = bindings[1]
         needs_proj = length(b1) != length(proj_vars) || !all(v -> haskey(b1, v), proj_vars)
@@ -105,10 +117,13 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
     # DISTINCT / REDUCED
     (q.distinct || q.reduced) && (bindings = unique(bindings))
 
-    # OFFSET + LIMIT
-    start = q.offset + 1
-    stop = isnothing(q.limit) ? length(bindings) : min(start + q.limit - 1, length(bindings))
-    start <= length(bindings) ? bindings[start:stop] : Dict{String,Identifier}[]
+    # OFFSET + LIMIT (skipped above when can_slice_first)
+    if !can_slice_first
+        start = q.offset + 1
+        stop = isnothing(q.limit) ? length(bindings) : min(start + q.limit - 1, length(bindings))
+        bindings = start <= length(bindings) ? bindings[start:stop] : Dict{String,Identifier}[]
+    end
+    bindings
 end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlAsk)
