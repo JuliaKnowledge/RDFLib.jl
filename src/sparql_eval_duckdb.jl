@@ -19,6 +19,7 @@
 # Anything else falls back to the generic SPARQL evaluator.
 
 using DuckDB
+using Tables
 
 # ─── Eligibility check ───────────────────────────────────────────────
 
@@ -439,14 +440,13 @@ end
 
 function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
     sql, projected, var_refs = _duckdb_pushdown_sql(q)
-    # Augment select for object-sourced projected vars: also fetch
-    # the metadata columns so we can rebuild Literals correctly.
     obj_meta = Dict{String,String}()  # var -> alias name
     extra_selects = String[]
+    has_aggs = !isempty(q.aggregates) || !isempty(q.group_by)
     for v in projected
         ref = get(var_refs, v, nothing)
         ref === nothing && continue
-        if ref.col === :object
+        if ref.col === :object && !has_aggs
             tag = "__$(v)_meta_"
             push!(extra_selects, "$(ref.alias).object_type AS \"$(tag)t\"")
             push!(extra_selects, "$(ref.alias).datatype AS \"$(tag)d\"")
@@ -455,44 +455,56 @@ function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
         end
     end
     if !isempty(extra_selects)
-        # Skip metadata augmentation for aggregated queries — they don't
-        # have raw object rows in scope.
-        if isempty(q.aggregates) && isempty(q.group_by)
-            sql = replace(sql, " FROM " => ", " * join(extra_selects, ", ") * " FROM ", count=1)
-        end
+        sql = replace(sql, " FROM " => ", " * join(extra_selects, ", ") * " FROM ", count=1)
     end
 
     store = g.store::DuckDBStore
     qres = DBInterface.execute(store.con, sql)
-    bindings = Dict{String,Identifier}[]
-    for row in qres
+    # Materialize into columns once (much cheaper than per-row NamedTuple
+    # iteration when projecting many columns / many rows).
+    cols = Tables.columntable(qres)
+    nrows = isempty(cols) ? 0 : length(cols[1])
+    isempty(cols) && return Dict{String,Identifier}[]
+
+    n = length(projected)
+    val_cols     = Vector{Any}(undef, n)
+    meta_t_cols  = Vector{Any}(undef, n)
+    meta_d_cols  = Vector{Any}(undef, n)
+    meta_l_cols  = Vector{Any}(undef, n)
+    is_obj       = Vector{Bool}(undef, n)
+    @inbounds for (i, v) in enumerate(projected)
+        val_cols[i] = cols[Symbol(v)]
+        if haskey(obj_meta, v)
+            tag = obj_meta[v]
+            meta_t_cols[i] = cols[Symbol(tag * "t")]
+            meta_d_cols[i] = cols[Symbol(tag * "d")]
+            meta_l_cols[i] = cols[Symbol(tag * "l")]
+            is_obj[i] = true
+        else
+            is_obj[i] = false
+        end
+    end
+
+    bindings = Vector{Dict{String,Identifier}}(undef, nrows)
+    @inbounds for r in 1:nrows
         b = Dict{String,Identifier}()
-        for v in projected
-            colsym = Symbol(v)
-            val = getproperty(row, colsym)
+        for i in 1:n
+            v = projected[i]
+            val = val_cols[i][r]
             val === missing && continue
-            ref = get(var_refs, v, nothing)
-            if ref !== nothing
-                if ref.col === :object && haskey(obj_meta, v) &&
-                    isempty(q.aggregates) && isempty(q.group_by)
-                    tag = obj_meta[v]
-                    ot = getproperty(row, Symbol(tag * "t"))
-                    dt = getproperty(row, Symbol(tag * "d"))
-                    lg = getproperty(row, Symbol(tag * "l"))
-                    b[v] = _duckdb_decode_object(string(val),
-                                                  ot === missing ? "" : string(ot),
-                                                  dt === missing ? "" : string(dt),
-                                                  lg === missing ? "" : string(lg))
-                else
-                    # Subject/predicate/group-key/aggregate value
-                    b[v] = _decode_pushdown_value(val)
-                end
+            if is_obj[i]
+                ot = meta_t_cols[i][r]
+                dt = meta_d_cols[i][r]
+                lg = meta_l_cols[i][r]
+                b[v] = _duckdb_decode_object(string(val),
+                                              ot === missing ? "" : string(ot),
+                                              dt === missing ? "" : string(dt),
+                                              lg === missing ? "" : string(lg))
             else
-                # Aggregate alias
                 b[v] = _decode_pushdown_value(val)
             end
         end
-        push!(bindings, b)
+        bindings[r] = b
     end
     return bindings
 end
