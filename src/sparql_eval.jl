@@ -523,14 +523,34 @@ end
         length(obj_sets[i]) != 1 && (all_single = false; break)
     end
     if all_single
+        # Pre-validate: check bound terms and pre-bound vars match BEFORE allocating.
+        # Defer Dict copy until we know the row will be emitted.
+        @inbounds for i in 1:n
+            obj = first(obj_sets[i])
+            pat_obj = pats[i].object
+            if pat_obj isa String
+                # Variable: check pre-existing binding (in `b`) only
+                bv = get(b, pat_obj, nothing)
+                bv === nothing || bv == obj || return
+            elseif pat_obj isa Identifier
+                pat_obj == obj || return
+            else
+                # Fall back to general resolver for ExprURI/ExprLiteral patterns
+                resolved = _ast_resolve_term(pat_obj, b)
+                resolved === nothing && return
+                resolved == obj || return
+            end
+        end
+        # All checks passed — now allocate and bind
         new_b = copy(b)
         haskey(new_b, subj_var) || (new_b[subj_var] = s)
         @inbounds for i in 1:n
             obj = first(obj_sets[i])
             pat_obj = pats[i].object
-            # For bound terms (URIRef/Literal/BNode), pass as resolved; for variables, use nothing
-            resolved = pat_obj isa String ? nothing : _ast_resolve_term(pat_obj, new_b)
-            _ast_match_term(obj, pat_obj, resolved, new_b) || return
+            if pat_obj isa String
+                # Bind if not already bound (pre-validated to match if it was)
+                haskey(new_b, pat_obj) || (new_b[pat_obj] = obj)
+            end
         end
         push!(results, new_b)
     else
@@ -2071,6 +2091,12 @@ end
 # ─── Aggregate computation ────────────────────────────────────────
 
 function _ast_eval_group_aggregate(q::SparqlSelect, bindings, g)
+    # Streaming path: when all aggregates are streaming-friendly (no DISTINCT,
+    # no GROUP_CONCAT/MEDIAN/MODE), avoid materialising bindings per group.
+    # Instead maintain per-group accumulators directly.
+    if _streaming_aggregate_safe(q)
+        return _ast_eval_group_aggregate_streaming(q, bindings, g)
+    end
     groups = Dict{Any, Vector{Dict{String,Identifier}}}()
     group_order = Any[]  # preserve insertion order for HAVING
     for b in bindings
@@ -2112,6 +2138,247 @@ function _ast_eval_group_aggregate(q::SparqlSelect, bindings, g)
     end
 
     new_bindings
+end
+
+# Detect if streaming aggregation is safe — all aggregates support O(1) update
+# and the query has no HAVING (HAVING needs full per-group bindings for now).
+function _streaming_aggregate_safe(q::SparqlSelect)
+    !isnothing(q.having) && return false
+    isempty(q.aggregates) && return false
+    for sa in q.aggregates
+        agg = sa.agg
+        # COUNT DISTINCT, SUM DISTINCT, AVG DISTINCT supported via Set-based accumulator
+        if agg.distinct
+            agg.func in ("COUNT", "SUM", "AVG", "MIN", "MAX") || return false
+            agg.arg isa ExprVar || agg.arg isa ExprStar || return false
+        else
+            agg.func in ("COUNT", "SUM", "AVG", "MIN", "MAX", "SAMPLE") || return false
+        end
+    end
+    for gb in q.group_by
+        gb isa ExprVar || return false
+    end
+    return true
+end
+
+# Streaming GROUP BY + aggregate. Maintains accumulators per group as we walk
+# bindings. Skips materialising the per-group binding lists.
+function _ast_eval_group_aggregate_streaming(q::SparqlSelect, bindings, g)
+    n_agg = length(q.aggregates)
+    n_gb = length(q.group_by)
+    # Per group state: (group_var_values::Vector{Identifier}, accumulators::Vector{Any})
+    groups = Dict{NTuple, Tuple{Vector{Identifier}, Vector{Any}}}()
+    group_order = NTuple[]
+    # Empty bindings + no group-by: still emit one row of empties
+    if isempty(bindings) && isempty(q.group_by)
+        result = Dict{String,Identifier}()
+        for sa in q.aggregates
+            # Compute on empty group
+            result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+        end
+        return Dict{String,Identifier}[result]
+    end
+    for b in bindings
+        key = if n_gb == 0
+            ()
+        else
+            ntuple(n_gb) do i
+                e = _ast_eval_expr(q.group_by[i], b, g)
+                isnothing(e) ? nothing : e
+            end
+        end
+        st = get(groups, key, nothing)
+        if st === nothing
+            gvals = Identifier[]
+            for gb in q.group_by
+                push!(gvals, get(b, (gb::ExprVar).name, Literal("")))
+            end
+            accs = Any[_agg_init(q.aggregates[i].agg) for i in 1:n_agg]
+            for i in 1:n_agg
+                accs[i] = _agg_update(accs[i], q.aggregates[i].agg, b)
+            end
+            groups[key] = (gvals, accs)
+            push!(group_order, key)
+        else
+            _, accs = st
+            for i in 1:n_agg
+                accs[i] = _agg_update(accs[i], q.aggregates[i].agg, b)
+            end
+        end
+    end
+
+    new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_order))
+    @inbounds for gi in eachindex(group_order)
+        key = group_order[gi]
+        gvals, accs = groups[key]
+        result = Dict{String,Identifier}()
+        for (i, gb) in enumerate(q.group_by)
+            result[(gb::ExprVar).name] = gvals[i]
+        end
+        for i in 1:n_agg
+            result[q.aggregates[i].alias] = _agg_finalize(accs[i], q.aggregates[i].agg)
+        end
+        new_bindings[gi] = result
+    end
+    new_bindings
+end
+
+# Initial accumulator state for a streaming aggregate
+@inline function _agg_init(agg::ExprAggregate)
+    f = agg.func
+    if agg.distinct
+        # All DISTINCT variants need a set of seen values
+        if f == "COUNT"
+            return Set{Identifier}()
+        elseif f == "SUM" || f == "AVG"
+            return Set{Identifier}()
+        elseif f == "MIN" || f == "MAX"
+            return Set{Identifier}()
+        end
+    end
+    if f == "COUNT"
+        return 0
+    elseif f == "SUM"
+        return (0.0, false)
+    elseif f == "AVG"
+        return (0.0, 0)
+    elseif f == "MIN" || f == "MAX"
+        return nothing
+    elseif f == "SAMPLE"
+        return nothing
+    end
+    return nothing
+end
+
+@inline function _agg_update(acc, agg::ExprAggregate, b::Dict{String,Identifier})
+    f = agg.func
+    arg = agg.arg
+    if agg.distinct
+        # Collect distinct values into a Set; finalize computes the result later.
+        s = acc::Set{Identifier}
+        if arg isa ExprStar
+            # COUNT(DISTINCT *) — distinct over the entire row signature.
+            # Approximate via row-tuple hash (rare path).
+            push!(s, Literal(string(hash(b))))
+        elseif arg isa ExprVar
+            v = get(b, arg.name, nothing)
+            v !== nothing && push!(s, v)
+        end
+        return s
+    end
+    if f == "COUNT"
+        if arg isa ExprStar
+            return acc + 1
+        elseif arg isa ExprVar
+            return haskey(b, arg.name) ? acc + 1 : acc
+        end
+        return acc
+    elseif f == "SUM"
+        v = _ast_extract_numeric_for_agg(arg, b)
+        v === nothing && return acc
+        s, all_int = acc::Tuple{Float64,Bool}
+        return (s + Float64(v), all_int)
+    elseif f == "AVG"
+        v = _ast_extract_numeric_for_agg(arg, b)
+        v === nothing && return acc
+        s, c = acc::Tuple{Float64,Int}
+        return (s + Float64(v), c + 1)
+    elseif f == "MIN"
+        v = _ast_extract_value_for_agg(arg, b)
+        v === nothing && return acc
+        if acc === nothing
+            return v
+        end
+        return _agg_lt(v, acc) ? v : acc
+    elseif f == "MAX"
+        v = _ast_extract_value_for_agg(arg, b)
+        v === nothing && return acc
+        if acc === nothing
+            return v
+        end
+        return _agg_lt(acc, v) ? v : acc
+    elseif f == "SAMPLE"
+        if acc === nothing
+            v = _ast_extract_value_for_agg(arg, b)
+            return v === nothing ? acc : v
+        end
+        return acc
+    end
+    return acc
+end
+
+@inline function _ast_extract_numeric_for_agg(arg, b::Dict{String,Identifier})
+    if arg isa ExprVar
+        v = get(b, arg.name, nothing)
+        v === nothing && return nothing
+        return _ast_to_numeric(v)
+    end
+    return nothing
+end
+
+@inline function _ast_extract_value_for_agg(arg, b::Dict{String,Identifier})
+    if arg isa ExprVar
+        return get(b, arg.name, nothing)
+    end
+    return nothing
+end
+
+@inline function _agg_lt(a::Identifier, b::Identifier)
+    na = _ast_to_numeric(a)
+    nb = _ast_to_numeric(b)
+    if na !== nothing && nb !== nothing
+        return na < nb
+    end
+    sa = a isa Literal ? a.lexical : string(a)
+    sb = b isa Literal ? b.lexical : string(b)
+    return sa < sb
+end
+
+@inline function _agg_finalize(acc, agg::ExprAggregate)
+    f = agg.func
+    if agg.distinct
+        s = acc::Set{Identifier}
+        if f == "COUNT"
+            return Literal(length(s))
+        elseif f == "SUM"
+            tot = 0.0
+            for v in s
+                n = _ast_to_numeric(v)
+                n !== nothing && (tot += Float64(n))
+            end
+            return isinteger(tot) ? Literal(Int(tot)) : Literal(tot)
+        elseif f == "AVG"
+            tot = 0.0; c = 0
+            for v in s
+                n = _ast_to_numeric(v)
+                n !== nothing && (tot += Float64(n); c += 1)
+            end
+            return c == 0 ? Literal(0.0) : Literal(tot / c)
+        elseif f == "MIN" || f == "MAX"
+            isempty(s) && return Literal("")
+            it = iterate(s); best = it[1]; state = it[2]
+            while true
+                it = iterate(s, state); it === nothing && break
+                v = it[1]; state = it[2]
+                if (f == "MIN" && _agg_lt(v, best)) || (f == "MAX" && _agg_lt(best, v))
+                    best = v
+                end
+            end
+            return best
+        end
+    end
+    if f == "COUNT"
+        return Literal(acc::Int)
+    elseif f == "SUM"
+        s, _ = acc::Tuple{Float64,Bool}
+        return isinteger(s) ? Literal(Int(s)) : Literal(s)
+    elseif f == "AVG"
+        s, c = acc::Tuple{Float64,Int}
+        return c == 0 ? Literal(0.0) : Literal(s / c)
+    elseif f == "MIN" || f == "MAX" || f == "SAMPLE"
+        return acc === nothing ? Literal("") : acc::Identifier
+    end
+    return Literal("")
 end
 
 """Recursively find ExprAggregate nodes and stash their computed values in the binding."""
