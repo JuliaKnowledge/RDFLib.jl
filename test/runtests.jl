@@ -39,6 +39,7 @@ using RDFLib
     include("test_shacl.jl")
     include("test_shex.jl")
     include("test_n3.jl")
+    include("test_arrow.jl")
     include("test_n3_rules.jl")
     include("test_n3_unifier.jl")
     include("test_n3_builtins.jl")

@@ -30,6 +30,10 @@ struct JSONLDFormat <: SerializationFormat end
 """Notation3 (N3) format (`.n3`)"""
 struct N3Format <: SerializationFormat end
 
+"""Apache Arrow IPC format (`.arrow`). Columnar binary; fast load/save and
+zero-copy interop with maplib/Polars/DuckDB."""
+struct ArrowFormat <: SerializationFormat end
+
 """Detect serialization format from file extension."""
 function _detect_format(filename::AbstractString)
     ext = lowercase(splitext(filename)[2])
@@ -47,6 +51,8 @@ function _detect_format(filename::AbstractString)
         JSONLDFormat()
     elseif ext == ".n3"
         N3Format()
+    elseif ext == ".arrow"
+        ArrowFormat()
     else
         throw(ArgumentError("Cannot detect format from extension: $ext"))
     end

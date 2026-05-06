@@ -98,6 +98,9 @@ include("shacl.jl")
 # Notation3 (N3) format
 include("n3.jl")
 
+# Apache Arrow IPC format (interop & fast persistence)
+include("arrow.jl")
+
 # N3 builtin predicates (math, string, log, crypto)
 include("n3_builtins.jl")
 
@@ -279,6 +282,7 @@ export
 
     # N3
     Formula, N3Format, serialize_n3, parse_n3, parse_n3!, LOG, MATH,
+    ArrowFormat, serialize_arrow, parse_arrow, parse_arrow!,
 
     # N3 builtins
     register_builtin!, is_builtin, evaluate_builtin,
