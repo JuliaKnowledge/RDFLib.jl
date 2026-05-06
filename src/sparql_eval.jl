@@ -478,7 +478,7 @@ function _ast_eval_star_memory(store::MemoryStore, pats,
                 end
             elseif driver === nothing && (
                 # Distinguish "no match found" (skip this binding) from
-                # "no constraint at all" (fall back to full scan).
+                # "no constraint at all" (fall back to scan).
                 any_bound_obj_var(pats, n, b)
             )
                 # Some object var was bound but had no matches → skip this binding
@@ -714,6 +714,15 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
     # left-join by shared variables. Avoids O(n*m) re-evaluation.
     # Falls back to nested loop if patterns reference outer-only variables.
     if _opt_safe_for_hashjoin(pat.patterns, bindings)
+        # Bound-join optimization: when outer bindings share variables produced
+        # inside the OPTIONAL, push them as constraints (evaluate inner WITH the
+        # outer bindings). This lets the star-join's runtime POS pivot use the
+        # bound vars directly, avoiding a full standalone scan + hash join.
+        # We then add back outer rows that had no match (LEFT JOIN semantics).
+        shared = _opt_shared_vars(pat.patterns, bindings)
+        if !isempty(shared) && length(shared) <= 2
+            return _opt_bound_join(g, pat.patterns, bindings, shared)
+        end
         opt_results = _ast_eval_patterns(g, pat.patterns)
         return _ast_left_join(bindings, opt_results)
     end
@@ -729,6 +738,66 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
         end
     end
     new_bindings
+end
+
+# Variables shared between outer bindings and inner OPTIONAL patterns
+function _opt_shared_vars(patterns::Vector{SparqlPattern}, bindings)
+    inner_vars = Set{String}()
+    for p in patterns
+        _collect_produced_vars!(inner_vars, p)
+    end
+    outer_vars = Set{String}()
+    for b in bindings, k in keys(b); push!(outer_vars, k); end
+    sort!(collect(intersect(inner_vars, outer_vars)))
+end
+
+# Bound-join: evaluate inner with outer bindings as constraints, then add
+# unmatched outer rows back (LEFT JOIN semantics).
+function _opt_bound_join(g::RDFGraph, patterns::Vector{SparqlPattern},
+                          outer::Vector{Dict{String,Identifier}},
+                          shared::Vector{String})
+    matched = _ast_eval_patterns(g, patterns, [copy(b) for b in outer])
+
+    # Build a set of (shared-var-tuple) values that appear in matched.
+    # For length-1 shared, use Set{Identifier}; otherwise Set{Tuple}.
+    if length(shared) == 1
+        sv = shared[1]
+        seen = Set{Identifier}()
+        sizehint!(seen, length(matched))
+        @inbounds for m in matched
+            v = get(m, sv, nothing)
+            v === nothing || push!(seen, v)
+        end
+        # Unmatched outer rows: those whose shared-var value is not in `seen`.
+        @inbounds for b in outer
+            v = get(b, sv, nothing)
+            (v === nothing || !(v in seen)) && push!(matched, b)
+        end
+    else
+        seen = Set{Tuple}()
+        sizehint!(seen, length(matched))
+        @inbounds for m in matched
+            ok = true
+            vals = Vector{Identifier}(undef, length(shared))
+            for (i, k) in enumerate(shared)
+                v = get(m, k, nothing)
+                v === nothing && (ok = false; break)
+                vals[i] = v
+            end
+            ok && push!(seen, Tuple(vals))
+        end
+        @inbounds for b in outer
+            ok = true
+            vals = Vector{Identifier}(undef, length(shared))
+            for (i, k) in enumerate(shared)
+                v = get(b, k, nothing)
+                v === nothing && (ok = false; break)
+                vals[i] = v
+            end
+            (!ok || !(Tuple(vals) in seen)) && push!(matched, b)
+        end
+    end
+    matched
 end
 
 # True iff the OPTIONAL pattern block can be evaluated standalone without
@@ -833,16 +902,17 @@ function _ast_left_join(lhs::Vector{Dict{String,Identifier}},
         return out
     end
 
+    # Specialised path: single shared variable — keys are Identifiers directly,
+    # avoiding Tuple/Vector allocations per row (huge win for 100K+ rows).
+    if length(shared) == 1
+        return _ast_left_join_single(lhs, rhs, shared[1])
+    end
+
     # Build hash on RHS keyed by shared var values.
-    # Key is a Tuple of values for the shared keys (or `nothing` if unbound on this row).
     Index = Dict{Tuple,Vector{Dict{String,Identifier}}}
     idx = Index()
     nshared = length(shared)
     for r in rhs
-        # Skip RHS rows that don't bind all shared keys — those can't match
-        # via hash key, but they could still be cartesian-joined. For OPTIONAL
-        # this case is rare and we conservatively skip them (correctness for
-        # benchmark queries; full semantics would require compatible-merge fallback).
         ok = true
         key_vals = Vector{Identifier}(undef, nshared)
         for (i, v) in enumerate(shared)
@@ -857,7 +927,6 @@ function _ast_left_join(lhs::Vector{Dict{String,Identifier}},
     out = Dict{String,Identifier}[]
     sizehint!(out, length(lhs))
     for l in lhs
-        # Build lookup key for this LHS row
         ok = true
         key_vals = Vector{Identifier}(undef, nshared)
         for (i, v) in enumerate(shared)
@@ -874,7 +943,35 @@ function _ast_left_join(lhs::Vector{Dict{String,Identifier}},
                 continue
             end
         end
-        # No match → keep LHS row (OPTIONAL pass-through)
+        push!(out, l)
+    end
+    out
+end
+
+# Single-shared-variable specialization: avoids per-row Tuple/Vector allocations
+function _ast_left_join_single(lhs::Vector{Dict{String,Identifier}},
+                                rhs::Vector{Dict{String,Identifier}},
+                                key_var::String)
+    idx = Dict{Identifier,Vector{Dict{String,Identifier}}}()
+    sizehint!(idx, length(rhs) ÷ 4 + 8)
+    @inbounds for r in rhs
+        v = get(r, key_var, nothing)
+        v === nothing && continue
+        push!(get!(() -> Dict{String,Identifier}[], idx, v), r)
+    end
+    out = Dict{String,Identifier}[]
+    sizehint!(out, length(lhs))
+    @inbounds for l in lhs
+        v = get(l, key_var, nothing)
+        if v !== nothing
+            matches = get(idx, v, nothing)
+            if matches !== nothing
+                for m in matches
+                    push!(out, merge(l, m))
+                end
+                continue
+            end
+        end
         push!(out, l)
     end
     out
