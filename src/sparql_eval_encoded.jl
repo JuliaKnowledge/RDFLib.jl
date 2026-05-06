@@ -1129,6 +1129,24 @@ end
     return acc
 end
 
+# Like _agg_update_uint32 but `id == 0` means missing-binding (no-op for non-star).
+# `is_star` (plan[4]) signals COUNT(*) which always counts. Used by stream OPTIONAL.
+@inline function _agg_update_slot(acc, plan::Tuple{Int,Bool,String,Bool},
+                                    id::UInt32, store::EncodedStore)
+    f, distinct, _, is_star = plan
+    if is_star
+        if distinct
+            s = acc::Set{UInt32}
+            push!(s, UInt32(length(s) + 1))
+            return s
+        end
+        f == 1 && return (acc::Int) + 1
+        return acc
+    end
+    id == 0 && return acc
+    return _agg_update_uint32(acc, plan, id, store)
+end
+
 # Split patterns into outer + last star group. Returns
 # (outer_pats, last_pats, last_subj_var) or `nothing` if not applicable.
 # The last star's subject MUST be bound by the outer patterns
@@ -1993,6 +2011,37 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
     outer_agg_idx = Int[i for i in 1:n_agg if agg_sources[i] === :outer]
     inner_agg_idx = Int[i for i in 1:n_agg if agg_sources[i] === :inner]
 
+    # Pre-resolve inner aggregate source slots:
+    #   kind=0: outer var (id read from outer_eb each iter)
+    #   kind=1: inner subject (id = s)
+    #   kind=2: inner obj_firsts[idx]
+    #   kind=3: COUNT(*) — no value needed
+    inner_obj_var_pos = Dict{String,Int}()
+    @inbounds for i in 1:n_inner
+        o = inner_triples[i].object
+        if o isa String && !haskey(inner_obj_var_pos, o)
+            inner_obj_var_pos[o] = i
+        end
+    end
+    inner_agg_kind = Vector{Int8}(undef, length(inner_agg_idx))
+    inner_agg_slot = Vector{Int}(undef, length(inner_agg_idx))
+    inner_slot_resolved = true
+    @inbounds for k in eachindex(inner_agg_idx)
+        i = inner_agg_idx[k]
+        plan = agg_plan[i]
+        is_star = plan[4]; var = plan[3]
+        if is_star
+            inner_agg_kind[k] = Int8(3); inner_agg_slot[k] = 0
+        elseif var == inner_subj
+            inner_agg_kind[k] = Int8(1); inner_agg_slot[k] = 0
+        elseif haskey(inner_obj_var_pos, var)
+            inner_agg_kind[k] = Int8(2); inner_agg_slot[k] = inner_obj_var_pos[var]
+        else
+            inner_agg_kind[k] = Int8(0); inner_agg_slot[k] = 0
+            inner_slot_resolved = false
+        end
+    end
+
     # Group state: NTuple{N,UInt32} key -> (gvals::Vector{UInt32}, accs::Vector{Any})
     groups = Dict{NTuple, Tuple{Vector{UInt32}, Vector{Any}}}()
     group_order = NTuple[]
@@ -2006,6 +2055,7 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
     obj_firsts = Vector{UInt32}(undef, n_inner)
 
     have_inner_filters = !isempty(inner_filters)
+    use_slot_path = inner_slot_resolved && !have_inner_filters
 
     for outer_eb in outer_ebs
         # Build group key from outer-only ids
@@ -2042,6 +2092,8 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
 
         # Find smallest driver subject set via POS pivot
         driver = nothing
+        driver_idx = 0
+        driver_obj = UInt32(0)
         bail = false
         @inbounds for i in 1:n_inner
             po = pos_buckets[i]
@@ -2064,6 +2116,8 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
             end
             if driver === nothing || length(subjs) < length(driver)
                 driver = subjs
+                driver_idx = i
+                driver_obj = obj_id
             end
         end
         bail && continue
@@ -2074,6 +2128,7 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
             sp === nothing && continue
             ok = true
             @inbounds for i in 1:n_inner
+                i == driver_idx && continue  # already known via driver pivot
                 os = get(sp, pred_ids[i], nothing)
                 if os === nothing
                     ok = false; break
@@ -2082,17 +2137,23 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
             end
             ok || continue
 
-            # all_single fast path
+            # all_single fast path (skip driver_idx — known to be single via pivot)
             all_single = true
             @inbounds for i in 1:n_inner
+                i == driver_idx && continue
                 length(obj_sets[i]) != 1 && (all_single = false; break)
             end
             if all_single
                 @inbounds for i in 1:n_inner
-                    obj_firsts[i] = first(obj_sets[i])
+                    if i == driver_idx
+                        obj_firsts[i] = driver_obj
+                    else
+                        obj_firsts[i] = first(obj_sets[i])
+                    end
                 end
                 ok2 = true
                 @inbounds for i in 1:n_inner
+                    i == driver_idx && continue  # already matched via pivot
                     pat_obj = inner_triples[i].object
                     if pat_obj isa String
                         bv = get(outer_eb, pat_obj, UInt32(0))
@@ -2106,31 +2167,48 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
                 ok2 || continue
 
                 if have_inner_filters || !isempty(inner_agg_idx)
-                    # Build scratch_eb: outer + inner subject + obj vars
-                    empty!(scratch_eb)
-                    for (k, v) in outer_eb
-                        scratch_eb[k] = v
-                    end
-                    scratch_eb[inner_subj] = s
-                    @inbounds for i in 1:n_inner
-                        pat_obj = inner_triples[i].object
-                        pat_obj isa String && (scratch_eb[pat_obj::String] = obj_firsts[i])
-                    end
-
-                    # Inner filters: decode scratch on demand
-                    if have_inner_filters
-                        scratch_id = _decode_one_binding(store, scratch_eb)
-                        fok = true
-                        for fexpr in inner_filters
-                            if !_ast_eval_expr_bool(fexpr, scratch_id, g)
-                                fok = false; break
+                    if use_slot_path
+                        # Slot-based fast path: no scratch_eb dict construction.
+                        @inbounds for k in eachindex(inner_agg_idx)
+                            i = inner_agg_idx[k]
+                            kind = inner_agg_kind[k]
+                            is_star = (kind == Int8(3))
+                            id::UInt32 = if kind == Int8(1)
+                                s
+                            elseif kind == Int8(2)
+                                obj_firsts[inner_agg_slot[k]]
+                            else
+                                UInt32(0)
                             end
+                            accs[i] = _agg_update_slot(accs[i], agg_plan[i], id, store)
                         end
-                        fok || continue
-                    end
+                    else
+                        # Build scratch_eb: outer + inner subject + obj vars
+                        empty!(scratch_eb)
+                        for (k, v) in outer_eb
+                            scratch_eb[k] = v
+                        end
+                        scratch_eb[inner_subj] = s
+                        @inbounds for i in 1:n_inner
+                            pat_obj = inner_triples[i].object
+                            pat_obj isa String && (scratch_eb[pat_obj::String] = obj_firsts[i])
+                        end
 
-                    @inbounds for i in inner_agg_idx
-                        accs[i] = _agg_update_fast_eb(accs[i], agg_plan[i], scratch_eb, store)
+                        # Inner filters: decode scratch on demand
+                        if have_inner_filters
+                            scratch_id = _decode_one_binding(store, scratch_eb)
+                            fok = true
+                            for fexpr in inner_filters
+                                if !_ast_eval_expr_bool(fexpr, scratch_id, g)
+                                    fok = false; break
+                                end
+                            end
+                            fok || continue
+                        end
+
+                        @inbounds for i in inner_agg_idx
+                            accs[i] = _agg_update_fast_eb(accs[i], agg_plan[i], scratch_eb, store)
+                        end
                     end
                 end
             else
