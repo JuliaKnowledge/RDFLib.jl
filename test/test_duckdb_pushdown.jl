@@ -85,3 +85,43 @@ using Test
     close(g.store)
     println("DuckDB pushdown tests passed")
 end
+
+@testset "DuckDB BGP pushdown — FILTER" begin
+    g = RDFGraph(store=DuckDBStore())
+    EX = Namespace("http://ex.org/")
+    for i in 1:10
+        s = URIRef("$(EX.uri)s$i")
+        add!(g, Triple(s, RDF.type, EX.Foo))
+        add!(g, Triple(s, EX.val, Literal(string(i),
+            datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))))
+    end
+
+    # Numeric filter
+    res = sparql_query(g, """
+        PREFIX ex: <http://ex.org/>
+        SELECT ?s ?v WHERE {?s a ex:Foo ; ex:val ?v . FILTER(?v > 5)}
+    """)
+    @test length(res) == 5
+
+    # Compound filter
+    res = sparql_query(g, """
+        PREFIX ex: <http://ex.org/>
+        SELECT ?s WHERE {?s a ex:Foo ; ex:val ?v . FILTER(?v >= 3 && ?v <= 7)}
+    """)
+    @test length(res) == 5
+
+    # Numeric ORDER BY (was buggy with lexicographic sort)
+    res = sparql_query(g, """
+        PREFIX ex: <http://ex.org/>
+        SELECT ?v WHERE {?s a ex:Foo ; ex:val ?v} ORDER BY ?v
+    """)
+    @test [r["v"].lexical for r in res] == [string(i) for i in 1:10]
+
+    res = sparql_query(g, """
+        PREFIX ex: <http://ex.org/>
+        SELECT ?v WHERE {?s a ex:Foo ; ex:val ?v} ORDER BY DESC(?v) LIMIT 3
+    """)
+    @test [r["v"].lexical for r in res] == ["10","9","8"]
+
+    close(g.store)
+end

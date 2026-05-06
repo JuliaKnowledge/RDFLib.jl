@@ -31,16 +31,23 @@ function _duckdb_pushdown_eligible(q::SparqlSelect, g::RDFGraph)
     isempty(pats) && return false
     n = length(pats)
 
-    # Check pattern shape: PatTriple* + optional PatOptional{PatTriple*}
+    # Find tail OPTIONAL boundary; everything before must be PatTriple or
+    # PatFilter (translatable). Trailing PatOptional must contain only
+    # PatTriple.
     has_opt = pats[end] isa PatOptional
     body_end = has_opt ? n - 1 : n
     body_end >= 1 || return false
     @inbounds for i in 1:body_end
         p = pats[i]
-        p isa PatTriple || return false
-        _is_simple_triple_term(p.subject)   || return false
-        _is_simple_pred(p.predicate)        || return false
-        _is_simple_triple_term(p.object)    || return false
+        if p isa PatTriple
+            _is_simple_triple_term(p.subject)   || return false
+            _is_simple_pred(p.predicate)        || return false
+            _is_simple_triple_term(p.object)    || return false
+        elseif p isa PatFilter
+            _is_translatable_filter(p.expr)     || return false
+        else
+            return false
+        end
     end
     if has_opt
         for ip in (pats[end]::PatOptional).patterns
@@ -64,14 +71,34 @@ function _duckdb_pushdown_eligible(q::SparqlSelect, g::RDFGraph)
         gb isa ExprVar || return false
     end
 
-    # ORDER BY: variable or aggregate alias only
-    agg_aliases = Set{String}(sa.alias for sa in q.aggregates)
+    # ORDER BY: variable only
     for ob in q.order_by
-        e = ob[1]
-        e isa ExprVar || return false
+        ob[1] isa ExprVar || return false
     end
 
     return true
+end
+
+# Translatable filters: comparison/logic over variables and literals.
+# Conservative list — anything else falls back.
+function _is_translatable_filter(e::SparqlExpr)
+    if e isa ExprBinaryOp
+        e.op in (:&&, :||, :(==), :!=, :<, :>, :<=, :>=, :+, :-, :*, :/) || return false
+        return _is_translatable_filter(e.left) && _is_translatable_filter(e.right)
+    elseif e isa ExprUnaryOp
+        e.op in (:!, :+, :-) || return false
+        return _is_translatable_filter(e.arg)
+    elseif e isa ExprVar
+        return true
+    elseif e isa ExprLiteral
+        # Numeric and string literals only — datatypes we can map to SQL.
+        return true
+    elseif e isa ExprBool
+        return true
+    elseif e isa ExprURI
+        return true
+    end
+    return false
 end
 
 @inline _is_simple_triple_term(x) =
@@ -170,10 +197,21 @@ function _ddb_build_bgp(pats::AbstractVector,
     where_clauses = String[]
     var_refs = outer_var_refs === nothing ? Dict{String,_DDBVarRef}() :
                                               copy(outer_var_refs)
+    alias_idx = start_alias
 
-    for (i, pat) in enumerate(pats)
+    for pat in pats
+        if pat isa PatFilter
+            # Defer until vars known? Filters reference vars from earlier
+            # patterns. We translate eagerly using the current var_refs map;
+            # if a referenced var isn't bound yet, the WHERE evaluates with
+            # NULL and the row drops — same as SPARQL semantics.
+            sql = _ddb_translate_expr(pat.expr, var_refs)
+            push!(where_clauses, "(" * sql * ")")
+            continue
+        end
         p = pat::PatTriple
-        a = "t" * string(start_alias + i - 1)
+        a = "t" * string(alias_idx)
+        alias_idx += 1
         push!(aliases, a)
 
         # Subject
@@ -219,6 +257,58 @@ function _ddb_build_bgp(pats::AbstractVector,
         end
     end
     return aliases, where_clauses, var_refs
+end
+
+# ─── Filter expression → SQL ─────────────────────────────────────────
+
+const _DDB_BIN_OP = Dict{Symbol,String}(
+    :(==) => "=", :!= => "<>",
+    :< => "<", :> => ">", :<= => "<=", :>= => ">=",
+    :+ => "+", :- => "-", :* => "*", :/ => "/",
+    :&& => " AND ", :|| => " OR ",
+)
+
+function _ddb_translate_expr(e::SparqlExpr, var_refs)
+    if e isa ExprBinaryOp
+        l = _ddb_translate_expr(e.left, var_refs)
+        r = _ddb_translate_expr(e.right, var_refs)
+        op = get(_DDB_BIN_OP, e.op, nothing)
+        op === nothing && error("unhandled op $(e.op)")
+        # Numeric ops: cast both sides to DOUBLE for safe comparison.
+        if e.op in (:<, :>, :<=, :>=, :+, :-, :*, :/)
+            return "TRY_CAST($l AS DOUBLE) $op TRY_CAST($r AS DOUBLE)"
+        elseif e.op in (:(==), :!=)
+            return "$l $op $r"
+        else
+            return "($l)$op($r)"
+        end
+    elseif e isa ExprUnaryOp
+        a = _ddb_translate_expr(e.arg, var_refs)
+        if e.op === :!
+            return "NOT ($a)"
+        else
+            return string(e.op) * "(" * a * ")"
+        end
+    elseif e isa ExprVar
+        ref = get(var_refs, e.name, nothing)
+        ref === nothing && error("unbound var $(e.name)")
+        return "$(ref.alias).$(ref.col)"
+    elseif e isa ExprLiteral
+        v = e.value::Literal
+        dt = v.datatype
+        if !isnothing(dt) && (occursin("integer", dt.value) ||
+                              occursin("decimal", dt.value) ||
+                              occursin("double",  dt.value) ||
+                              occursin("float",   dt.value))
+            return v.lexical
+        end
+        return _sql_str_lit(v.lexical)
+    elseif e isa ExprBool
+        return e.value ? "TRUE" : "FALSE"
+    elseif e isa ExprURI
+        return _sql_str_lit(e.uri.value)
+    end
+    error("untranslatable expr $(typeof(e))")
 end
 
 # Build the full SQL statement for a SparqlSelect. Returns
@@ -307,7 +397,15 @@ function _duckdb_pushdown_sql(q::SparqlSelect)
         parts = String[]
         for (e, dir) in q.order_by
             v = (e::ExprVar).name
-            push!(parts, "\"$v\" " * (dir === :desc ? "DESC" : "ASC"))
+            ref = get(var_refs, v, nothing)
+            d = dir === :desc ? "DESC" : "ASC"
+            if ref !== nothing && ref.col === :object
+                # Numeric-aware sort: cast to DOUBLE first, fall back to lex.
+                src = "$(ref.alias).object"
+                push!(parts, "TRY_CAST($src AS DOUBLE) $d NULLS LAST, $src $d")
+            else
+                push!(parts, "\"$v\" $d")
+            end
         end
         " ORDER BY " * join(parts, ", ")
     else
