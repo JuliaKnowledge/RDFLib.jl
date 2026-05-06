@@ -16,6 +16,16 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         return [Dict{String,Identifier}(q.aggregates[1].alias => Literal(length(g)))]
     end
 
+    # Fast path: DuckDB BGP pushdown — translate the entire SELECT into a
+    # single SQL query and let DuckDB's vectorized engine evaluate it.
+    if _duckdb_pushdown_eligible(q, g)
+        try
+            return _duckdb_pushdown_run(g, q)
+        catch err
+            @debug "DuckDB pushdown failed; falling back" exception=(err, catch_backtrace())
+        end
+    end
+
     # Fast path: streaming OPTIONAL+aggregate (Q4-shape queries). Returns
     # already-aggregated bindings — skips the secondary group/aggregate pass.
     streamed = _try_stream_opt_agg(q, g)
