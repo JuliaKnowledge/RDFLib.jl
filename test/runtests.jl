@@ -49,6 +49,7 @@ using RDFLib
     include("test_sqlitestore.jl")
     include("test_duckdbstore.jl")
     include("test_duckdb_pushdown.jl")
+    include("test_duckdb_bulk.jl")
     include("test_sparqlstore.jl")
     include("test_lmdbstore.jl")
     include("test_collections.jl")

@@ -217,7 +217,7 @@ export
 
     # Store
     AbstractStore, MemoryStore, EncodedStore, SQLiteStore, DuckDBStore, SPARQLStore, LMDBStore,
-    transaction, sparql_remote, add_bulk!, clear!,
+    transaction, sparql_remote, add_bulk!, bulk_add!, clear!,
 
     # RDFGraph
     RDFGraph,
