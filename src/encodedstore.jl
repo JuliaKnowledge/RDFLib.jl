@@ -33,6 +33,11 @@ mutable struct EncodedStore <: AbstractStore
     count::Int
     indexed::Bool            # SPO built
     secondary_indexed::Bool  # POS/OSP/flat built
+
+    # Lazy numeric cache: parallel to id_to_term (resized on first lookup)
+    # status: 0=unknown, 1=cached numeric, 2=known non-numeric
+    numeric_status::Vector{UInt8}
+    numeric_value::Vector{Float64}
 end
 
 EncodedStore() = EncodedStore(
@@ -47,6 +52,8 @@ EncodedStore() = EncodedStore(
     0,
     true,
     false,
+    UInt8[],
+    Float64[],
 )
 
 # ─── Term interning ─────────────────────────────────────────────────
@@ -68,6 +75,41 @@ end
 
 """Decode a UInt32 id back to its Identifier."""
 @inline _decode(store::EncodedStore, id::UInt32)::Identifier = store.id_to_term[id]
+
+# ─── Lazy numeric cache ─────────────────────────────────────────────
+# Parallel to id_to_term. Lazily populated on first SUM/AVG/numeric-comparison.
+# status[id]: 0=unknown, 1=numeric, 2=non-numeric.
+
+@inline function _enc_numeric(store::EncodedStore, id::UInt32)::Union{Float64, Nothing}
+    id == 0 && return nothing
+    status = store.numeric_status
+    n = length(store.id_to_term)
+    if length(status) < n
+        old = length(status)
+        resize!(status, n)
+        resize!(store.numeric_value, n)
+        @inbounds for i in (old+1):n
+            status[i] = 0x00
+        end
+    end
+    @inbounds st = status[id]
+    if st == 0x01
+        @inbounds return store.numeric_value[id]
+    elseif st == 0x02
+        return nothing
+    end
+    @inbounds v = store.id_to_term[id]
+    nv = _ast_to_numeric(v)
+    if nv === nothing
+        @inbounds status[id] = 0x02
+        return nothing
+    else
+        f = Float64(nv)
+        @inbounds store.numeric_value[id] = f
+        @inbounds status[id] = 0x01
+        return f
+    end
+end
 
 """Decode an encoded triple."""
 @inline function _decode_triple(store::EncodedStore, t::NTuple{3, UInt32})::Triple
