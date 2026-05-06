@@ -25,6 +25,22 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         @goto post_aggregate
     end
 
+    # Fast path: encoded streaming aggregate (EncodedStore + GROUP BY +
+    # streaming-friendly aggregates). Operates on Vector{EncBinding}
+    # directly, eliminating the BGP-exit decode boundary (Q2-shape).
+    if _enc_streaming_agg_eligible(q, g)
+        # Push LIMIT into BGP only if no ORDER BY / DISTINCT
+        push_limit_eb = 0
+        pats = q.patterns
+        if length(pats) >= 2
+            pats = _reorder_star_groups_encoded(g.store::EncodedStore, pats)
+        end
+        ebs = _ast_eval_patterns_star_encoded_eb(g, pats,
+            Dict{String,Identifier}[Dict{String,Identifier}()], push_limit_eb)
+        bindings = _ast_eval_group_aggregate_streaming_eb(q, ebs, g.store::EncodedStore, g)
+        @goto post_aggregate
+    end
+
     # Push LIMIT into pattern evaluation when safe (no ORDER BY, GROUP BY, DISTINCT, computed exprs)
     push_limit = 0
     if !isnothing(q.limit) && isempty(q.order_by) && isempty(q.aggregates) &&
