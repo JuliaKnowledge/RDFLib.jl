@@ -1116,3 +1116,314 @@ function _enc_streaming_agg_eligible(q::SparqlSelect, g::RDFGraph)
     end
     return true
 end
+
+# ─── Encoded streaming OPTIONAL+aggregate (Q4-shape) ──────────────────
+# Mirror of _exec_stream_opt_agg in sparql_eval.jl but operates on
+# EncodedStore's UInt32-id indices end-to-end. Outer BGP is evaluated
+# via the EB pipeline; inner OPTIONAL star-join is performed per outer
+# row using pos_enc/spo_enc lookups; aggregates accumulate UInt32 ids.
+function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
+                                   outer_pats::Vector{SparqlPattern},
+                                   inner_pats::Vector{SparqlPattern},
+                                   inner_triples::Vector{PatTriple},
+                                   inner_subj::String,
+                                   agg_sources::Vector{Symbol})
+    store = g.store::EncodedStore
+    _ensure_all_indexed!(store)
+    n_agg = length(q.aggregates)
+    n_gb = length(q.group_by)
+    n_inner = length(inner_triples)
+
+    # Evaluate outer BGP via EB pipeline (returns Vector{EncBinding}).
+    pats_re = length(outer_pats) >= 2 ?
+        _reorder_star_groups_encoded(store, outer_pats) : outer_pats
+    outer_ebs = _ast_eval_patterns_star_encoded_eb(g, pats_re,
+        Dict{String,Identifier}[Dict{String,Identifier}()], 0)
+
+    if isempty(outer_ebs)
+        if n_gb == 0
+            result = Dict{String,Identifier}()
+            for sa in q.aggregates
+                result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+            end
+            return Dict{String,Identifier}[result]
+        else
+            return Dict{String,Identifier}[]
+        end
+    end
+
+    # Pre-classify aggregate plan
+    agg_plan = Vector{Tuple{Int,Bool,String,Bool}}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        a = q.aggregates[i].agg
+        fi = a.func == "COUNT" ? 1 : a.func == "SUM" ? 2 : a.func == "AVG" ? 3 :
+             a.func == "MIN" ? 4 : a.func == "MAX" ? 5 : a.func == "SAMPLE" ? 6 : 0
+        is_star = a.arg isa ExprStar
+        var = a.arg isa ExprVar ? (a.arg::ExprVar).name : ""
+        agg_plan[i] = (fi, a.distinct, var, is_star)
+    end
+
+    # Pre-resolve inner predicate ids and POS buckets
+    pred_ids = Vector{UInt32}(undef, n_inner)
+    pos_buckets = Vector{Union{Dict{UInt32,Set{UInt32}},Nothing}}(undef, n_inner)
+    has_inner_match_possible = true
+    @inbounds for i in 1:n_inner
+        pid = get(store.term_to_id, inner_triples[i].predicate::URIRef, UInt32(0))
+        pred_ids[i] = pid
+        if pid == 0
+            pos_buckets[i] = nothing
+            has_inner_match_possible = false
+        else
+            po = get(store.pos_enc, pid, nothing)
+            pos_buckets[i] = po
+            po === nothing && (has_inner_match_possible = false)
+        end
+    end
+
+    # Inner constants encoded once
+    inner_obj_const_id = Vector{UInt32}(undef, n_inner)
+    @inbounds for i in 1:n_inner
+        o = inner_triples[i].object
+        inner_obj_const_id[i] = if o isa Identifier
+            get(store.term_to_id, o, UInt32(0))
+        else
+            UInt32(0)
+        end
+        # Constant not in dict -> can't match anything
+        if o isa Identifier && inner_obj_const_id[i] == 0
+            has_inner_match_possible = false
+        end
+    end
+
+    inner_filters = SparqlExpr[]
+    for p in inner_pats
+        p isa PatFilter && push!(inner_filters, (p::PatFilter).expr)
+    end
+
+    # Per-aggregate index lists for the per-row hot path
+    outer_agg_idx = Int[i for i in 1:n_agg if agg_sources[i] === :outer]
+    inner_agg_idx = Int[i for i in 1:n_agg if agg_sources[i] === :inner]
+
+    # Group state: NTuple{N,UInt32} key -> (gvals::Vector{UInt32}, accs::Vector{Any})
+    groups = Dict{NTuple, Tuple{Vector{UInt32}, Vector{Any}}}()
+    group_order = NTuple[]
+
+    # GB var names
+    gb_vars = String[(q.group_by[i]::ExprVar).name for i in 1:n_gb]
+
+    # Scratch EB for inner-row aggregate updates
+    scratch_eb = EncBinding()
+    obj_sets = Vector{Set{UInt32}}(undef, n_inner)
+    obj_firsts = Vector{UInt32}(undef, n_inner)
+
+    have_inner_filters = !isempty(inner_filters)
+
+    for outer_eb in outer_ebs
+        # Build group key from outer-only ids
+        key::NTuple = if n_gb == 0
+            ()
+        else
+            ntuple(n_gb) do i
+                get(outer_eb, gb_vars[i], UInt32(0))
+            end
+        end
+
+        st = get(groups, key, nothing)
+        local accs::Vector{Any}
+        if st === nothing
+            gvals = Vector{UInt32}(undef, n_gb)
+            @inbounds for i in 1:n_gb
+                gvals[i] = get(outer_eb, gb_vars[i], UInt32(0))
+            end
+            accs = Any[_agg_init_eb(q.aggregates[i].agg) for i in 1:n_agg]
+            groups[key] = (gvals, accs)
+            push!(group_order, key)
+        else
+            _, accs = st
+        end
+
+        # Outer-source aggregates (one update per outer row, LEFT JOIN semantics)
+        @inbounds for i in outer_agg_idx
+            accs[i] = _agg_update_fast_eb(accs[i], agg_plan[i], outer_eb, store)
+        end
+
+        # Skip inner work if no inner-source agg + no filters, or impossible
+        isempty(inner_agg_idx) && !have_inner_filters && continue
+        has_inner_match_possible || continue
+
+        # Find smallest driver subject set via POS pivot
+        driver = nothing
+        bail = false
+        @inbounds for i in 1:n_inner
+            po = pos_buckets[i]
+            po === nothing && (bail = true; break)
+            obj = inner_triples[i].object
+            obj_id::UInt32 = 0
+            if obj isa String
+                bv = get(outer_eb, obj, UInt32(0))
+                bv == 0 && continue  # not bound; not a constraint here
+                obj_id = bv
+            elseif obj isa Identifier
+                obj_id = inner_obj_const_id[i]
+            else
+                continue
+            end
+            obj_id == 0 && continue
+            subjs = get(po, obj_id, nothing)
+            if subjs === nothing
+                bail = true; break
+            end
+            if driver === nothing || length(subjs) < length(driver)
+                driver = subjs
+            end
+        end
+        bail && continue
+        driver === nothing && continue
+
+        for s in driver
+            sp = get(store.spo_enc, s, nothing)
+            sp === nothing && continue
+            ok = true
+            @inbounds for i in 1:n_inner
+                os = get(sp, pred_ids[i], nothing)
+                if os === nothing
+                    ok = false; break
+                end
+                obj_sets[i] = os
+            end
+            ok || continue
+
+            # all_single fast path
+            all_single = true
+            @inbounds for i in 1:n_inner
+                length(obj_sets[i]) != 1 && (all_single = false; break)
+            end
+            if all_single
+                @inbounds for i in 1:n_inner
+                    obj_firsts[i] = first(obj_sets[i])
+                end
+                ok2 = true
+                @inbounds for i in 1:n_inner
+                    pat_obj = inner_triples[i].object
+                    if pat_obj isa String
+                        bv = get(outer_eb, pat_obj, UInt32(0))
+                        if bv != 0
+                            bv == obj_firsts[i] || (ok2 = false; break)
+                        end
+                    elseif pat_obj isa Identifier
+                        inner_obj_const_id[i] == obj_firsts[i] || (ok2 = false; break)
+                    end
+                end
+                ok2 || continue
+
+                if have_inner_filters || !isempty(inner_agg_idx)
+                    # Build scratch_eb: outer + inner subject + obj vars
+                    empty!(scratch_eb)
+                    for (k, v) in outer_eb
+                        scratch_eb[k] = v
+                    end
+                    scratch_eb[inner_subj] = s
+                    @inbounds for i in 1:n_inner
+                        pat_obj = inner_triples[i].object
+                        pat_obj isa String && (scratch_eb[pat_obj::String] = obj_firsts[i])
+                    end
+
+                    # Inner filters: decode scratch on demand
+                    if have_inner_filters
+                        scratch_id = _decode_one_binding(store, scratch_eb)
+                        fok = true
+                        for fexpr in inner_filters
+                            if !_ast_eval_expr_bool(fexpr, scratch_id, g)
+                                fok = false; break
+                            end
+                        end
+                        fok || continue
+                    end
+
+                    @inbounds for i in inner_agg_idx
+                        accs[i] = _agg_update_fast_eb(accs[i], agg_plan[i], scratch_eb, store)
+                    end
+                end
+            else
+                # Multi-valued: enumerate cross product
+                empty!(scratch_eb)
+                for (k, v) in outer_eb
+                    scratch_eb[k] = v
+                end
+                scratch_eb[inner_subj] = s
+                _stream_inner_cross_agg_eb!(scratch_eb, outer_eb, s, inner_subj,
+                                              inner_triples, obj_sets, 1, n_inner,
+                                              inner_filters, accs, inner_agg_idx,
+                                              agg_plan, store, g, inner_obj_const_id)
+            end
+        end
+    end
+
+    # Finalize groups: decode UInt32 group ids to Identifier
+    new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_order))
+    @inbounds for gi in eachindex(group_order)
+        key = group_order[gi]
+        gvals, accs = groups[key]
+        result = Dict{String,Identifier}()
+        for (i, name) in enumerate(gb_vars)
+            id = gvals[i]
+            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+        end
+        for i in 1:n_agg
+            agg = q.aggregates[i].agg
+            if agg.distinct
+                s_id = accs[i]::Set{UInt32}
+                s_ident = Set{Identifier}()
+                for id in s_id
+                    push!(s_ident, store.id_to_term[id])
+                end
+                result[q.aggregates[i].alias] = _agg_finalize(s_ident, agg)
+            else
+                result[q.aggregates[i].alias] = _agg_finalize(accs[i], agg)
+            end
+        end
+        new_bindings[gi] = result
+    end
+    new_bindings
+end
+
+function _stream_inner_cross_agg_eb!(scratch::EncBinding,
+                                       outer_eb::EncBinding,
+                                       s::UInt32, inner_subj::String,
+                                       inner_triples::Vector{PatTriple},
+                                       obj_sets::Vector{Set{UInt32}},
+                                       idx::Int, n::Int,
+                                       inner_filters::Vector{SparqlExpr},
+                                       accs::Vector{Any}, inner_agg_idx::Vector{Int},
+                                       agg_plan::Vector{Tuple{Int,Bool,String,Bool}},
+                                       store::EncodedStore, g,
+                                       inner_obj_const_id::Vector{UInt32})
+    if idx > n
+        if !isempty(inner_filters)
+            sid = _decode_one_binding(store, scratch)
+            for fexpr in inner_filters
+                _ast_eval_expr_bool(fexpr, sid, g) || return
+            end
+        end
+        @inbounds for i in inner_agg_idx
+            accs[i] = _agg_update_fast_eb(accs[i], agg_plan[i], scratch, store)
+        end
+        return
+    end
+    pat_obj = inner_triples[idx].object
+    for obj_id in obj_sets[idx]
+        # Validate against bound/constant at this position
+        if pat_obj isa String
+            bv = get(outer_eb, pat_obj, UInt32(0))
+            if bv != 0 && bv != obj_id
+                continue
+            end
+            scratch[pat_obj::String] = obj_id
+        elseif pat_obj isa Identifier
+            inner_obj_const_id[idx] == obj_id || continue
+        end
+        _stream_inner_cross_agg_eb!(scratch, outer_eb, s, inner_subj, inner_triples,
+                                     obj_sets, idx + 1, n, inner_filters, accs,
+                                     inner_agg_idx, agg_plan, store, g, inner_obj_const_id)
+    end
+end

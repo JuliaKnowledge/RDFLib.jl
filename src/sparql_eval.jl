@@ -2337,7 +2337,7 @@ function _try_stream_opt_agg(q::SparqlSelect, g::RDFGraph)
     isempty(q.aggregates) && return nothing
     !isnothing(q.having) && return nothing
     !isempty(q.select_exprs) && return nothing
-    g.store isa MemoryStore || return nothing
+    g.store isa MemoryStore || g.store isa EncodedStore || return nothing
     !_streaming_aggregate_safe(q) && return nothing
 
     # Reject any ExprStar aggregate arg (COUNT(*), COUNT(DISTINCT *)) — row-signature
@@ -2450,6 +2450,10 @@ function _try_stream_opt_agg(q::SparqlSelect, g::RDFGraph)
         end
     end
 
+    if g.store isa EncodedStore
+        return _exec_stream_opt_agg_eb(q, g, outer_pats, inner_pats, inner_triples,
+                                        inner_subj, agg_sources)
+    end
     return _exec_stream_opt_agg(q, g, outer_pats, inner_pats, inner_triples,
                                  inner_subj, agg_sources)
 end
