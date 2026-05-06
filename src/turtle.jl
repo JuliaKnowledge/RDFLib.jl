@@ -275,6 +275,22 @@ function parse_turtle!(g::RDFGraph, io::IO)
 end
 
 """
+Specialised fast path for `DuckDBStore`: parse via a temporary
+in-memory graph then bulk-load into DuckDB via the Appender.
+"""
+function parse_turtle!(g::RDFGraph{DuckDBStore}, input::AbstractString)
+    tmp = RDFGraph()  # MemoryStore
+    parser = _TurtleParser(tmp, String(input))
+    _turtle_parse_document!(parser)
+    bulk_add!(g.store, (t for t in triples(tmp)))
+    # Carry over namespace bindings discovered during parsing.
+    for (prefix, ns) in tmp.namespace_manager.namespaces
+        bind!(g.namespace_manager, prefix, ns)
+    end
+    g
+end
+
+"""
     parse_turtle!(g::RDFGraph, input::AbstractString) -> RDFGraph
 
 Parse Turtle format from a string and add triples to the graph.
