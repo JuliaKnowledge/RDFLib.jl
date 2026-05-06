@@ -427,6 +427,9 @@ function _ast_eval_star_memory(store::MemoryStore, pats,
     pred_uris = URIRef[pats[i].predicate::URIRef for i in 1:n]
     results = Dict{String,Identifier}[]
     obj_sets = Vector{Set{Identifier}}(undef, n)
+    # Cache the first element of each obj_set to avoid double `first(::Set)`
+    # (each call walks the Set's underlying Dict slots).
+    obj_firsts = Vector{Identifier}(undef, n)
 
     # Pre-resolve POS buckets and statically-bound objects
     _ensure_all_indexed!(store)
@@ -450,7 +453,7 @@ function _ast_eval_star_memory(store::MemoryStore, pats,
         s_val = get(b, subj_var, nothing)
         if s_val isa Identifier
             _star_check!(results, store.spo, b, s_val, subj_var, pats, pred_uris,
-                         obj_sets, n, limit)
+                         obj_sets, obj_firsts, n, limit)
         else
             # Find smallest driver from: static-bound objects in patterns,
             # or runtime-bound object vars in `b` (post-reorder joins).
@@ -476,7 +479,7 @@ function _ast_eval_star_memory(store::MemoryStore, pats,
             if driver isa Set{Identifier}
                 for s in driver
                     _star_check!(results, store.spo, b, s, subj_var, pats, pred_uris,
-                                 obj_sets, n, limit)
+                                 obj_sets, obj_firsts, n, limit)
                     limit > 0 && length(results) >= limit && break
                 end
             elseif driver === nothing && (
@@ -489,7 +492,7 @@ function _ast_eval_star_memory(store::MemoryStore, pats,
                 # No bound objects anywhere → iterate all subjects in store
                 for (s, _) in store.spo
                     _star_check!(results, store.spo, b, s, subj_var, pats, pred_uris,
-                                 obj_sets, n, limit)
+                                 obj_sets, obj_firsts, n, limit)
                     limit > 0 && length(results) >= limit && break
                 end
             end
@@ -511,7 +514,7 @@ end
 
 # Check one subject against all star-group predicates, emit matching bindings
 @inline function _star_check!(results, spo, b, s, subj_var, pats, pred_uris,
-                               obj_sets, n, limit)
+                               obj_sets, obj_firsts, n, limit)
     sp = get(spo, s, nothing)
     sp === nothing && return
     # Collect object sets; bail early if any predicate missing
@@ -526,10 +529,15 @@ end
         length(obj_sets[i]) != 1 && (all_single = false; break)
     end
     if all_single
+        # Cache `first(obj_sets[i])` once — calling it walks the underlying
+        # Dict slot vector which is a measurable hot-spot for 1-elem Sets.
+        @inbounds for i in 1:n
+            obj_firsts[i] = first(obj_sets[i])
+        end
         # Pre-validate: check bound terms and pre-bound vars match BEFORE allocating.
         # Defer Dict copy until we know the row will be emitted.
         @inbounds for i in 1:n
-            obj = first(obj_sets[i])
+            obj = obj_firsts[i]
             pat_obj = pats[i].object
             if pat_obj isa String
                 # Variable: check pre-existing binding (in `b`) only
@@ -548,11 +556,10 @@ end
         new_b = copy(b)
         haskey(new_b, subj_var) || (new_b[subj_var] = s)
         @inbounds for i in 1:n
-            obj = first(obj_sets[i])
             pat_obj = pats[i].object
             if pat_obj isa String
                 # Bind if not already bound (pre-validated to match if it was)
-                haskey(new_b, pat_obj) || (new_b[pat_obj] = obj)
+                haskey(new_b, pat_obj) || (new_b[pat_obj] = obj_firsts[i])
             end
         end
         push!(results, new_b)
