@@ -950,19 +950,17 @@ end
     elseif f == 2  # SUM
         id = isempty(var) ? UInt32(0) : get(eb, var, UInt32(0))
         id == 0 && return acc
-        v = store.id_to_term[id]
-        nv = _ast_to_numeric(v)
+        nv = _enc_numeric(store, id)
         nv === nothing && return acc
         s, ai = acc::Tuple{Float64,Bool}
-        return (s + Float64(nv), ai)
+        return (s + nv, ai)
     elseif f == 3  # AVG
         id = isempty(var) ? UInt32(0) : get(eb, var, UInt32(0))
         id == 0 && return acc
-        v = store.id_to_term[id]
-        nv = _ast_to_numeric(v)
+        nv = _enc_numeric(store, id)
         nv === nothing && return acc
         s, c = acc::Tuple{Float64,Int}
-        return (s + Float64(nv), c + 1)
+        return (s + nv, c + 1)
     elseif f == 4  # MIN
         id = isempty(var) ? UInt32(0) : get(eb, var, UInt32(0))
         id == 0 && return acc
