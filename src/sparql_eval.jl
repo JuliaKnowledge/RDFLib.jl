@@ -25,6 +25,22 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         @goto post_aggregate
     end
 
+    # Fast path: encoded streaming aggregate (EncodedStore + GROUP BY +
+    # streaming-friendly aggregates). Operates on Vector{EncBinding}
+    # directly, eliminating the BGP-exit decode boundary (Q2-shape).
+    if _enc_streaming_agg_eligible(q, g)
+        # Push LIMIT into BGP only if no ORDER BY / DISTINCT
+        push_limit_eb = 0
+        pats = q.patterns
+        if length(pats) >= 2
+            pats = _reorder_star_groups_encoded(g.store::EncodedStore, pats)
+        end
+        ebs = _ast_eval_patterns_star_encoded_eb(g, pats,
+            Dict{String,Identifier}[Dict{String,Identifier}()], push_limit_eb)
+        bindings = _ast_eval_group_aggregate_streaming_eb(q, ebs, g.store::EncodedStore, g)
+        @goto post_aggregate
+    end
+
     # Push LIMIT into pattern evaluation when safe (no ORDER BY, GROUP BY, DISTINCT, computed exprs)
     push_limit = 0
     if !isnothing(q.limit) && isempty(q.order_by) && isempty(q.aggregates) &&
@@ -2321,7 +2337,7 @@ function _try_stream_opt_agg(q::SparqlSelect, g::RDFGraph)
     isempty(q.aggregates) && return nothing
     !isnothing(q.having) && return nothing
     !isempty(q.select_exprs) && return nothing
-    g.store isa MemoryStore || return nothing
+    g.store isa MemoryStore || g.store isa EncodedStore || return nothing
     !_streaming_aggregate_safe(q) && return nothing
 
     # Reject any ExprStar aggregate arg (COUNT(*), COUNT(DISTINCT *)) — row-signature
@@ -2434,6 +2450,10 @@ function _try_stream_opt_agg(q::SparqlSelect, g::RDFGraph)
         end
     end
 
+    if g.store isa EncodedStore
+        return _exec_stream_opt_agg_eb(q, g, outer_pats, inner_pats, inner_triples,
+                                        inner_subj, agg_sources)
+    end
     return _exec_stream_opt_agg(q, g, outer_pats, inner_pats, inner_triples,
                                  inner_subj, agg_sources)
 end
