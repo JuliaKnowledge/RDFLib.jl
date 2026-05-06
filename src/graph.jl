@@ -147,10 +147,15 @@ function Base.iterate(g::RDFGraph)
         isempty(g.store.insertion_order) && return nothing
         return (g.store.insertion_order[1], (g.store, 2))
     end
+    if g.store isa EncodedStore
+        enc = g.store.insertion_order_enc
+        isempty(enc) && return nothing
+        return (_decode_triple(g.store, enc[1]), (g.store, 2))
+    end
     ch = triples(g)
     result = iterate(ch)
     isnothing(result) && return nothing
-    (result[1], ch)
+    (result[1], (ch, result[2]))
 end
 
 function Base.iterate(g::RDFGraph, state)
@@ -160,10 +165,16 @@ function Base.iterate(g::RDFGraph, state)
         idx > length(store.insertion_order) && return nothing
         return (store.insertion_order[idx], (store, idx + 1))
     end
-    ch = state
-    result = iterate(ch)
+    if state isa Tuple{EncodedStore, Int}
+        store, idx = state
+        enc = store.insertion_order_enc
+        idx > length(enc) && return nothing
+        return (_decode_triple(store, enc[idx]), (store, idx + 1))
+    end
+    ch, ist = state
+    result = iterate(ch, ist)
     isnothing(result) && return nothing
-    (result[1], ch)
+    (result[1], (ch, result[2]))
 end
 
 function Base.in(t::Triple, g::RDFGraph)
@@ -175,6 +186,17 @@ function Base.in(t::Triple, g::RDFGraph)
         objs = get(sp, t.predicate, nothing)
         objs === nothing && return false
         return t.object in objs
+    end
+    if g.store isa EncodedStore
+        _ensure_indexed!(g.store)
+        s_id = _lookup_id(g.store, t.subject); s_id == 0 && return false
+        p_id = _lookup_id(g.store, t.predicate); p_id == 0 && return false
+        o_id = _lookup_id(g.store, t.object); o_id == 0 && return false
+        sp = get(g.store.spo_enc, s_id, nothing)
+        sp === nothing && return false
+        objs = get(sp, p_id, nothing)
+        objs === nothing && return false
+        return o_id in objs
     end
     for _ in triples(g, (t.subject, t.predicate, t.object))
         return true

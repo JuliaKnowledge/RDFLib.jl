@@ -95,4 +95,5 @@ using RDFLib
     include("test_datalog.jl")
     include("test_problog.jl")
     include("test_tabular.jl")
+    include("test_encoded_store.jl")
 end

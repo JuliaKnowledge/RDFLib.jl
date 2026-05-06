@@ -26,6 +26,7 @@ include("more_namespaces.jl")
 
 # Store interface and implementations
 include("store.jl")
+include("encodedstore.jl")
 include("sqlitestore.jl")
 include("duckdbstore.jl")
 include("sparqlstore.jl")
@@ -210,7 +211,7 @@ export
     NamespaceManager, bind!, expand_curie, compute_qname,
 
     # Store
-    AbstractStore, MemoryStore, SQLiteStore, DuckDBStore, SPARQLStore, LMDBStore,
+    AbstractStore, MemoryStore, EncodedStore, SQLiteStore, DuckDBStore, SPARQLStore, LMDBStore,
     transaction, sparql_remote, add_bulk!, clear!,
 
     # RDFGraph
