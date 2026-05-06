@@ -16,6 +16,15 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         return [Dict{String,Identifier}(q.aggregates[1].alias => Literal(length(g)))]
     end
 
+    # Fast path: streaming OPTIONAL+aggregate (Q4-shape queries). Returns
+    # already-aggregated bindings — skips the secondary group/aggregate pass.
+    streamed = _try_stream_opt_agg(q, g)
+    if streamed !== nothing
+        bindings = streamed
+        # Skip BGP eval, SELECT exprs, and group/aggregate; jump to ORDER BY etc.
+        @goto post_aggregate
+    end
+
     # Push LIMIT into pattern evaluation when safe (no ORDER BY, GROUP BY, DISTINCT, computed exprs)
     push_limit = 0
     if !isnothing(q.limit) && isempty(q.order_by) && isempty(q.aggregates) &&
@@ -36,6 +45,8 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
     if !isempty(q.aggregates) || !isempty(q.group_by)
         bindings = _ast_eval_group_aggregate(q, bindings, g)
     end
+
+    @label post_aggregate
 
     # ORDER BY — use partial sort when LIMIT is set (top-K optimization)
     if !isempty(q.order_by)
@@ -2283,6 +2294,407 @@ function _streaming_aggregate_safe(q::SparqlSelect)
         gb isa ExprVar || return false
     end
     return true
+end
+
+# Streaming OPTIONAL+aggregate: avoid materializing inner-BGP rows by piping
+# matches directly into per-group accumulators using a reused scratch dict.
+# Returns Vector{Dict} of finalized aggregate rows (caller handles ORDER BY/LIMIT/proj),
+# or `nothing` if the query doesn't fit the supported shape.
+#
+# Supported shape (Q4-class queries):
+#   SELECT (group-by-vars + aggregates only)
+#   WHERE { outer-BGP+Filter . OPTIONAL { inner-single-star-BGP+Filter . } }
+#   GROUP BY <outer-vars only>
+# Aggregates over outer vars must be DISTINCT (or MIN/MAX/SAMPLE) so that
+# outer-row multiplicity from inner matches doesn't affect the result.
+function _try_stream_opt_agg(q::SparqlSelect, g::RDFGraph)
+    isempty(q.aggregates) && return nothing
+    !isnothing(q.having) && return nothing
+    !isempty(q.select_exprs) && return nothing
+    g.store isa MemoryStore || return nothing
+    !_streaming_aggregate_safe(q) && return nothing
+
+    # Reject any ExprStar aggregate arg (COUNT(*), COUNT(DISTINCT *)) — row-signature
+    # distinctness is unsafe with a reused scratch dict.
+    for sa in q.aggregates
+        sa.agg.arg isa ExprStar && return nothing
+        sa.agg.arg isa ExprVar || return nothing
+    end
+
+    # Pattern shape: outer (1+ patterns) + trailing PatOptional
+    ps = q.patterns
+    length(ps) >= 2 || return nothing
+    last_p = ps[end]
+    last_p isa PatOptional || return nothing
+    inner_pats = (last_p::PatOptional).patterns
+    outer_pats = SparqlPattern[ps[i] for i in 1:length(ps)-1]
+    isempty(outer_pats) && return nothing
+    isempty(inner_pats) && return nothing
+
+    # Both sides must be pure BGP+Filter
+    for p in outer_pats
+        (p isa PatTriple || p isa PatFilter) || return nothing
+    end
+    for p in inner_pats
+        (p isa PatTriple || p isa PatFilter) || return nothing
+    end
+
+    # Inner: must be a single star group (all triples share same subject var)
+    inner_triples = PatTriple[]
+    for p in inner_pats
+        p isa PatTriple && push!(inner_triples, p::PatTriple)
+    end
+    isempty(inner_triples) && return nothing
+    inner_subj = inner_triples[1].subject
+    inner_subj isa String || return nothing
+    for t in inner_triples
+        t.subject == inner_subj || return nothing
+        t.predicate isa URIRef || return nothing
+    end
+
+    # Outer-produced vars (statically — assumes outer BGP can bind these)
+    outer_vars = Set{String}()
+    for p in outer_pats
+        if p isa PatTriple
+            p.subject isa String && push!(outer_vars, p.subject::String)
+            p.object isa String && push!(outer_vars, p.object::String)
+        end
+    end
+    isempty(outer_vars) && return nothing
+
+    # Inner subject var must be FRESH (not in outer); otherwise we'd need to
+    # constrain the candidate-subject scan to the bound value (not implemented).
+    inner_subj in outer_vars && return nothing
+
+    # Reject repeated obj vars in inner star (would require equality validation
+    # that the simple object-singleton path doesn't perform).
+    inner_obj_vars = String[]
+    for t in inner_triples
+        if t.object isa String && t.object != inner_subj
+            t.object in inner_obj_vars && return nothing
+            push!(inner_obj_vars, t.object::String)
+        end
+    end
+
+    # Inner-produced vars: subject + fresh obj vars
+    inner_produced = Set{String}([inner_subj])
+    for v in inner_obj_vars
+        v in outer_vars || push!(inner_produced, v)
+    end
+
+    # GROUP BY: every var must be outer-produced
+    for gb in q.group_by
+        gb isa ExprVar || return nothing
+        (gb::ExprVar).name in outer_vars || return nothing
+    end
+
+    # Projection / ORDER BY: only group-by vars and aggregate aliases allowed
+    agg_aliases = Set{String}(sa.alias for sa in q.aggregates)
+    gb_names = Set{String}((gb::ExprVar).name for gb in q.group_by)
+    proj = _ast_projection_vars(q)
+    for v in proj
+        (v in agg_aliases || v in gb_names) || return nothing
+    end
+    for ob in q.order_by
+        e = ob[1]
+        if e isa ExprVar
+            ((e::ExprVar).name in agg_aliases || (e::ExprVar).name in gb_names) || return nothing
+        else
+            return nothing
+        end
+    end
+
+    # Classify each aggregate as :outer or :inner.
+    n_agg = length(q.aggregates)
+    agg_sources = Vector{Symbol}(undef, n_agg)
+    for (i, sa) in enumerate(q.aggregates)
+        vn = (sa.agg.arg::ExprVar).name
+        if vn in outer_vars
+            # Multiplicity-sensitive aggregates over outer vars must be DISTINCT
+            # (MIN/MAX/SAMPLE are insensitive to duplicate values).
+            f = sa.agg.func
+            if !sa.agg.distinct && (f == "COUNT" || f == "SUM" || f == "AVG")
+                return nothing
+            end
+            agg_sources[i] = :outer
+        elseif vn in inner_produced
+            agg_sources[i] = :inner
+        else
+            return nothing
+        end
+    end
+
+    return _exec_stream_opt_agg(q, g, outer_pats, inner_pats, inner_triples,
+                                 inner_subj, agg_sources)
+end
+
+function _exec_stream_opt_agg(q::SparqlSelect, g::RDFGraph,
+                               outer_pats::Vector{SparqlPattern},
+                               inner_pats::Vector{SparqlPattern},
+                               inner_triples::Vector{PatTriple},
+                               inner_subj::String,
+                               agg_sources::Vector{Symbol})
+    store = g.store::MemoryStore
+    _ensure_all_indexed!(store)
+    n_agg = length(q.aggregates)
+    n_gb = length(q.group_by)
+    n_inner = length(inner_triples)
+
+    # Evaluate outer BGP fully (typically small relative to the join product)
+    outer_bindings = _ast_eval_patterns(g, outer_pats,
+                                         Dict{String,Identifier}[Dict{String,Identifier}()])
+    # Empty outer + no GROUP BY: still emit a single aggregate-on-empty row.
+    if isempty(outer_bindings)
+        if n_gb == 0
+            result = Dict{String,Identifier}()
+            for sa in q.aggregates
+                result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+            end
+            return Dict{String,Identifier}[result]
+        else
+            return Dict{String,Identifier}[]
+        end
+    end
+
+    # Pre-classify aggregate plan for _agg_update_fast
+    agg_plan = Vector{Tuple{Int,Bool,String,Bool}}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        a = q.aggregates[i].agg
+        fi = a.func == "COUNT" ? 1 : a.func == "SUM" ? 2 : a.func == "AVG" ? 3 :
+             a.func == "MIN" ? 4 : a.func == "MAX" ? 5 : a.func == "SAMPLE" ? 6 : 0
+        is_star = a.arg isa ExprStar
+        var = a.arg isa ExprVar ? (a.arg::ExprVar).name : ""
+        agg_plan[i] = (fi, a.distinct, var, is_star)
+    end
+
+    # Pre-resolve inner predicate URIs and POS buckets
+    pred_uris = URIRef[t.predicate::URIRef for t in inner_triples]
+    pos_buckets = Vector{Union{Dict{Identifier,Set{Identifier}},Nothing}}(undef, n_inner)
+    has_inner_match_possible = true
+    @inbounds for i in 1:n_inner
+        po = get(store.pos, pred_uris[i], nothing)
+        pos_buckets[i] = po
+        if po === nothing
+            has_inner_match_possible = false
+        end
+    end
+
+    # Inner PatFilters (evaluated per candidate inner solution)
+    inner_filters = SparqlExpr[]
+    for p in inner_pats
+        p isa PatFilter && push!(inner_filters, (p::PatFilter).expr)
+    end
+
+    # Group state and scratch
+    groups = Dict{Tuple,Tuple{Vector{Identifier},Vector{Any}}}()
+    group_order = Tuple[]
+    scratch = Dict{String,Identifier}()
+    obj_sets = Vector{Set{Identifier}}(undef, n_inner)
+    obj_firsts = Vector{Identifier}(undef, n_inner)
+
+    # Per-aggregate index lists for the per-row hot path
+    outer_agg_idx = Int[i for i in 1:n_agg if agg_sources[i] === :outer]
+    inner_agg_idx = Int[i for i in 1:n_agg if agg_sources[i] === :inner]
+
+    for outer_b in outer_bindings
+        # Build group key from outer-only vars
+        key = if n_gb == 0
+            ()
+        else
+            ntuple(n_gb) do i
+                e = _ast_eval_expr(q.group_by[i], outer_b, g)
+                isnothing(e) ? nothing : e
+            end
+        end
+
+        st = get(groups, key, nothing)
+        local accs::Vector{Any}
+        if st === nothing
+            gvals = Identifier[]
+            for gb in q.group_by
+                push!(gvals, get(outer_b, (gb::ExprVar).name, Literal("")))
+            end
+            accs = Any[_agg_init(q.aggregates[i].agg) for i in 1:n_agg]
+            groups[key] = (gvals, accs)
+            push!(group_order, key)
+        else
+            _, accs = st
+        end
+
+        # Always update outer-source aggregates once per outer row (LEFT JOIN
+        # semantics: outer contributes regardless of inner match).
+        @inbounds for i in outer_agg_idx
+            accs[i] = _agg_update_fast(accs[i], agg_plan[i], outer_b)
+        end
+
+        # Skip inner if no agg consumes it AND no inner match is even possible.
+        # (For inner-agg-free queries the streaming check is just a no-op anyway.)
+        isempty(inner_agg_idx) && isempty(inner_filters) && continue
+        has_inner_match_possible || continue
+
+        # Populate scratch with outer_b once per outer row. Inner-var keys get
+        # OVERWRITTEN per match (every inner match binds the same set of inner
+        # vars), so no stale-binding issue between matches.
+        empty!(scratch)
+        for (k, v) in outer_b
+            scratch[k] = v
+        end
+
+        # Find smallest driver set via POS pivot on bound objects
+        driver = nothing
+        bail = false
+        @inbounds for i in 1:n_inner
+            po = pos_buckets[i]
+            po === nothing && (bail = true; break)
+            obj = inner_triples[i].object
+            if obj isa String
+                bv = get(outer_b, obj, nothing)
+                if bv isa Identifier
+                    subjs = get(po, bv, nothing)
+                    if subjs === nothing
+                        bail = true; break
+                    end
+                    if driver === nothing || length(subjs) < length(driver)
+                        driver = subjs
+                    end
+                end
+            elseif obj isa Identifier
+                subjs = get(po, obj, nothing)
+                if subjs === nothing
+                    bail = true; break
+                end
+                if driver === nothing || length(subjs) < length(driver)
+                    driver = subjs
+                end
+            end
+        end
+        bail && continue
+        # No driver = no bound objects = would scan all subjects. For inner OPTIONAL
+        # we should not full-scan the store per outer row; conservatively fall back.
+        # This shouldn't happen normally because we required has_shared via the
+        # "shared var" check… actually we didn't enforce that; do it now.
+        driver === nothing && continue
+
+        for s in driver
+            sp = get(store.spo, s, nothing)
+            sp === nothing && continue
+            ok = true
+            @inbounds for i in 1:n_inner
+                os = get(sp, pred_uris[i], nothing)
+                if os === nothing
+                    ok = false; break
+                end
+                obj_sets[i] = os
+            end
+            ok || continue
+
+            scratch[inner_subj] = s
+
+            all_single = true
+            @inbounds for i in 1:n_inner
+                length(obj_sets[i]) != 1 && (all_single = false; break)
+            end
+            if all_single
+                @inbounds for i in 1:n_inner
+                    obj_firsts[i] = first(obj_sets[i])
+                end
+                # Validate bound vars / constants
+                ok2 = true
+                @inbounds for i in 1:n_inner
+                    pat_obj = inner_triples[i].object
+                    if pat_obj isa String
+                        bv = get(outer_b, pat_obj, nothing)
+                        if bv isa Identifier
+                            bv == obj_firsts[i] || (ok2 = false; break)
+                        end
+                    elseif pat_obj isa Identifier
+                        pat_obj == obj_firsts[i] || (ok2 = false; break)
+                    end
+                end
+                ok2 || continue
+
+                # Bind inner obj vars in scratch (overwrites prior match's values)
+                @inbounds for i in 1:n_inner
+                    pat_obj = inner_triples[i].object
+                    pat_obj isa String && (scratch[pat_obj::String] = obj_firsts[i])
+                end
+
+                # Inner filters (full bindings now in scratch)
+                fok = true
+                for fexpr in inner_filters
+                    if !_ast_eval_expr_bool(fexpr, scratch, g)
+                        fok = false; break
+                    end
+                end
+                fok || continue
+
+                # Update inner-source aggregates
+                @inbounds for i in inner_agg_idx
+                    accs[i] = _agg_update_fast(accs[i], agg_plan[i], scratch)
+                end
+            else
+                # Multi-valued: enumerate cross product of obj_sets
+                _stream_inner_cross_agg!(scratch, outer_b, s, inner_subj, inner_triples,
+                                          obj_sets, 1, n_inner, inner_filters, accs,
+                                          inner_agg_idx, agg_plan, g)
+            end
+        end
+    end
+
+    # Finalize groups
+    new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_order))
+    @inbounds for gi in eachindex(group_order)
+        key = group_order[gi]
+        gvals, accs = groups[key]
+        result = Dict{String,Identifier}()
+        for (i, gb) in enumerate(q.group_by)
+            result[(gb::ExprVar).name] = gvals[i]
+        end
+        for i in 1:n_agg
+            result[q.aggregates[i].alias] = _agg_finalize(accs[i], q.aggregates[i].agg)
+        end
+        new_bindings[gi] = result
+    end
+    new_bindings
+end
+
+# Recursive cross-product enumerator for multi-valued inner star matches.
+# Mutates `scratch` in place; restores nothing (caller's loop overwrites for next subj).
+function _stream_inner_cross_agg!(scratch::Dict{String,Identifier},
+                                    outer_b::Dict{String,Identifier},
+                                    s::Identifier, inner_subj::String,
+                                    inner_triples::Vector{PatTriple},
+                                    obj_sets::Vector{Set{Identifier}},
+                                    idx::Int, n::Int,
+                                    inner_filters::Vector{SparqlExpr},
+                                    accs::Vector{Any}, inner_agg_idx::Vector{Int},
+                                    agg_plan::Vector{Tuple{Int,Bool,String,Bool}}, g)
+    if idx > n
+        # Inner filters
+        for fexpr in inner_filters
+            _ast_eval_expr_bool(fexpr, scratch, g) || return
+        end
+        # Update inner aggregates
+        @inbounds for i in inner_agg_idx
+            accs[i] = _agg_update_fast(accs[i], agg_plan[i], scratch)
+        end
+        return
+    end
+    pat_obj = inner_triples[idx].object
+    for obj in obj_sets[idx]
+        if pat_obj isa String
+            bv = get(outer_b, pat_obj, nothing)
+            if bv isa Identifier
+                bv == obj || continue
+            end
+            scratch[pat_obj::String] = obj
+        elseif pat_obj isa Identifier
+            pat_obj == obj || continue
+        end
+        _stream_inner_cross_agg!(scratch, outer_b, s, inner_subj, inner_triples,
+                                   obj_sets, idx + 1, n, inner_filters, accs,
+                                   inner_agg_idx, agg_plan, g)
+    end
 end
 
 function _ast_eval_group_aggregate_streaming(q::SparqlSelect, bindings, g)
