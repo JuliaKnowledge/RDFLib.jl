@@ -632,7 +632,9 @@ end
             end
         end
         # Emit row — push EncBinding directly, no decode.
-        new_eb = copy(eb)
+        # Skip the empty-Dict copy that costs ~64B and is the dominant
+        # alloc for outer stars (where eb starts empty).
+        new_eb = isempty(eb) ? sizehint!(Dict{String,UInt32}(), n + 1) : copy(eb)
         get(new_eb, subj_var, UInt32(0)) == 0 && (new_eb[subj_var] = s_id)
         @inbounds for i in 1:n
             pat_obj = pats[i].object
@@ -643,7 +645,7 @@ end
         push!(results, new_eb)
     else
         # Multi-valued: cross-product
-        new_eb = copy(eb)
+        new_eb = isempty(eb) ? sizehint!(Dict{String,UInt32}(), n + 1) : copy(eb)
         get(new_eb, subj_var, UInt32(0)) == 0 && (new_eb[subj_var] = s_id)
         _star_cross_eb!(results, store, new_eb, obj_sets, pats, static_obj_ids, 1, n, limit)
     end
