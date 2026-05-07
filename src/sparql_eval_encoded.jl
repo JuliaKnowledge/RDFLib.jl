@@ -1614,13 +1614,8 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
         end
         if best_p != 0 && best_total < length(store.spo_enc)
             po = store.pos_enc[best_p]
-            seen = Set{UInt32}()
             for (_, ss) in po
                 for s in ss
-                    if s in seen
-                        continue
-                    end
-                    push!(seen, s)
                     process_subject(s)
                 end
             end
