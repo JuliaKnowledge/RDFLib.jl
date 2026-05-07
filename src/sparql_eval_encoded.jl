@@ -1005,6 +1005,19 @@ end
     return nothing
 end
 
+@inline function _agg_finalize_eb(acc, agg::ExprAggregate, store::EncodedStore)
+    if agg.distinct
+        s_id = acc::Set{UInt32}
+        agg.func == "COUNT" && return Literal(length(s_id))
+        s_ident = Set{Identifier}()
+        for id in s_id
+            push!(s_ident, store.id_to_term[id])
+        end
+        return _agg_finalize(s_ident, agg)
+    end
+    return _agg_finalize(acc, agg)
+end
+
 # Streaming GROUP BY + aggregate over Vector{EncBinding}. Group keys
 # are NTuple{N,UInt32} of group_by variable ids (cheap to hash). For
 # DISTINCT aggregates, accumulator is Set{UInt32}; finalize converts
@@ -1082,17 +1095,7 @@ function _ast_eval_group_aggregate_streaming_eb(q::SparqlSelect,
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
-            if agg.distinct
-                # Convert Set{UInt32} to Set{Identifier} for legacy finalize.
-                s_id = accs[i]::Set{UInt32}
-                s_ident = Set{Identifier}()
-                for id in s_id
-                    push!(s_ident, store.id_to_term[id])
-                end
-                result[q.aggregates[i].alias] = _agg_finalize(s_ident, agg)
-            else
-                result[q.aggregates[i].alias] = _agg_finalize(accs[i], agg)
-            end
+            result[q.aggregates[i].alias] = _agg_finalize_eb(accs[i], agg, store)
         end
         new_bindings[gi] = result
     end
@@ -1656,12 +1659,7 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
                 end
                 result[q.aggregates[i].alias] = v
             elseif agg.distinct
-                s_id_set = fallback_accs[gi][i]::Set{UInt32}
-                s_ident = Set{Identifier}()
-                for id in s_id_set
-                    push!(s_ident, store.id_to_term[id])
-                end
-                result[q.aggregates[i].alias] = _agg_finalize(s_ident, agg)
+                result[q.aggregates[i].alias] = _agg_finalize_eb(fallback_accs[gi][i], agg, store)
             else
                 result[q.aggregates[i].alias] = _agg_finalize(fallback_accs[gi][i], agg)
             end
@@ -1877,16 +1875,7 @@ function _exec_fused_bgp_agg_eb(q::SparqlSelect, g::RDFGraph,
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
-            if agg.distinct
-                s_id_set = accs[i]::Set{UInt32}
-                s_ident = Set{Identifier}()
-                for id in s_id_set
-                    push!(s_ident, store.id_to_term[id])
-                end
-                result[q.aggregates[i].alias] = _agg_finalize(s_ident, agg)
-            else
-                result[q.aggregates[i].alias] = _agg_finalize(accs[i], agg)
-            end
+            result[q.aggregates[i].alias] = _agg_finalize_eb(accs[i], agg, store)
         end
         new_bindings[gi] = result
     end
@@ -2242,16 +2231,7 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
-            if agg.distinct
-                s_id = accs[i]::Set{UInt32}
-                s_ident = Set{Identifier}()
-                for id in s_id
-                    push!(s_ident, store.id_to_term[id])
-                end
-                result[q.aggregates[i].alias] = _agg_finalize(s_ident, agg)
-            else
-                result[q.aggregates[i].alias] = _agg_finalize(accs[i], agg)
-            end
+            result[q.aggregates[i].alias] = _agg_finalize_eb(accs[i], agg, store)
         end
         new_bindings[gi] = result
     end
