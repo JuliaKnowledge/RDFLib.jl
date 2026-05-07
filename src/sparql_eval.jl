@@ -83,13 +83,29 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
 
     # ORDER BY — use partial sort when LIMIT is set (top-K optimization)
     if !isempty(q.order_by)
-        cmp = (a, b) -> _ast_order_compare(a, b, q.order_by, g)
         k = q.offset + (isnothing(q.limit) ? length(bindings) : q.limit)
+        # Fast path: all order_by exprs are bare ExprVar, all values numeric
+        # → precompute Float64 keys, sortperm, apply. Avoids per-compare
+        # string + tryparse work.
+        if length(bindings) > 32 && all(o -> first(o) isa ExprVar, q.order_by)
+            keys_f64 = _ast_try_numeric_sort_keys(bindings, q.order_by)
+            if keys_f64 !== nothing
+                perm = if k < length(bindings)
+                    partialsortperm(keys_f64, 1:min(k, length(keys_f64)), lt=isless)
+                else
+                    sortperm(keys_f64, lt=isless)
+                end
+                bindings = bindings[perm]
+                @goto post_orderby
+            end
+        end
+        cmp = (a, b) -> _ast_order_compare(a, b, q.order_by, g)
         if k < length(bindings)
             sort!(bindings, lt=cmp, alg=PartialQuickSort(k))
         else
             sort!(bindings, lt=cmp)
         end
+        @label post_orderby
     end
 
     proj_vars = _ast_projection_vars(q)
@@ -3129,6 +3145,49 @@ function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Id
 end
 
 # ─── ORDER BY comparison ──────────────────────────────────────────
+
+# Try to compute numeric (Float64) sort keys for ORDER BY when every
+# expr is a bare ExprVar and every binding produces a numeric Literal.
+# Returns Vector{Float64} for single ORDER BY (DESC encoded as -value),
+# Vector{NTuple{N,Float64}} for multiple, or nothing if any binding is
+# non-numeric.
+function _ast_try_numeric_sort_keys(bindings, order_by)
+    n = length(order_by)
+    if n == 1
+        expr, dir = order_by[1]
+        var = (expr::ExprVar).name
+        sign = dir == :desc ? -1.0 : 1.0
+        keys = Vector{Float64}(undef, length(bindings))
+        @inbounds for i in eachindex(bindings)
+            v = get(bindings[i], var, nothing)
+            x = _ast_literal_float64(v)
+            x === nothing && return nothing
+            keys[i] = sign * x
+        end
+        return keys
+    else
+        # Multi-key path: build NTuple of signed Float64 per row.
+        signs = ntuple(i -> order_by[i][2] == :desc ? -1.0 : 1.0, n)
+        vars = ntuple(i -> (order_by[i][1]::ExprVar).name, n)
+        keys = Vector{NTuple{n,Float64}}(undef, length(bindings))
+        @inbounds for i in eachindex(bindings)
+            b = bindings[i]
+            row = ntuple(n) do j
+                v = get(b, vars[j], nothing)
+                x = _ast_literal_float64(v)
+                x === nothing ? NaN : signs[j] * x
+            end
+            any(isnan, row) && return nothing
+            keys[i] = row
+        end
+        return keys
+    end
+end
+
+@inline function _ast_literal_float64(v)
+    v isa Literal || return nothing
+    return tryparse(Float64, v.lexical)
+end
 
 function _ast_order_compare(a, b, order_by, g)
     for (expr, dir) in order_by
