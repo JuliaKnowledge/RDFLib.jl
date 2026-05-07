@@ -1203,6 +1203,8 @@ end
 function _try_fused_bgp_agg(q::SparqlSelect, g::RDFGraph)
     g.store isa EncodedStore || return nothing
     !_enc_streaming_agg_eligible(q, g) && return nothing
+    direct = _try_direct_two_star_count_sum_eb(q, g)
+    direct !== nothing && return direct
     # Try the deep two-star fusion first (avoids ALL Dict allocs)
     deep = _try_full_fused_bgp_agg(q, g)
     deep !== nothing && return deep
@@ -1251,6 +1253,204 @@ function _split_two_star(patterns)
     outer = SparqlPattern[patterns[i] for i in 1:first_end]
     last  = SparqlPattern[patterns[i] for i in last_start:n]
     return (outer, first_subj, last, last_subj)
+end
+
+function _try_direct_two_star_count_sum_eb(q::SparqlSelect, g::RDFGraph)
+    # Direct kernel for q2-like pure BGP aggregates:
+    #   outer star (?order :placedBy ?customer ; :amount ?amount)
+    #   last star  (?customer :label ?label)
+    #   GROUP BY ?label, COUNT(?order), SUM(?amount)
+    # Drive from labeled customers, then visit each customer's orders once.
+    split = _split_two_star(q.patterns)
+    split === nothing && return nothing
+    outer_pats, outer_subj, last_pats, last_subj = split
+    length(q.group_by) == 1 || return nothing
+
+    store = g.store::EncodedStore
+    _ensure_all_indexed!(store)
+    n_outer = length(outer_pats)
+    n_last = length(last_pats)
+    n_agg = length(q.aggregates)
+
+    outer_pred_ids = Vector{UInt32}(undef, n_outer)
+    outer_obj_var = Vector{String}(undef, n_outer)
+    outer_obj_const_id = Vector{UInt32}(undef, n_outer)
+    link_idx = 0
+    outer_var_slot = Dict{String,Int}(outer_subj => -1)
+    @inbounds for i in 1:n_outer
+        pat = outer_pats[i]::PatTriple
+        pat.predicate isa URIRef || return nothing
+        pid = _enc_id(store, pat.predicate::URIRef)
+        pid == 0 && return Dict{String,Identifier}[]
+        outer_pred_ids[i] = pid
+        obj = pat.object
+        if obj isa String
+            outer_obj_var[i] = obj
+            outer_obj_const_id[i] = 0
+            !haskey(outer_var_slot, obj) && (outer_var_slot[obj] = i)
+            if obj == last_subj
+                link_idx == 0 || return nothing
+                link_idx = i
+            end
+        elseif obj isa Identifier
+            oid = _enc_id(store, obj)
+            oid == 0 && return Dict{String,Identifier}[]
+            outer_obj_var[i] = ""
+            outer_obj_const_id[i] = oid
+        else
+            return nothing
+        end
+    end
+    link_idx == 0 && return nothing
+    link_po = get(store.pos_enc, outer_pred_ids[link_idx], nothing)
+    link_po === nothing && return Dict{String,Identifier}[]
+
+    last_pred_ids = Vector{UInt32}(undef, n_last)
+    last_obj_var = Vector{String}(undef, n_last)
+    last_obj_const_id = Vector{UInt32}(undef, n_last)
+    last_var_slot = Dict{String,Int}(last_subj => -1)
+    @inbounds for i in 1:n_last
+        pat = last_pats[i]::PatTriple
+        pat.predicate isa URIRef || return nothing
+        pid = _enc_id(store, pat.predicate::URIRef)
+        pid == 0 && return Dict{String,Identifier}[]
+        last_pred_ids[i] = pid
+        obj = pat.object
+        if obj isa String
+            last_obj_var[i] = obj
+            last_obj_const_id[i] = 0
+            !haskey(last_var_slot, obj) && (last_var_slot[obj] = i)
+        elseif obj isa Identifier
+            oid = _enc_id(store, obj)
+            oid == 0 && return Dict{String,Identifier}[]
+            last_obj_var[i] = ""
+            last_obj_const_id[i] = oid
+        else
+            return nothing
+        end
+    end
+
+    gb = q.group_by[1]
+    gb isa ExprVar || return nothing
+    gb_var = (gb::ExprVar).name
+    gb_slot = get(last_var_slot, gb_var, 0)
+    gb_slot > 0 || return nothing
+    gb_po = get(store.pos_enc, last_pred_ids[gb_slot], nothing)
+    gb_po === nothing && return Dict{String,Identifier}[]
+
+    # agg kind: 1=count outer subject, 2=sum outer object slot
+    agg_kind = Vector{Int8}(undef, n_agg)
+    agg_slot = Vector{Int}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        agg = q.aggregates[i].agg
+        agg.distinct && return nothing
+        agg.arg isa ExprVar || return nothing
+        v = (agg.arg::ExprVar).name
+        if agg.func == "COUNT" && v == outer_subj
+            agg_kind[i] = Int8(1); agg_slot[i] = 0
+        elseif agg.func == "SUM" && haskey(outer_var_slot, v)
+            slot = outer_var_slot[v]
+            slot > 0 || return nothing
+            agg_kind[i] = Int8(2); agg_slot[i] = slot
+        else
+            return nothing
+        end
+    end
+
+    groups = Dict{UInt32,Int}()
+    group_keys = UInt32[]
+    count_accs = [Int[] for _ in 1:n_agg]
+    sum_accs = [Float64[] for _ in 1:n_agg]
+    outer_obj_firsts = Vector{UInt32}(undef, n_outer)
+    last_obj_firsts = Vector{UInt32}(undef, n_last)
+
+    for (label_id, customers) in gb_po
+        for customer_id in customers
+            sp_last = get(store.spo_enc, customer_id, nothing)
+            sp_last === nothing && continue
+            @inbounds for i in 1:n_last
+                os = get(sp_last, last_pred_ids[i], nothing)
+                os === nothing && @goto next_customer
+                length(os) == 1 || return nothing
+                oid = first(os)
+                cid = last_obj_const_id[i]
+                cid != 0 && cid != oid && @goto next_customer
+                last_obj_firsts[i] = oid
+            end
+            last_obj_firsts[gb_slot] == label_id || continue
+            @inbounds for i in 1:n_last
+                lv = last_obj_var[i]
+                isempty(lv) && continue
+                for j in (i + 1):n_last
+                    last_obj_var[j] == lv && last_obj_firsts[j] != last_obj_firsts[i] && @goto next_customer
+                end
+            end
+
+            gi = get(groups, label_id, 0)
+            if gi == 0
+                push!(group_keys, label_id)
+                gi = length(group_keys)
+                groups[label_id] = gi
+                @inbounds for i in 1:n_agg
+                    agg_kind[i] == Int8(2) ? push!(sum_accs[i], 0.0) : push!(count_accs[i], 0)
+                end
+            end
+
+            orders = get(link_po, customer_id, nothing)
+            orders === nothing && @goto next_customer
+            for order_id in orders
+                sp_outer = get(store.spo_enc, order_id, nothing)
+                sp_outer === nothing && continue
+                @inbounds for i in 1:n_outer
+                    if i == link_idx
+                        outer_obj_firsts[i] = customer_id
+                        continue
+                    end
+                    os = get(sp_outer, outer_pred_ids[i], nothing)
+                    os === nothing && @goto next_order
+                    length(os) == 1 || return nothing
+                    oid = first(os)
+                    cid = outer_obj_const_id[i]
+                    cid != 0 && cid != oid && @goto next_order
+                    outer_obj_firsts[i] = oid
+                end
+                @inbounds for i in 1:n_outer
+                    ov = outer_obj_var[i]
+                    isempty(ov) && continue
+                    for j in (i + 1):n_outer
+                        outer_obj_var[j] == ov && outer_obj_firsts[j] != outer_obj_firsts[i] && @goto next_order
+                    end
+                end
+                @inbounds for i in 1:n_agg
+                    if agg_kind[i] == Int8(1)
+                        count_accs[i][gi] += 1
+                    else
+                        nv = _enc_numeric(store, outer_obj_firsts[agg_slot[i]])
+                        nv !== nothing && (sum_accs[i][gi] += nv)
+                    end
+                end
+                @label next_order
+            end
+            @label next_customer
+        end
+    end
+
+    results = Vector{Dict{String,Identifier}}(undef, length(group_keys))
+    @inbounds for gi in eachindex(group_keys)
+        result = Dict{String,Identifier}()
+        result[gb_var] = store.id_to_term[group_keys[gi]]
+        for i in 1:n_agg
+            alias = q.aggregates[i].alias
+            if agg_kind[i] == Int8(1)
+                result[alias] = Literal(count_accs[i][gi])
+            else
+                s = sum_accs[i][gi]
+                result[alias] = isinteger(s) ? Literal(Int(s)) : Literal(s)
+            end
+        end
+        results[gi] = result
+    end
+    return results
 end
 
 function _try_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph)
