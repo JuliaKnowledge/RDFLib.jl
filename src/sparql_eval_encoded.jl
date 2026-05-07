@@ -1922,6 +1922,277 @@ end
 # EncodedStore's UInt32-id indices end-to-end. Outer BGP is evaluated
 # via the EB pipeline; inner OPTIONAL star-join is performed per outer
 # row using pos_enc/spo_enc lookups; aggregates accumulate UInt32 ids.
+function _try_direct_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
+                                       outer_pats::Vector{SparqlPattern},
+                                       inner_pats::Vector{SparqlPattern},
+                                       inner_triples::Vector{PatTriple},
+                                       inner_subj::String)
+    # High-risk direct kernel for the trainmarks q4 shape:
+    #   outer single-subject star; OPTIONAL inner single-subject star;
+    #   GROUP BY outer vars; COUNT(DISTINCT outer subject),
+    #   COUNT(DISTINCT inner subject), SUM(inner object var).
+    # It avoids outer EncBinding materialization and DISTINCT Set accumulators.
+    for p in outer_pats
+        p isa PatFilter && return nothing
+    end
+    for p in inner_pats
+        p isa PatFilter && return nothing
+    end
+
+    store = g.store::EncodedStore
+    _ensure_all_indexed!(store)
+
+    outer_triples = PatTriple[]
+    for p in outer_pats
+        p isa PatTriple || return nothing
+        push!(outer_triples, p::PatTriple)
+    end
+    isempty(outer_triples) && return nothing
+    outer_subj = outer_triples[1].subject
+    outer_subj isa String || return nothing
+    n_outer = length(outer_triples)
+    n_inner = length(inner_triples)
+    n_agg = length(q.aggregates)
+    n_gb = length(q.group_by)
+
+    outer_pred_ids = Vector{UInt32}(undef, n_outer)
+    outer_obj_var = Vector{String}(undef, n_outer)
+    outer_obj_const_id = Vector{UInt32}(undef, n_outer)
+    outer_var_slot = Dict{String,Int}(outer_subj => -1)
+    @inbounds for i in 1:n_outer
+        pat = outer_triples[i]
+        pat.subject == outer_subj || return nothing
+        pat.predicate isa URIRef || return nothing
+        pid = _enc_id(store, pat.predicate::URIRef)
+        pid == 0 && return Dict{String,Identifier}[]
+        outer_pred_ids[i] = pid
+        obj = pat.object
+        if obj isa String
+            outer_obj_var[i] = obj
+            outer_obj_const_id[i] = 0
+            !haskey(outer_var_slot, obj) && (outer_var_slot[obj] = i)
+        elseif obj isa Identifier
+            oid = _enc_id(store, obj)
+            oid == 0 && return Dict{String,Identifier}[]
+            outer_obj_var[i] = ""
+            outer_obj_const_id[i] = oid
+        else
+            return nothing
+        end
+    end
+
+    inner_pred_ids = Vector{UInt32}(undef, n_inner)
+    inner_obj_var = Vector{String}(undef, n_inner)
+    inner_obj_const_id = Vector{UInt32}(undef, n_inner)
+    inner_var_slot = Dict{String,Int}(inner_subj => -1)
+    driver_idx = 0
+    @inbounds for i in 1:n_inner
+        pat = inner_triples[i]
+        pat.subject == inner_subj || return nothing
+        pat.predicate isa URIRef || return nothing
+        pid = _enc_id(store, pat.predicate::URIRef)
+        pid == 0 && return Dict{String,Identifier}[]
+        inner_pred_ids[i] = pid
+        obj = pat.object
+        if obj isa String
+            inner_obj_var[i] = obj
+            inner_obj_const_id[i] = 0
+            if obj == outer_subj
+                driver_idx == 0 || return nothing
+                driver_idx = i
+            else
+                !haskey(inner_var_slot, obj) && (inner_var_slot[obj] = i)
+            end
+        elseif obj isa Identifier
+            oid = _enc_id(store, obj)
+            oid == 0 && return Dict{String,Identifier}[]
+            inner_obj_var[i] = ""
+            inner_obj_const_id[i] = oid
+        else
+            return nothing
+        end
+    end
+    driver_idx == 0 && return nothing
+    driver_po = get(store.pos_enc, inner_pred_ids[driver_idx], nothing)
+    driver_po === nothing && return Dict{String,Identifier}[]
+
+    gb_vars = String[]
+    gb_src = Vector{Int}(undef, n_gb)
+    @inbounds for i in 1:n_gb
+        gb = q.group_by[i]
+        gb isa ExprVar || return nothing
+        v = (gb::ExprVar).name
+        push!(gb_vars, v)
+        src = get(outer_var_slot, v, 0)
+        src == 0 && return nothing
+        gb_src[i] = src
+    end
+
+    # agg kind: 1=count outer subject, 2=count inner subject, 3=sum inner object slot
+    agg_kind = Vector{Int8}(undef, n_agg)
+    agg_slot = Vector{Int}(undef, n_agg)
+    @inbounds for i in 1:n_agg
+        agg = q.aggregates[i].agg
+        agg.arg isa ExprVar || return nothing
+        v = (agg.arg::ExprVar).name
+        if agg.func == "COUNT" && agg.distinct && v == outer_subj
+            agg_kind[i] = Int8(1); agg_slot[i] = 0
+        elseif agg.func == "COUNT" && agg.distinct && v == inner_subj
+            agg_kind[i] = Int8(2); agg_slot[i] = 0
+        elseif agg.func == "SUM" && !agg.distinct && haskey(inner_var_slot, v)
+            slot = inner_var_slot[v]
+            slot > 0 || return nothing
+            agg_kind[i] = Int8(3); agg_slot[i] = slot
+        else
+            return nothing
+        end
+    end
+
+    static_driver = nothing
+    @inbounds for i in 1:n_outer
+        cid = outer_obj_const_id[i]
+        cid == 0 && continue
+        po = get(store.pos_enc, outer_pred_ids[i], nothing)
+        po === nothing && return Dict{String,Identifier}[]
+        ss = get(po, cid, nothing)
+        ss === nothing && return Dict{String,Identifier}[]
+        if static_driver === nothing || length(ss) < length(static_driver)
+            static_driver = ss
+        end
+    end
+
+    groups = Dict{NTuple,Int}()
+    group_keys = NTuple[]
+    group_gvals = Vector{Vector{UInt32}}()
+    count_accs = [Int[] for _ in 1:n_agg]
+    sum_accs = [Float64[] for _ in 1:n_agg]
+    outer_obj_firsts = Vector{UInt32}(undef, n_outer)
+    inner_obj_firsts = Vector{UInt32}(undef, n_inner)
+    gkey_buf = Vector{UInt32}(undef, max(n_gb, 1))
+
+    function process_outer(s_outer::UInt32)
+        sp = get(store.spo_enc, s_outer, nothing)
+        sp === nothing && return 0
+        @inbounds for i in 1:n_outer
+            os = get(sp, outer_pred_ids[i], nothing)
+            os === nothing && return 0
+            length(os) == 1 || return -1
+            oid = first(os)
+            cid = outer_obj_const_id[i]
+            cid != 0 && cid != oid && return 0
+            outer_obj_firsts[i] = oid
+        end
+        @inbounds for i in 1:n_outer
+            ov = outer_obj_var[i]
+            isempty(ov) && continue
+            for j in (i + 1):n_outer
+                outer_obj_var[j] == ov && outer_obj_firsts[j] != outer_obj_firsts[i] && return 0
+            end
+        end
+
+        @inbounds for i in 1:n_gb
+            src = gb_src[i]
+            gkey_buf[i] = src == -1 ? s_outer : outer_obj_firsts[src]
+        end
+        key::NTuple = if n_gb == 0
+            ()
+        elseif n_gb == 1
+            (gkey_buf[1],)
+        elseif n_gb == 2
+            (gkey_buf[1], gkey_buf[2])
+        elseif n_gb == 3
+            (gkey_buf[1], gkey_buf[2], gkey_buf[3])
+        else
+            Tuple(gkey_buf)
+        end
+        gi = get(groups, key, 0)
+        if gi == 0
+            gvals = Vector{UInt32}(undef, n_gb)
+            @inbounds for i in 1:n_gb
+                gvals[i] = key[i]
+            end
+            push!(group_keys, key)
+            push!(group_gvals, gvals)
+            gi = length(group_keys)
+            groups[key] = gi
+            @inbounds for i in 1:n_agg
+                agg_kind[i] == Int8(3) ? push!(sum_accs[i], 0.0) : push!(count_accs[i], 0)
+            end
+        end
+
+        @inbounds for i in 1:n_agg
+            agg_kind[i] == Int8(1) && (count_accs[i][gi] += 1)
+        end
+
+        orders = get(driver_po, s_outer, nothing)
+        orders === nothing && return 1
+        for s_inner in orders
+            sp_inner = get(store.spo_enc, s_inner, nothing)
+            sp_inner === nothing && continue
+            ok = true
+            @inbounds for i in 1:n_inner
+                if i == driver_idx
+                    inner_obj_firsts[i] = s_outer
+                    continue
+                end
+                os = get(sp_inner, inner_pred_ids[i], nothing)
+                if os === nothing
+                    ok = false; break
+                end
+                length(os) == 1 || return -1
+                oid = first(os)
+                cid = inner_obj_const_id[i]
+                if cid != 0 && cid != oid
+                    ok = false; break
+                end
+                inner_obj_firsts[i] = oid
+            end
+            ok || continue
+            @inbounds for i in 1:n_agg
+                k = agg_kind[i]
+                if k == Int8(2)
+                    count_accs[i][gi] += 1
+                elseif k == Int8(3)
+                    nv = _enc_numeric(store, inner_obj_firsts[agg_slot[i]])
+                    nv !== nothing && (sum_accs[i][gi] += nv)
+                end
+            end
+        end
+        return 1
+    end
+
+    if static_driver !== nothing
+        for s in static_driver
+            process_outer(s) < 0 && return nothing
+        end
+    else
+        for (s, _) in store.spo_enc
+            process_outer(s) < 0 && return nothing
+        end
+    end
+
+    results = Vector{Dict{String,Identifier}}(undef, length(group_keys))
+    @inbounds for gi in eachindex(group_keys)
+        result = Dict{String,Identifier}()
+        gvals = group_gvals[gi]
+        for (i, name) in enumerate(gb_vars)
+            id = gvals[i]
+            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+        end
+        for i in 1:n_agg
+            alias = q.aggregates[i].alias
+            if agg_kind[i] == Int8(3)
+                s = sum_accs[i][gi]
+                result[alias] = isinteger(s) ? Literal(Int(s)) : Literal(s)
+            else
+                result[alias] = Literal(count_accs[i][gi])
+            end
+        end
+        results[gi] = result
+    end
+    return results
+end
+
 function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
                                    outer_pats::Vector{SparqlPattern},
                                    inner_pats::Vector{SparqlPattern},
@@ -1930,6 +2201,8 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
                                    agg_sources::Vector{Symbol})
     store = g.store::EncodedStore
     _ensure_all_indexed!(store)
+    direct = _try_direct_stream_opt_agg_eb(q, g, outer_pats, inner_pats, inner_triples, inner_subj)
+    direct !== nothing && return direct
     n_agg = length(q.aggregates)
     n_gb = length(q.group_by)
     n_inner = length(inner_triples)
