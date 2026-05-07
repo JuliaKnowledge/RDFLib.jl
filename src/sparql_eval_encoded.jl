@@ -738,7 +738,14 @@ function _eval_patterns_eb_inner(g::RDFGraph, patterns::Vector{SparqlPattern},
 
     while i <= n
         star_end = _star_group_end(patterns, i)
-        if star_end > i
+        # Promote single-triple "star" to EB pipeline when the triple shape
+        # is supported by _ast_eval_star_eb. Avoids decoding back to
+        # Identifier-Dict mode just to evaluate one triple via the legacy
+        # _ast_eval_pattern path. (e.g., q3's `?product rdfs:label ?n` tail.)
+        is_eb_single = star_end == i && let p = patterns[i]
+            p isa PatTriple && (p.subject isa String) && (p.predicate isa URIRef)
+        end
+        if star_end > i || is_eb_single
             filters = SparqlExpr[]
             j = star_end + 1
             while j <= n && patterns[j] isa PatFilter
