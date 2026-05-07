@@ -23,7 +23,7 @@ mutable struct Formula <: Node
     _hash::UInt  # cached hash (0 = not yet computed)
 end
 
-Formula() = Formula(RDFGraph(), "F" * replace(string(uuid4()), "-" => ""), UInt(0))
+Formula() = Formula(RDFGraph(strict=false), "F" * replace(string(uuid4()), "-" => ""), UInt(0))
 
 function Base.:(==)(a::Formula, b::Formula)
     a === b && return true
@@ -598,13 +598,10 @@ function _n3_parse_iriref!(p::_N3Parser)
     throw(ArgumentError("Unterminated IRI reference"))
 end
 
-_n3_is_absolute_uri(uri::AbstractString) = occursin("://", uri) || startswith(uri, "urn:")
+_n3_is_absolute_uri(uri::AbstractString) = occursin(r"^[A-Za-z][A-Za-z0-9+.-]*:", uri)
 
 function _n3_resolve_uri(base::AbstractString, relative::AbstractString)
-    isempty(relative) && return base
-    startswith(relative, '#') && return string(base, relative)
-    idx = findlast('/', base)
-    isnothing(idx) ? relative : string(base[1:idx], relative)
+    string(URIs.resolvereference(URIs.URI(base), URIs.URI(relative)))
 end
 
 # ─── Triple parsing ─────────────────────────────────────────────────

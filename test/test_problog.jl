@@ -594,8 +594,8 @@ end
 end
 
 @testset "generated.pl (54-query propositional network)" begin
-    # problog/test/generated.pl — auto-generated BN with 54 queries
-    source = read(joinpath(@__DIR__, "..", "..", "problog", "test", "generated.pl"), String)
+    source_path = joinpath(@__DIR__, "fixtures", "generated.pl")
+    source = read(source_path, String)
     r = problog_query(source)
     expected = Dict{String,Float64}()
     for line in split(source, "\n")

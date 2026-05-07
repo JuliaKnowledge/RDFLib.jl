@@ -182,7 +182,10 @@ function triples(store::DuckDBStore, pattern::TriplePattern)
 
     # Collect results eagerly to avoid holding the cursor open
     result = DBInterface.execute(store.con, sql, params)
-    rows = [(row.subject, row.predicate, row.object, row.object_type, row.datatype, row.language) for row in result]
+    rows = [
+        (row.subject, row.predicate, row.object, row.object_type, row.datatype, row.language)
+        for row in Tables.namedtupleiterator(result)
+    ]
 
     Channel{Triple}() do ch
         for (subj, pred, obj, obj_type, dt, lang) in rows
@@ -197,7 +200,7 @@ end
 function Base.length(store::DuckDBStore)
     if store._count < 0
         result = DBInterface.execute(store.con, "SELECT COUNT(*) as cnt FROM triples")
-        row = first(result)
+        row = only(Tables.namedtupleiterator(result))
         store._count = Int(row.cnt)
     end
     store._count

@@ -44,6 +44,7 @@ function _trig_write_graph_body(io::IO, g::RDFGraph, nsm::NamespaceManager)
     # Group by subject
     subject_props = Dict{Node, Dict{URIRef, Vector{Identifier}}}()
     for t in g
+        _validate_rdf_serializable(t)
         s, p, o = t.subject, t.predicate, t.object
         props = get!(subject_props, s, Dict{URIRef, Vector{Identifier}}())
         push!(get!(props, p, Identifier[]), o)
@@ -116,8 +117,7 @@ function _trig_format_term(nsm::NamespaceManager, lit::Literal)
         if dt == xsd * "integer" || dt == xsd * "decimal" || dt == xsd * "boolean"
             return lit.lexical
         elseif dt == xsd * "double"
-            s = lit.lexical
-            return ('e' in s || 'E' in s) ? s : s * "e0"
+            return n3(lit)
         end
     end
     n3(lit)
@@ -268,6 +268,7 @@ function _trig_parse_triples_in_graph!(p::_TriGParser, graph_name::Union{URIRef,
     _trig_skip_ws!(p)
     rest_start = p.pos
     in_string = false
+    in_iri = false
     quote_char = nothing
     depth = 0
     while p.pos <= lastindex(p.input)
@@ -278,10 +279,16 @@ function _trig_parse_triples_in_graph!(p::_TriGParser, graph_name::Union{URIRef,
             elseif c == quote_char
                 in_string = false
             end
+        elseif in_iri
+            if c == '>'
+                in_iri = false
+            end
         else
             if c == '"' || c == '\''
                 in_string = true
                 quote_char = c
+            elseif c == '<'
+                in_iri = true
             elseif c == '['
                 depth += 1
             elseif c == ']'

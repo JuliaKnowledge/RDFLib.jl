@@ -4,6 +4,7 @@ using UUIDs
 using Random
 using Dates
 using EzXML
+using HTTP: URIs
 using Downloads: download
 import JSON3
 import SHA

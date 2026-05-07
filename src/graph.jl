@@ -19,11 +19,13 @@ mutable struct RDFGraph{S<:AbstractStore}
     store::S
     identifier::Union{URIRef, BNode, Nothing}
     namespace_manager::NamespaceManager
+    strict::Bool
 end
 
 function RDFGraph(; store::AbstractStore=MemoryStore(),
-                 identifier::Union{URIRef, BNode, Nothing}=nothing)
-    RDFGraph(store, identifier, NamespaceManager())
+                 identifier::Union{URIRef, BNode, Nothing}=nothing,
+                 strict::Bool=true)
+    RDFGraph(store, identifier, NamespaceManager(), strict)
 end
 
 # ─── Core operations ────────────────────────────────────────────────
@@ -33,7 +35,41 @@ end
 
 Add a triple to the graph.
 """
+function _validate_graph_insert(t::Triple)
+    t.subject isa Literal &&
+        throw(ArgumentError("Triple subjects cannot be literals"))
+    (t.predicate isa URIRef || t.predicate isa Variable) ||
+        throw(ArgumentError("Triple predicates must be URIRefs or Variables"))
+    nothing
+end
+
+"""
+    _validate_n3_insert(t)
+
+Permissive validator used when inserting into N3 *formula* contexts
+(`{ ... }`). N3 formulas allow literal subjects (e.g. `"hello" crypto:md5
+?h`), unlike strict RDF graphs.
+"""
+function _validate_n3_insert(t::Triple)
+    (t.predicate isa URIRef || t.predicate isa Variable) ||
+        throw(ArgumentError("Triple predicates must be URIRefs or Variables"))
+    nothing
+end
+
+function _validate_graph_insert(g::RDFGraph, t::Triple)
+    g.strict ? _validate_graph_insert(t) : _validate_n3_insert(t)
+end
+
+function _validate_rdf_serializable(t::Triple)
+    t.subject isa Node ||
+        throw(ArgumentError("RDF serialization requires triple subjects to be RDF nodes"))
+    t.predicate isa URIRef ||
+        throw(ArgumentError("RDF serialization requires triple predicates to be URIRefs"))
+    nothing
+end
+
 function add!(g::RDFGraph, t::Triple)
+    _validate_graph_insert(g, t)
     add!(g.store, t)
     g
 end

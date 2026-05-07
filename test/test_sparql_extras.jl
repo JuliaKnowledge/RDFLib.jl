@@ -799,6 +799,36 @@ using RDFLib
             """)
             @test length(sub_results) == 2
         end
+
+        @testset "CONSTRUCT allocates fresh blank nodes per solution" begin
+            result = sparql_query(g, """
+                PREFIX ex: <http://example.org/>
+                CONSTRUCT {
+                    _:card ex:owner ?s .
+                    _:card ex:name ?name .
+                } WHERE {
+                    ?s a ex:Person .
+                    ?s ex:name ?name .
+                }
+            """)
+            triples_out = collect(triples(result))
+            @test length(triples_out) == 4
+
+            owners = Dict{BNode, Identifier}()
+            names = Dict{BNode, Identifier}()
+            for t in triples_out
+                if t.subject isa BNode && t.predicate == EX("owner")
+                    owners[t.subject] = t.object
+                elseif t.subject isa BNode && t.predicate == EX("name")
+                    names[t.subject] = t.object
+                end
+            end
+
+            @test length(owners) == 2
+            @test Set(keys(owners)) == Set(keys(names))
+            @test Set(values(owners)) == Set([EX("alice"), EX("bob")])
+            @test Set(values(names)) == Set([Literal("Alice"), Literal("Bob")])
+        end
     end
 
     # ─── Additional: ASK queries ───────────────────────────────────────

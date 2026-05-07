@@ -160,20 +160,22 @@ function _sparql_exec_update(g::RDFGraph, op::_SPARQLModify)
     end
     # Delete first
     for binding in bindings
+        delete_bnodes = Dict{String, BNode}()
         for (s_t, p_t, o_t) in op.delete_template
-            s = _sparql_resolve(s_t, binding)
-            p = _sparql_resolve(p_t, binding)
-            o = _sparql_resolve(o_t, binding)
+            s = _resolve_template_term(s_t, binding, delete_bnodes)
+            p = _resolve_template_term(p_t, binding, delete_bnodes)
+            o = _resolve_template_term(o_t, binding, delete_bnodes)
             (isnothing(s) || isnothing(p) || isnothing(o)) && continue
             s isa Node && p isa URIRef && o isa Identifier && remove!(g, Triple(s, p, o))
         end
     end
     # Then insert
     for binding in bindings
+        insert_bnodes = Dict{String, BNode}()
         for (s_t, p_t, o_t) in op.insert_template
-            s = _sparql_resolve(s_t, binding)
-            p = _sparql_resolve(p_t, binding)
-            o = _sparql_resolve(o_t, binding)
+            s = _resolve_template_term(s_t, binding, insert_bnodes)
+            p = _resolve_template_term(p_t, binding, insert_bnodes)
+            o = _resolve_template_term(o_t, binding, insert_bnodes)
             (isnothing(s) || isnothing(p) || isnothing(o)) && continue
             s isa Node && p isa URIRef && o isa Identifier && add!(g, Triple(s, p, o))
         end
@@ -190,19 +192,21 @@ end
 function _sparql_exec_update(g::RDFGraph, op::_SPARQLModify, ::Val{:ast})
     bindings = _ast_eval_patterns(g, Vector{SparqlPattern}(op.patterns))
     for binding in bindings
+        delete_bnodes = Dict{String, BNode}()
         for (s_t, p_t, o_t) in op.delete_template
-            s = _sparql_resolve(s_t, binding)
-            p = _sparql_resolve(p_t, binding)
-            o = _sparql_resolve(o_t, binding)
+            s = _resolve_template_term(s_t, binding, delete_bnodes)
+            p = _resolve_template_term(p_t, binding, delete_bnodes)
+            o = _resolve_template_term(o_t, binding, delete_bnodes)
             (isnothing(s) || isnothing(p) || isnothing(o)) && continue
             s isa Node && p isa URIRef && o isa Identifier && remove!(g, Triple(s, p, o))
         end
     end
     for binding in bindings
+        insert_bnodes = Dict{String, BNode}()
         for (s_t, p_t, o_t) in op.insert_template
-            s = _sparql_resolve(s_t, binding)
-            p = _sparql_resolve(p_t, binding)
-            o = _sparql_resolve(o_t, binding)
+            s = _resolve_template_term(s_t, binding, insert_bnodes)
+            p = _resolve_template_term(p_t, binding, insert_bnodes)
+            o = _resolve_template_term(o_t, binding, insert_bnodes)
             (isnothing(s) || isnothing(p) || isnothing(o)) && continue
             s isa Node && p isa URIRef && o isa Identifier && add!(g, Triple(s, p, o))
         end

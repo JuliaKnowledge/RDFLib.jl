@@ -146,9 +146,9 @@ version = "1.7.0"
 
 [[deps.DuckDB]]
 deps = ["DBInterface", "Dates", "DuckDB_jll", "FixedPointDecimals", "Tables", "UUIDs", "WeakRefStrings"]
-git-tree-sha1 = "6cdf0e67cbf9786c173d706651ee9409fb907118"
+git-tree-sha1 = "0f20ef55836887eddb6f80bfc5bf57b0833b691e"
 uuid = "d2f5444f-75bc-4fdf-ac35-56f514c445e1"
-version = "1.4.1"
+version = "1.4.4"
 
 [[deps.DuckDB_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -582,7 +582,7 @@ uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 version = "1.11.0"
 
 [[deps.RDFLib]]
-deps = ["BenchmarkTools", "CSV", "DBInterface", "Dates", "Downloads", "DuckDB", "EzXML", "GraphViz", "Graphs", "Graphviz_jll", "HTTP", "JSON", "JSON3", "LMDB", "Lerche", "MD5", "Random", "SHA", "SQLite", "Tables", "UUIDs", "XML"]
+deps = ["Arrow", "BenchmarkTools", "CSV", "DBInterface", "Dates", "Downloads", "DuckDB", "EzXML", "GraphViz", "Graphs", "Graphviz_jll", "HTTP", "JSON", "JSON3", "LMDB", "Lerche", "MD5", "Random", "SHA", "SQLite", "Tables", "UUIDs", "XML"]
 path = "."
 uuid = "a0e68e5a-3a1c-4e72-9e58-7b3f0e842d1a"
 version = "0.1.0"

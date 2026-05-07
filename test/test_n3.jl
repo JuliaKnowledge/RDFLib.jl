@@ -137,4 +137,30 @@ const G = RDFLib.RDFGraph
         @test LOG.implies isa URIRef
         @test LOG.implies.value == "http://www.w3.org/2000/10/swap/log#implies"
     end
+
+    @testset "Literal subjects: strict RDF rejects, N3 formulas accept" begin
+        # Strict RDF graphs must still reject literal subjects.
+        g_strict = RDFGraph()
+        @test_throws ArgumentError add!(g_strict,
+            Triple(Literal("hello"), URIRef("urn:p"), URIRef("urn:o")))
+
+        # N3 formulas (e.g., crypto: builtins) permit literal subjects.
+        n3 = """
+        @prefix : <urn:example:> .
+        @prefix crypto: <http://www.w3.org/2000/10/swap/crypto#> .
+        {
+            "hello world" crypto:md5 ?md5 .
+        }
+        =>
+        {
+            :result :md5 ?md5 .
+        } .
+        """
+        g = parse_n3(n3)
+        result = reason(g)
+        ex = Namespace("urn:example:")
+        md5s = [t.object for t in triples(result, (ex("result"), ex("md5"), nothing))]
+        @test length(md5s) == 1
+        @test md5s[1] == Literal("5eb63bbbe01eeed093cb22bb8f5acdc3")
+    end
 end

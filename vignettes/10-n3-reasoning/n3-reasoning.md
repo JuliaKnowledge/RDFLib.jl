@@ -236,6 +236,11 @@ end
 
 ## Cryptographic Builtins
 
+The N3 cryptographic builtins (`crypto:md5`, `crypto:sha`) require
+literals as triple subjects. RDFLib.jl permits this inside N3 formula
+contexts (`{ ... }`) while still enforcing strict RDF semantics for
+top-level graphs.
+
 ``` julia
 n3 = """
 @prefix : <urn:example:> .

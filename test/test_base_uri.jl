@@ -51,4 +51,22 @@ using RDFLib: namespaces
         @test qname[1] == ""
         @test qname[3] == "foo"
     end
+
+    @testset "parse_rdf_with_base resolves relative Turtle IRIs" begin
+        ttl = "<alice> <knows> <bob> ."
+        g = parse_rdf_with_base(ttl, TurtleFormat(), "http://example.org/base/")
+        t = first(g)
+        @test t.subject == URIRef("http://example.org/base/alice")
+        @test t.predicate == URIRef("http://example.org/base/knows")
+        @test t.object == URIRef("http://example.org/base/bob")
+    end
+
+    @testset "parse_rdf_with_base resolves relative N3 IRIs" begin
+        n3 = "<alice> <knows> <bob> ."
+        g = parse_rdf_with_base(n3, N3Format(), "http://example.org/base/")
+        t = first(g)
+        @test t.subject == URIRef("http://example.org/base/alice")
+        @test t.predicate == URIRef("http://example.org/base/knows")
+        @test t.object == URIRef("http://example.org/base/bob")
+    end
 end

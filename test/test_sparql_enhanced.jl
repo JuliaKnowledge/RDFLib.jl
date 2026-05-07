@@ -87,6 +87,29 @@ using RDFLib
         @test length(results) == 3
     end
 
+    @testset "INSERT WHERE allocates fresh blank nodes per solution" begin
+        g = make_test_graph()
+        sparql_update(g, """
+            PREFIX ex: <http://example.org/>
+            INSERT {
+                _:card ex:owner ?s .
+            }
+            WHERE { ?s a ex:Person }
+        """)
+
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?card ?owner WHERE {
+                ?card ex:owner ?owner .
+            }
+        """)
+
+        @test length(results) == 3
+        @test length(Set(r["card"] for r in results)) == 3
+        @test Set(r["owner"] for r in results) ==
+              Set([EX("alice"), EX("bob"), EX("carol")])
+    end
+
     @testset "DELETE INSERT WHERE" begin
         g = RDFGraph()
         bind!(g, "ex", EX)
@@ -346,6 +369,23 @@ using RDFLib
         @test length(results) == 3
         @test results[1]["age"] == Literal(25)
         @test results[3]["age"] == Literal(35)
+    end
+
+    @testset "ORDER BY bare expression" begin
+        g = RDFGraph()
+        bind!(g, "ex", EX)
+        add!(g, EX("alice"), EX("label"), Literal("Alice", lang="en"))
+        add!(g, EX("alice"), EX("label"), Literal("Alicia", lang="es"))
+
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?lbl (LANG(?lbl) AS ?lng) WHERE {
+                ex:alice ex:label ?lbl .
+            }
+            ORDER BY LANG(?lbl)
+        """)
+
+        @test [r["lng"].lexical for r in results] == ["en", "es"]
     end
 
     # ─── Enhanced BIND expressions ──────────────────────────────────
