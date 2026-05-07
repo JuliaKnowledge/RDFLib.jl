@@ -64,6 +64,64 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
        isempty(q.group_by) && !q.distinct && !q.reduced && isempty(q.select_exprs)
         push_limit = q.offset + q.limit
     end
+
+    # Fast path: EncodedStore + ORDER BY (single bare ExprVar) + LIMIT,
+    # no DISTINCT/aggregates/group_by/select_exprs. Run BGP returning
+    # raw EBs, sort by id-decoded numeric key on EBs, then decode only
+    # the survivors. Avoids decoding ~30K bindings when only k are kept.
+    if g.store isa EncodedStore && length(q.order_by) == 1 &&
+       !isnothing(q.limit) && q.offset == 0 &&
+       isempty(q.aggregates) && isempty(q.group_by) && isempty(q.select_exprs) &&
+       !q.distinct && !q.reduced &&
+       first(q.order_by[1]) isa ExprVar
+        sort_var = (q.order_by[1][1]::ExprVar).name
+        sign = q.order_by[1][2] == :desc ? -1.0 : 1.0
+        store_e = g.store::EncodedStore
+        pats = q.patterns
+        if length(pats) >= 2
+            pats = _reorder_star_groups_encoded(store_e, pats)
+        end
+        ebs = _ast_eval_patterns_star_encoded_eb(g, pats,
+            Dict{String,Identifier}[Dict{String,Identifier}()], 0)
+        if !(ebs isa Vector{EncBinding})
+            # Pipeline returned decoded bindings; fall through to legacy path.
+            bindings = ebs
+            @goto post_aggregate
+        end
+        if isempty(ebs)
+            return Dict{String,Identifier}[]
+        end
+        # Build numeric keys from id-decoded Literal lexicals
+        keys_f64 = Vector{Float64}(undef, length(ebs))
+        all_numeric = true
+        @inbounds for i in eachindex(ebs)
+            id = get(ebs[i], sort_var, UInt32(0))
+            if id == 0
+                all_numeric = false; break
+            end
+            t = store_e.id_to_term[id]
+            x = t isa Literal ? tryparse(Float64, t.lexical) : nothing
+            if x === nothing
+                all_numeric = false; break
+            end
+            keys_f64[i] = sign * x
+        end
+        if all_numeric
+            k = q.limit
+            perm = if k < length(keys_f64)
+                partialsortperm(keys_f64, 1:k)
+            else
+                sortperm(keys_f64)
+            end
+            selected = ebs[perm]
+            bindings = _decode_bindings(store_e, selected)
+            @goto post_orderby_skip
+        end
+        # Non-numeric — fall back to full decode + legacy ORDER BY path.
+        bindings = _decode_bindings(store_e, ebs)
+        @goto post_aggregate
+    end
+
     bindings = _ast_eval_patterns(g, q.patterns; limit=push_limit)
 
     # Evaluate SELECT expressions
@@ -108,6 +166,7 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         @label post_orderby
     end
 
+    @label post_orderby_skip
     proj_vars = _ast_projection_vars(q)
 
     # When OFFSET+LIMIT is set and we don't need DISTINCT (which requires
