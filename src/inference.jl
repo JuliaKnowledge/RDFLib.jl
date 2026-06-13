@@ -1,61 +1,93 @@
 # ─── RDFS/OWL Forward-Chaining Inference ────────────────────────────
 
 """
-    rdfs_closure!(g::RDFGraph)
+    rdfs_closure!(g::RDFGraph; axiomatic=false)
 
 Apply RDFS entailment rules to `g` in-place using fixed-point iteration.
-Rules: rdfs2 (subclass typing), rdfs3 (subproperty), rdfs5 (subClassOf transitivity),
-rdfs7 (subPropertyOf transitivity), rdfs9 (domain), rdfs10 (range).
+
+Implemented rules (W3C RDF Semantics rule names):
+
+- **rdfs2** — `?p rdfs:domain ?C . ?x ?p ?y` ⇒ `?x rdf:type ?C`
+- **rdfs3** — `?p rdfs:range ?C . ?x ?p ?y` ⇒ `?y rdf:type ?C`
+- **rdfs5** — `rdfs:subPropertyOf` transitivity
+- **rdfs6** — `?p rdf:type rdf:Property` ⇒ `?p rdfs:subPropertyOf ?p`
+- **rdfs7** — `?p rdfs:subPropertyOf ?q . ?x ?p ?y` ⇒ `?x ?q ?y`
+- **rdfs9** — `?C rdfs:subClassOf ?D . ?x rdf:type ?C` ⇒ `?x rdf:type ?D`
+- **rdfs10** — `?C rdf:type rdfs:Class` ⇒ `?C rdfs:subClassOf ?C`
+- **rdfs11** — `rdfs:subClassOf` transitivity
+- **rdfs12** — `?p rdf:type rdfs:ContainerMembershipProperty` ⇒
+  `?p rdfs:subPropertyOf rdfs:member`
+- **rdfs13** — `?d rdf:type rdfs:Datatype` ⇒ `?d rdfs:subClassOf rdfs:Literal`
+
+Opt-in via `axiomatic=true` (off by default because they add an `rdf:type
+rdfs:Resource` / `rdfs:subClassOf rdfs:Resource` triple for nearly every
+node and significantly bloat the graph):
+
+- **rdfs4a** — `?x ?p ?y` ⇒ `?x rdf:type rdfs:Resource`
+- **rdfs4b** — `?x ?p ?y` ⇒ `?y rdf:type rdfs:Resource` (non-literal objects)
+- **rdfs8** — `?C rdf:type rdfs:Class` ⇒ `?C rdfs:subClassOf rdfs:Resource`
+
+Not implemented: **rdfs1** (every literal's datatype is an
+`rdfs:Datatype` member). It concerns literal datatype membership — in this
+triple-based implementation it would only assert `?dt rdf:type rdfs:Datatype`
+for datatypes of literals appearing in the graph, which is essentially
+vacuous for entailment purposes and is therefore skipped.
 """
-function rdfs_closure!(g::RDFGraph)
-    _fixed_point!(g, _apply_rdfs_rules!)
+function rdfs_closure!(g::RDFGraph; axiomatic::Bool=false)
+    _fixed_point!(g, gg -> _apply_rdfs_rules!(gg; axiomatic=axiomatic))
 end
 
 """
-    rdfs_closure(g::RDFGraph) -> RDFGraph
+    rdfs_closure(g::RDFGraph; axiomatic=false) -> RDFGraph
 
 Return a new graph containing all triples from `g` plus RDFS-entailed triples.
+See [`rdfs_closure!`](@ref) for the rule list and the `axiomatic` keyword
+(enables rdfs4a/4b/8, which derive `rdfs:Resource` membership for every node).
 """
-function rdfs_closure(g::RDFGraph)
+function rdfs_closure(g::RDFGraph; axiomatic::Bool=false)
     result = _copy_graph(g)
-    rdfs_closure!(result)
+    rdfs_closure!(result; axiomatic=axiomatic)
     result
 end
 
 """
-    owl_closure!(g::RDFGraph)
+    owl_closure!(g::RDFGraph; axiomatic=false)
 
 Apply RDFS + OWL entailment rules to `g` in-place using fixed-point iteration.
+`axiomatic=true` additionally enables RDFS rules rdfs4a/4b/8 (see
+[`rdfs_closure!`](@ref)).
 """
-function owl_closure!(g::RDFGraph)
-    _fixed_point!(g, _apply_owl_rules!)
+function owl_closure!(g::RDFGraph; axiomatic::Bool=false)
+    _fixed_point!(g, gg -> _apply_owl_rules!(gg; axiomatic=axiomatic))
 end
 
 """
-    owl_closure(g::RDFGraph) -> RDFGraph
+    owl_closure(g::RDFGraph; axiomatic=false) -> RDFGraph
 
 Return a new graph containing all triples from `g` plus RDFS+OWL-entailed triples.
 """
-function owl_closure(g::RDFGraph)
+function owl_closure(g::RDFGraph; axiomatic::Bool=false)
     result = _copy_graph(g)
-    owl_closure!(result)
+    owl_closure!(result; axiomatic=axiomatic)
     result
 end
 
 """
-    infer(g::RDFGraph; rules=:rdfs) -> RDFGraph
+    infer(g::RDFGraph; rules=:rdfs, axiomatic=false) -> RDFGraph
 
 Return a new graph with inferred triples. `rules` can be `:rdfs`, `:owl`, `:owl2`, or `:all`.
 `:owl` applies RDFS + OWL rules. `:owl2` applies RDFS + OWL + OWL 2 RL rules.
 `:all` applies all available rules (OWL 2 RL).
+`axiomatic=true` enables RDFS rules rdfs4a/4b/8 (everything is an
+`rdfs:Resource`), which are off by default because they bloat the graph.
 """
-function infer(g::RDFGraph; rules::Symbol=:rdfs)
+function infer(g::RDFGraph; rules::Symbol=:rdfs, axiomatic::Bool=false)
     if rules === :rdfs
-        return rdfs_closure(g)
+        return rdfs_closure(g; axiomatic=axiomatic)
     elseif rules === :owl
-        return owl_closure(g)
+        return owl_closure(g; axiomatic=axiomatic)
     elseif rules === :owl2 || rules === :all
-        return owl2_rl_closure(g)
+        return owl2_rl_closure(g; axiomatic=axiomatic)
     else
         throw(ArgumentError("Unknown rule set: $rules. Use :rdfs, :owl, :owl2, or :all"))
     end
@@ -98,23 +130,41 @@ function _collect_triples(g::RDFGraph, pattern::TriplePattern)
 end
 
 # ─── RDFS Rules ─────────────────────────────────────────────────────
+# Rule names follow the W3C RDF Semantics entailment rule numbering.
+# rdfs1 (literal datatype membership) is intentionally not implemented:
+# it would only assert `?dt rdf:type rdfs:Datatype` for datatypes of
+# literals appearing in the graph, which is vacuous for entailment here.
 
-function _apply_rdfs_rules!(g::RDFGraph)
+function _apply_rdfs_rules!(g::RDFGraph; axiomatic::Bool=false)
     new_triples = Triple[]
-    _rdfs5!(g, new_triples)   # subClassOf transitivity
-    _rdfs7!(g, new_triples)   # subPropertyOf transitivity
-    _rdfs2!(g, new_triples)   # subclass typing
-    _rdfs3!(g, new_triples)   # subproperty
-    _rdfs9!(g, new_triples)   # domain
-    _rdfs10!(g, new_triples)  # range
+    _push_rdfs_rules!(g, new_triples; axiomatic=axiomatic)
     # Deduplicate against existing graph
     filter!(t -> !(t in g), new_triples)
     unique!(new_triples)
 end
 
-# rdfs5: rdfs:subClassOf is transitive
+# Push one round of RDFS-rule conclusions into `new_triples` (no dedup).
+function _push_rdfs_rules!(g::RDFGraph, new_triples::Vector{Triple}; axiomatic::Bool=false)
+    _rdfs11!(g, new_triples)  # subClassOf transitivity
+    _rdfs5!(g, new_triples)   # subPropertyOf transitivity
+    _rdfs9!(g, new_triples)   # subclass typing
+    _rdfs7!(g, new_triples)   # subproperty usage
+    _rdfs2!(g, new_triples)   # domain
+    _rdfs3!(g, new_triples)   # range
+    _rdfs6!(g, new_triples)   # property reflexivity
+    _rdfs10!(g, new_triples)  # class reflexivity
+    _rdfs12!(g, new_triples)  # ContainerMembershipProperty → rdfs:member
+    _rdfs13!(g, new_triples)  # Datatype → subclass of rdfs:Literal
+    if axiomatic
+        _rdfs4!(g, new_triples)  # rdfs4a/4b: everything is an rdfs:Resource
+        _rdfs8!(g, new_triples)  # classes are subclasses of rdfs:Resource
+    end
+    new_triples
+end
+
+# rdfs11: rdfs:subClassOf is transitive
 # If ?A rdfs:subClassOf ?B and ?B rdfs:subClassOf ?C, then ?A rdfs:subClassOf ?C
-function _rdfs5!(g::RDFGraph, new_triples::Vector{Triple})
+function _rdfs11!(g::RDFGraph, new_triples::Vector{Triple})
     subclass_of = RDFS.subClassOf
     for t1 in _collect_triples(g, (nothing, subclass_of, nothing))
         a = t1.subject
@@ -129,9 +179,9 @@ function _rdfs5!(g::RDFGraph, new_triples::Vector{Triple})
     end
 end
 
-# rdfs7: rdfs:subPropertyOf is transitive
+# rdfs5: rdfs:subPropertyOf is transitive
 # If ?p rdfs:subPropertyOf ?q and ?q rdfs:subPropertyOf ?r, then ?p rdfs:subPropertyOf ?r
-function _rdfs7!(g::RDFGraph, new_triples::Vector{Triple})
+function _rdfs5!(g::RDFGraph, new_triples::Vector{Triple})
     sub_prop = RDFS.subPropertyOf
     for t1 in _collect_triples(g, (nothing, sub_prop, nothing))
         p = t1.subject
@@ -147,8 +197,8 @@ function _rdfs7!(g::RDFGraph, new_triples::Vector{Triple})
     end
 end
 
-# rdfs2: If ?x rdf:type ?C and ?C rdfs:subClassOf ?D, then ?x rdf:type ?D
-function _rdfs2!(g::RDFGraph, new_triples::Vector{Triple})
+# rdfs9: If ?x rdf:type ?C and ?C rdfs:subClassOf ?D, then ?x rdf:type ?D
+function _rdfs9!(g::RDFGraph, new_triples::Vector{Triple})
     rdf_type = RDF.type
     subclass_of = RDFS.subClassOf
     for t in _collect_triples(g, (nothing, rdf_type, nothing))
@@ -161,22 +211,23 @@ function _rdfs2!(g::RDFGraph, new_triples::Vector{Triple})
     end
 end
 
-# rdfs3: If ?x ?p ?y and ?p rdfs:subPropertyOf ?q, then ?x ?q ?y
-function _rdfs3!(g::RDFGraph, new_triples::Vector{Triple})
+# rdfs7: If ?x ?p ?y and ?p rdfs:subPropertyOf ?q, then ?x ?q ?y
+function _rdfs7!(g::RDFGraph, new_triples::Vector{Triple})
     sub_prop = RDFS.subPropertyOf
     for sp in _collect_triples(g, (nothing, sub_prop, nothing))
         p = sp.subject
         q = sp.object
         p isa URIRef || continue
         q isa URIRef || continue
+        p == q && continue
         for t in _collect_triples(g, (nothing, p, nothing))
             push!(new_triples, Triple(t.subject, q, t.object))
         end
     end
 end
 
-# rdfs9: If ?p rdfs:domain ?C and ?x ?p ?y, then ?x rdf:type ?C
-function _rdfs9!(g::RDFGraph, new_triples::Vector{Triple})
+# rdfs2: If ?p rdfs:domain ?C and ?x ?p ?y, then ?x rdf:type ?C
+function _rdfs2!(g::RDFGraph, new_triples::Vector{Triple})
     rdf_type = RDF.type
     rdfs_domain = RDFS.domain
     for d in _collect_triples(g, (nothing, rdfs_domain, nothing))
@@ -189,8 +240,8 @@ function _rdfs9!(g::RDFGraph, new_triples::Vector{Triple})
     end
 end
 
-# rdfs10: If ?p rdfs:range ?C and ?x ?p ?y, then ?y rdf:type ?C
-function _rdfs10!(g::RDFGraph, new_triples::Vector{Triple})
+# rdfs3: If ?p rdfs:range ?C and ?x ?p ?y, then ?y rdf:type ?C
+function _rdfs3!(g::RDFGraph, new_triples::Vector{Triple})
     rdf_type = RDF.type
     rdfs_range = RDFS.range
     for r in _collect_triples(g, (nothing, rdfs_range, nothing))
@@ -205,17 +256,78 @@ function _rdfs10!(g::RDFGraph, new_triples::Vector{Triple})
     end
 end
 
+# rdfs6: If ?p rdf:type rdf:Property, then ?p rdfs:subPropertyOf ?p
+function _rdfs6!(g::RDFGraph, new_triples::Vector{Triple})
+    sub_prop = RDFS.subPropertyOf
+    for t in _collect_triples(g, (nothing, RDF.type, RDF.Property))
+        p = t.subject
+        p isa URIRef || continue
+        push!(new_triples, Triple(p, sub_prop, p))
+    end
+end
+
+# rdfs10: If ?C rdf:type rdfs:Class, then ?C rdfs:subClassOf ?C
+function _rdfs10!(g::RDFGraph, new_triples::Vector{Triple})
+    subclass_of = RDFS.subClassOf
+    for t in _collect_triples(g, (nothing, RDF.type, RDFS.Class))
+        c = t.subject
+        c isa Node || continue
+        push!(new_triples, Triple(c, subclass_of, c))
+    end
+end
+
+# rdfs12: If ?p rdf:type rdfs:ContainerMembershipProperty,
+# then ?p rdfs:subPropertyOf rdfs:member
+function _rdfs12!(g::RDFGraph, new_triples::Vector{Triple})
+    sub_prop = RDFS.subPropertyOf
+    for t in _collect_triples(g, (nothing, RDF.type, RDFS.ContainerMembershipProperty))
+        p = t.subject
+        p isa URIRef || continue
+        push!(new_triples, Triple(p, sub_prop, RDFS.member))
+    end
+end
+
+# rdfs13: If ?d rdf:type rdfs:Datatype, then ?d rdfs:subClassOf rdfs:Literal
+function _rdfs13!(g::RDFGraph, new_triples::Vector{Triple})
+    subclass_of = RDFS.subClassOf
+    for t in _collect_triples(g, (nothing, RDF.type, RDFS.Datatype))
+        d = t.subject
+        d isa Node || continue
+        push!(new_triples, Triple(d, subclass_of, RDFS.Literal))
+    end
+end
+
+# rdfs4a/4b (axiomatic, opt-in): If ?x ?p ?y, then ?x rdf:type rdfs:Resource
+# and ?y rdf:type rdfs:Resource (literal objects are skipped — a literal
+# cannot be the subject of an RDF triple).
+function _rdfs4!(g::RDFGraph, new_triples::Vector{Triple})
+    rdf_type = RDF.type
+    resource = RDFS.Resource
+    for t in g
+        push!(new_triples, Triple(t.subject, rdf_type, resource))      # rdfs4a
+        if t.object isa Node
+            push!(new_triples, Triple(t.object, rdf_type, resource))   # rdfs4b
+        end
+    end
+end
+
+# rdfs8 (axiomatic, opt-in): If ?C rdf:type rdfs:Class,
+# then ?C rdfs:subClassOf rdfs:Resource
+function _rdfs8!(g::RDFGraph, new_triples::Vector{Triple})
+    subclass_of = RDFS.subClassOf
+    for t in _collect_triples(g, (nothing, RDF.type, RDFS.Class))
+        c = t.subject
+        c isa Node || continue
+        push!(new_triples, Triple(c, subclass_of, RDFS.Resource))
+    end
+end
+
 # ─── OWL Rules (includes RDFS) ─────────────────────────────────────
 
-function _apply_owl_rules!(g::RDFGraph)
+function _apply_owl_rules!(g::RDFGraph; axiomatic::Bool=false)
     new_triples = Triple[]
     # RDFS rules first
-    _rdfs5!(g, new_triples)
-    _rdfs7!(g, new_triples)
-    _rdfs2!(g, new_triples)
-    _rdfs3!(g, new_triples)
-    _rdfs9!(g, new_triples)
-    _rdfs10!(g, new_triples)
+    _push_rdfs_rules!(g, new_triples; axiomatic=axiomatic)
     # OWL rules
     _owl_equivalent_class!(g, new_triples)
     _owl_equivalent_property!(g, new_triples)
@@ -660,14 +772,9 @@ function _owl2_rule_inverse_functional_property!(g::RDFGraph, new_triples::Vecto
     end
 end
 
-function _apply_owl2_rl_rules!(g::RDFGraph)
+function _apply_owl2_rl_rules!(g::RDFGraph; axiomatic::Bool=false)
     new_triples = Triple[]
-    _rdfs5!(g, new_triples)
-    _rdfs7!(g, new_triples)
-    _rdfs2!(g, new_triples)
-    _rdfs3!(g, new_triples)
-    _rdfs9!(g, new_triples)
-    _rdfs10!(g, new_triples)
+    _push_rdfs_rules!(g, new_triples; axiomatic=axiomatic)
     _owl_equivalent_class!(g, new_triples)
     _owl_equivalent_property!(g, new_triples)
     _owl_transitive_property!(g, new_triples)
@@ -691,21 +798,23 @@ function _apply_owl2_rl_rules!(g::RDFGraph)
 end
 
 """
-    owl2_rl_closure!(g::RDFGraph)
+    owl2_rl_closure!(g::RDFGraph; axiomatic=false)
 
 Apply OWL 2 RL profile rules to `g` in-place using fixed-point iteration.
+`axiomatic=true` additionally enables RDFS rules rdfs4a/4b/8 (see
+[`rdfs_closure!`](@ref)).
 """
-function owl2_rl_closure!(g::RDFGraph)
-    _fixed_point!(g, _apply_owl2_rl_rules!)
+function owl2_rl_closure!(g::RDFGraph; axiomatic::Bool=false)
+    _fixed_point!(g, gg -> _apply_owl2_rl_rules!(gg; axiomatic=axiomatic))
 end
 
 """
-    owl2_rl_closure(g::RDFGraph) -> RDFGraph
+    owl2_rl_closure(g::RDFGraph; axiomatic=false) -> RDFGraph
 
 Return a new graph containing all triples from `g` plus OWL 2 RL-entailed triples.
 """
-function owl2_rl_closure(g::RDFGraph)
+function owl2_rl_closure(g::RDFGraph; axiomatic::Bool=false)
     result = _copy_graph(g)
-    owl2_rl_closure!(result)
+    owl2_rl_closure!(result; axiomatic=axiomatic)
     result
 end
