@@ -519,14 +519,16 @@ end
 
 @testset "Parse CLEAR ALL" begin
     op = RDFLib.sparql_parse_update("CLEAR ALL")
-    @test op isa RDFLib._SPARQLClear
-    @test op.target == "ALL"
+    @test op isa RDFLib.UpdateGraphOp
+    @test op.op == :clear
+    @test op.target == :all
 end
 
 @testset "Parse DROP DEFAULT" begin
     op = RDFLib.sparql_parse_update("DROP DEFAULT")
-    @test op isa RDFLib._SPARQLClear
-    @test op.target == "DEFAULT"
+    @test op isa RDFLib.UpdateGraphOp
+    @test op.op == :drop
+    @test op.target == :default
 end
 
 @testset "Parse INSERT DATA with PREFIX" begin
@@ -626,6 +628,408 @@ end
     @test length(g) == 1
     sparql_update(g, "CLEAR ALL")
     @test length(g) == 0
+end
+
+# ═══ Regression tests for review fixes ════════════════════════════
+
+# Fix 1: `!` binds at unary level, not between && and comparison
+@testset "Regression: ! precedence (unary level)" begin
+    q = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> ?x FILTER(!?x = ?y) }")
+    f = first(p for p in q.patterns if p isa RDFLib.PatFilter)
+    # (!?x) = ?y  → top-level is the comparison, left arg is the negation
+    @test f.expr isa RDFLib.ExprBinaryOp
+    @test f.expr.op == :(==)
+    @test f.expr.left isa RDFLib.ExprUnaryOp
+    @test f.expr.left.op == :!
+
+    # !A && B  → (!A) && B
+    q2 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> ?x FILTER(!BOUND(?x) && ?x > 1) }")
+    f2 = first(p for p in q2.patterns if p isa RDFLib.PatFilter)
+    @test f2.expr isa RDFLib.ExprBinaryOp
+    @test f2.expr.op == :&&
+    @test f2.expr.left isa RDFLib.ExprUnaryOp
+end
+
+# Fix 2: IRI-named function calls keep their IRI; builtins stay uppercase
+@testset "Regression: function name casing" begin
+    q = RDFLib.sparql_parse("""
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT (xsd:integer(?x) AS ?i) WHERE { ?s <http://ex.org/p> ?x }
+    """)
+    @test length(q.select_exprs) == 1
+    fc = q.select_exprs[1].expr
+    @test fc isa RDFLib.ExprFunctionCall
+    @test fc.name == "http://www.w3.org/2001/XMLSchema#integer"
+
+    # Full-IRI function call
+    q2 = RDFLib.sparql_parse("SELECT (<http://example.org/MyFunc>(?x) AS ?y) WHERE { ?s ?p ?x }")
+    fc2 = q2.select_exprs[1].expr
+    @test fc2 isa RDFLib.ExprFunctionCall
+    @test fc2.name == "http://example.org/MyFunc"
+
+    # Bare builtins still uppercased (lowercase in query)
+    q3 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/n> ?n FILTER(contains(?n, \"x\")) }")
+    f3 = first(p for p in q3.patterns if p isa RDFLib.PatFilter)
+    @test f3.expr.name == "CONTAINS"
+end
+
+# Fix 3: decimal literals keep lexical form and get xsd:decimal
+@testset "Regression: decimal literal datatype + lexical" begin
+    q = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/v> ?x FILTER(?x = 1.50) }")
+    f = first(p for p in q.patterns if p isa RDFLib.PatFilter)
+    lit = f.expr.right.value
+    @test lit isa Literal
+    @test lit.lexical == "1.50"
+    @test lit.datatype == URIRef("http://www.w3.org/2001/XMLSchema#decimal")
+
+    # DOUBLE (exponent form) stays xsd:double
+    q2 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/v> ?x FILTER(?x = 1.5e2) }")
+    lit2 = first(p for p in q2.patterns if p isa RDFLib.PatFilter).expr.right.value
+    @test lit2.datatype == URIRef("http://www.w3.org/2001/XMLSchema#double")
+    @test lit2.lexical == "1.5e2"
+
+    # INTEGER stays xsd:integer
+    q3 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/v> ?x FILTER(?x = 42) }")
+    lit3 = first(p for p in q3.patterns if p isa RDFLib.PatFilter).expr.right.value
+    @test lit3.datatype == URIRef("http://www.w3.org/2001/XMLSchema#integer")
+end
+
+# Fix 4: trailing dot terminates pnames / bnode labels
+@testset "Regression: trailing dot not swallowed" begin
+    tz = RDFLib._sparql_tokenize_all(":o.")
+    @test tz.tokens[1].kind == RDFLib.TOK_PNAME
+    @test tz.tokens[1].value == ":o"
+    @test tz.tokens[2].kind == RDFLib.TOK_DOT
+
+    tz2 = RDFLib._sparql_tokenize_all("_:b1.")
+    @test tz2.tokens[1].kind == RDFLib.TOK_BNODE
+    @test tz2.tokens[1].value == "_:b1"
+    @test tz2.tokens[2].kind == RDFLib.TOK_DOT
+
+    tz3 = RDFLib._sparql_tokenize_all("ex:foo.bar.")
+    @test tz3.tokens[1].kind == RDFLib.TOK_PNAME
+    @test tz3.tokens[1].value == "ex:foo.bar"  # internal dot kept
+    @test tz3.tokens[2].kind == RDFLib.TOK_DOT
+
+    # End-to-end: triple terminated by dot glued to the object pname
+    g = RDFGraph()
+    add!(g, Triple(URIRef("http://ex.org/s"), URIRef("http://ex.org/p"), URIRef("http://ex.org/o")))
+    res = sparql_query(g, "PREFIX : <http://ex.org/> SELECT ?s WHERE { ?s :p :o. }")
+    @test length(res) == 1
+end
+
+# Fix 5: variables may start with a digit
+@testset "Regression: digit-starting variable names" begin
+    tz = RDFLib._sparql_tokenize_all("?1 \$2x")
+    @test tz.tokens[1].kind == RDFLib.TOK_VAR
+    @test tz.tokens[1].value == "?1"
+    @test tz.tokens[2].kind == RDFLib.TOK_VAR
+    @test tz.tokens[2].value == "\$2x"
+    q = RDFLib.sparql_parse("SELECT ?1 WHERE { ?1 ?p ?o }")
+    @test q.variables == ["1"]
+end
+
+# Fix 6: < as comparison operator is not mistaken for an IRI
+@testset "Regression: < operator vs IRI disambiguation" begin
+    q = RDFLib.sparql_parse("SELECT * WHERE { ?a <http://ex.org/p> ?b . ?c <http://ex.org/p> ?d FILTER(?a<?b&&?c>?d) }")
+    f = first(p for p in q.patterns if p isa RDFLib.PatFilter)
+    @test f.expr isa RDFLib.ExprBinaryOp
+    @test f.expr.op == :&&
+
+    # Real IRIs (absolute and relative) still tokenize as IRIs
+    tz = RDFLib._sparql_tokenize_all("<http://ex.org/x> <rel/path>")
+    @test tz.tokens[1].kind == RDFLib.TOK_IRI
+    @test tz.tokens[2].kind == RDFLib.TOK_IRI
+end
+
+# Fix 7: `?x-1` (negative numeric literal as additive continuation)
+@testset "Regression: ?x-1 additive" begin
+    q = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/v> ?x FILTER(?x-1 > 0) }")
+    f = first(p for p in q.patterns if p isa RDFLib.PatFilter)
+    @test f.expr isa RDFLib.ExprBinaryOp
+    @test f.expr.op == :>
+    add_e = f.expr.left
+    @test add_e isa RDFLib.ExprBinaryOp
+    @test add_e.op == :+
+    @test add_e.right isa RDFLib.ExprLiteral
+    @test add_e.right.value.lexical == "-1"
+
+    # End-to-end
+    g = RDFGraph()
+    add!(g, Triple(URIRef("http://ex.org/s"), URIRef("http://ex.org/v"), Literal(5)))
+    res = sparql_query(g, "SELECT (?x-1 AS ?y) WHERE { ?s <http://ex.org/v> ?x }")
+    @test length(res) == 1
+    @test RDFLib._ast_to_numeric(res[1]["y"]) == 4
+end
+
+# Fix 8: blank node property lists and collections
+@testset "Regression: blank node property lists" begin
+    g = RDFGraph()
+    ex = "http://ex.org/"
+    add!(g, Triple(BNode("x"), URIRef(ex * "p"), Literal("v1")))
+    add!(g, Triple(BNode("x"), URIRef(ex * "q"), Literal("v2")))
+    add!(g, Triple(URIRef(ex * "s"), URIRef(ex * "r"), BNode("x")))
+
+    # Object position
+    res = sparql_query(g, "PREFIX : <$ex> SELECT ?s WHERE { ?s :r [ :p \"v1\" ; :q \"v2\" ] }")
+    @test length(res) == 1
+    @test res[1]["s"] == URIRef(ex * "s")
+
+    # Subject position
+    res2 = sparql_query(g, "PREFIX : <$ex> SELECT ?v WHERE { [ :p \"v1\" ] :q ?v }")
+    @test length(res2) == 1
+    @test res2[1]["v"] == Literal("v2")
+
+    # Standalone property-list subject
+    res3 = sparql_query(g, "PREFIX : <$ex> ASK { [ :p \"v1\" ; :q \"v2\" ] }")
+    @test res3 == true
+
+    # SELECT * does not leak internal anon variables
+    res4 = sparql_query(g, "PREFIX : <$ex> SELECT * WHERE { ?s :r [ :p ?v ] }")
+    @test length(res4) == 1
+    @test sort(collect(keys(res4[1]))) == ["s", "v"]
+end
+
+@testset "Regression: collections in patterns" begin
+    rdfns = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    g = RDFGraph()
+    ex = "http://ex.org/"
+    b1 = BNode(); b2 = BNode()
+    add!(g, Triple(URIRef(ex * "s"), URIRef(ex * "list"), b1))
+    add!(g, Triple(b1, URIRef(rdfns * "first"), Literal(1)))
+    add!(g, Triple(b1, URIRef(rdfns * "rest"), b2))
+    add!(g, Triple(b2, URIRef(rdfns * "first"), Literal(2)))
+    add!(g, Triple(b2, URIRef(rdfns * "rest"), URIRef(rdfns * "nil")))
+
+    res = sparql_query(g, "PREFIX : <$ex> SELECT ?s WHERE { ?s :list ( 1 2 ) }")
+    @test length(res) == 1
+    @test res[1]["s"] == URIRef(ex * "s")
+
+    # Empty collection is rdf:nil
+    q = RDFLib.sparql_parse("PREFIX : <$ex> SELECT ?s WHERE { ?s :list () }")
+    pat = first(p for p in q.patterns if p isa RDFLib.PatTriple)
+    @test pat.object == URIRef(rdfns * "nil")
+end
+
+# Fix 9: trailing VALUES clause + EOF enforcement
+@testset "Regression: trailing VALUES clause" begin
+    g = RDFGraph()
+    ex = "http://ex.org/"
+    add!(g, Triple(URIRef(ex * "a"), URIRef(ex * "p"), Literal("1")))
+    add!(g, Triple(URIRef(ex * "b"), URIRef(ex * "p"), Literal("2")))
+    res = sparql_query(g, "PREFIX : <$ex> SELECT ?s ?v WHERE { ?s :p ?v } VALUES ?s { :a }")
+    @test length(res) == 1
+    @test res[1]["s"] == URIRef(ex * "a")
+end
+
+@testset "Regression: trailing garbage is a parse error" begin
+    @test_throws Exception RDFLib.sparql_parse("SELECT ?s WHERE { ?s ?p ?o } garbage here")
+    @test_throws Exception RDFLib.sparql_parse("SELECT ?s WHERE { ?s ?p ?o } } }")
+    @test_throws Exception RDFLib.sparql_parse_update("CLEAR ALL nonsense")
+end
+
+# Fix 10: GROUP BY robustness
+@testset "Regression: GROUP BY builtin and alias" begin
+    # Bare builtin without parens-wrapping
+    q = RDFLib.sparql_parse("SELECT (COUNT(*) AS ?c) WHERE { ?s <http://ex.org/n> ?n } GROUP BY STRLEN(?n)")
+    @test length(q.group_by) == 1
+    @test q.group_by[1] isa RDFLib.ExprFunctionCall
+
+    # (expr AS ?v) keeps the alias bound
+    g = RDFGraph()
+    ex = "http://ex.org/"
+    add!(g, Triple(URIRef(ex * "a"), URIRef(ex * "n"), Literal("ab")))
+    add!(g, Triple(URIRef(ex * "b"), URIRef(ex * "n"), Literal("cd")))
+    add!(g, Triple(URIRef(ex * "c"), URIRef(ex * "n"), Literal("xyz")))
+    res = sparql_query(g, "PREFIX : <$ex> SELECT ?len (COUNT(?s) AS ?c) WHERE { ?s :n ?n } GROUP BY (STRLEN(?n) AS ?len)")
+    @test length(res) == 2
+    @test all(haskey(r, "len") for r in res)
+    by_len = Dict(RDFLib._ast_to_numeric(r["len"]) => RDFLib._ast_to_numeric(r["c"]) for r in res)
+    @test by_len[2] == 2
+    @test by_len[3] == 1
+end
+
+# Fix 11: string escapes
+@testset "Regression: string escapes" begin
+    q = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> \"a\\u00e9b\" }")
+    pat = first(p for p in q.patterns if p isa RDFLib.PatTriple)
+    @test pat.object.lexical == "aéb"
+
+    q2 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> \"x\\U0001F600y\" }")
+    pat2 = first(p for p in q2.patterns if p isa RDFLib.PatTriple)
+    @test pat2.object.lexical == "x😀y"
+
+    q3 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> \"a\\bb\\fc\" }")
+    pat3 = first(p for p in q3.patterns if p isa RDFLib.PatTriple)
+    @test pat3.object.lexical == "a\bb\fc"
+
+    # Surrogates rejected
+    @test_throws Exception RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> \"\\uD800\" }")
+
+    # Long single-quoted strings
+    q4 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s <http://ex.org/p> '''multi\nline''' }")
+    pat4 = first(p for p in q4.patterns if p isa RDFLib.PatTriple)
+    @test pat4.object.lexical == "multi\nline"
+end
+
+# Fix 12: direct subselect with single braces
+@testset "Regression: direct subselect" begin
+    q = RDFLib.sparql_parse("SELECT ?s WHERE { SELECT ?s WHERE { ?s ?p ?o } LIMIT 5 }")
+    @test any(p -> p isa RDFLib.PatSubquery, q.patterns)
+
+    g = RDFGraph()
+    add!(g, Triple(URIRef("http://ex.org/s"), URIRef("http://ex.org/p"), Literal("v")))
+    res = sparql_query(g, "SELECT ?s WHERE { SELECT ?s WHERE { ?s ?p ?o } }")
+    @test length(res) == 1
+end
+
+# Fix 13: negated property sets with inverse members and `a`
+@testset "Regression: negated property sets" begin
+    q = RDFLib.sparql_parse("PREFIX : <http://ex.org/> SELECT ?s WHERE { ?s !(:p|^:q) ?o }")
+    pat = first(p for p in q.patterns if p isa RDFLib.PatTriple)
+    @test pat.predicate isa RDFLib.PathNegatedSet
+    @test pat.predicate.uris == [URIRef("http://ex.org/p")]
+    @test pat.predicate.inverse == [URIRef("http://ex.org/q")]
+
+    q2 = RDFLib.sparql_parse("PREFIX : <http://ex.org/> SELECT ?s WHERE { ?s !^:p ?o }")
+    pat2 = first(p for p in q2.patterns if p isa RDFLib.PatTriple)
+    @test isempty(pat2.predicate.uris)
+    @test pat2.predicate.inverse == [URIRef("http://ex.org/p")]
+
+    q3 = RDFLib.sparql_parse("SELECT ?s WHERE { ?s !a ?o }")
+    pat3 = first(p for p in q3.patterns if p isa RDFLib.PatTriple)
+    @test pat3.predicate.uris == [URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")]
+
+    # Eval: !^:q matches only reverse edges with predicate != q
+    g = RDFGraph()
+    ex = "http://ex.org/"
+    add!(g, Triple(URIRef(ex * "a"), URIRef(ex * "p"), URIRef(ex * "b")))
+    add!(g, Triple(URIRef(ex * "c"), URIRef(ex * "q"), URIRef(ex * "d")))
+    res = sparql_query(g, "PREFIX : <$ex> SELECT ?x ?y WHERE { ?x !^:q ?y }")
+    @test length(res) == 1
+    @test res[1]["x"] == URIRef(ex * "b") && res[1]["y"] == URIRef(ex * "a")
+
+    # Eval: !(:nope|^:q) — forward edges (pred != nope) plus inverse edges (pred != q)
+    res2 = sparql_query(g, "PREFIX : <$ex> SELECT ?x ?y WHERE { ?x !(:nope|^:q) ?y }")
+    pairs = Set((r["x"], r["y"]) for r in res2)
+    @test (URIRef(ex * "a"), URIRef(ex * "b")) in pairs   # forward :p
+    @test (URIRef(ex * "c"), URIRef(ex * "d")) in pairs   # forward :q (not excluded forward)
+    @test (URIRef(ex * "b"), URIRef(ex * "a")) in pairs   # inverse :p
+    @test !((URIRef(ex * "d"), URIRef(ex * "c")) in pairs) # inverse :q excluded
+end
+
+# Fix 14: UPDATE graph management
+@testset "Regression: UPDATE graph management parse" begin
+    op = RDFLib.sparql_parse_update("COPY DEFAULT TO <http://ex.org/g>")
+    @test op isa RDFLib.UpdateGraphOp
+    @test op.op == :copy && op.source === :default && op.target == URIRef("http://ex.org/g")
+
+    op2 = RDFLib.sparql_parse_update("MOVE SILENT GRAPH <http://ex.org/g1> TO GRAPH <http://ex.org/g2>")
+    @test op2.op == :move && op2.silent
+    @test op2.source == URIRef("http://ex.org/g1") && op2.target == URIRef("http://ex.org/g2")
+
+    op3 = RDFLib.sparql_parse_update("ADD <http://ex.org/g1> TO DEFAULT")
+    @test op3.op == :add && op3.target === :default
+
+    op4 = RDFLib.sparql_parse_update("CREATE SILENT GRAPH <http://ex.org/g>")
+    @test op4.op == :create && op4.silent && op4.target == URIRef("http://ex.org/g")
+
+    op5 = RDFLib.sparql_parse_update("CLEAR GRAPH <http://ex.org/g>")
+    @test op5.op == :clear && op5.target == URIRef("http://ex.org/g")
+
+    op6 = RDFLib.sparql_parse_update("DROP NAMED")
+    @test op6.op == :drop && op6.target === :named
+
+    # WITH / USING parse without error
+    op7 = RDFLib.sparql_parse_update("""
+        WITH <http://ex.org/g>
+        DELETE { ?s <http://ex.org/old> ?o }
+        INSERT { ?s <http://ex.org/new> ?o }
+        WHERE { ?s <http://ex.org/old> ?o }
+    """)
+    @test op7 isa RDFLib._SPARQLModify
+    @test op7.with_graph == URIRef("http://ex.org/g")
+
+    op8 = RDFLib.sparql_parse_update("""
+        DELETE { ?s ?p ?o }
+        USING <http://ex.org/g> USING NAMED <http://ex.org/h>
+        WHERE { ?s ?p ?o }
+    """)
+    @test op8 isa RDFLib._SPARQLModify
+end
+
+@testset "Regression: UPDATE graph management eval" begin
+    ex = "http://ex.org/"
+    # Plain RDFGraph: CREATE/DROP GRAPH throw unless SILENT; CLEAR DEFAULT works
+    g = RDFGraph()
+    add!(g, Triple(URIRef(ex * "s"), URIRef(ex * "p"), Literal("v")))
+    @test_throws Exception sparql_update(g, "CREATE GRAPH <http://ex.org/g>")
+    @test_throws Exception sparql_update(g, "DROP GRAPH <http://ex.org/g>")
+    sparql_update(g, "DROP SILENT GRAPH <http://ex.org/g>")  # silent: no-op
+    @test length(g) == 1
+    sparql_update(g, "CLEAR DEFAULT")
+    @test length(g) == 0
+
+    # Dataset: full graph management
+    ds = RDFLib.Dataset()
+    g1 = URIRef(ex * "g1")
+    g2 = URIRef(ex * "g2")
+    add!(ds, Triple(URIRef(ex * "s"), URIRef(ex * "p"), Literal("default")))
+    add!(ds, Triple(URIRef(ex * "s1"), URIRef(ex * "p"), Literal("one")), g1)
+
+    sparql_update(ds, "CREATE GRAPH <$(ex)g3>")
+    @test haskey(ds.named_graphs, URIRef(ex * "g3"))
+    @test_throws Exception sparql_update(ds, "CREATE GRAPH <$(ex)g3>")
+    sparql_update(ds, "CREATE SILENT GRAPH <$(ex)g3>")  # no error
+
+    sparql_update(ds, "COPY <$(ex)g1> TO <$(ex)g2>")
+    @test length(ds.named_graphs[g2]) == 1
+    @test length(ds.named_graphs[g1]) == 1
+
+    sparql_update(ds, "ADD DEFAULT TO <$(ex)g2>")
+    @test length(ds.named_graphs[g2]) == 2
+
+    sparql_update(ds, "MOVE <$(ex)g1> TO <$(ex)g4>")
+    @test !haskey(ds.named_graphs, g1)
+    @test length(ds.named_graphs[URIRef(ex * "g4")]) == 1
+
+    sparql_update(ds, "CLEAR GRAPH <$(ex)g2>")
+    @test length(ds.named_graphs[g2]) == 0
+
+    sparql_update(ds, "DROP GRAPH <$(ex)g2>")
+    @test !haskey(ds.named_graphs, g2)
+
+    sparql_update(ds, "CLEAR ALL")
+    @test length(ds.default_graph) == 0
+
+    # WITH applies the modify to a named graph
+    ds2 = RDFLib.Dataset()
+    add!(ds2, Triple(URIRef(ex * "s"), URIRef(ex * "old"), Literal("v")), g1)
+    sparql_update(ds2, "WITH <$(ex)g1> DELETE { ?s <$(ex)old> ?o } INSERT { ?s <$(ex)new> ?o } WHERE { ?s <$(ex)old> ?o }")
+    gg = ds2.named_graphs[g1]
+    @test length(gg) == 1
+    @test first(triples(gg)).predicate == URIRef(ex * "new")
+    @test length(ds2.default_graph) == 0
+end
+
+# Fix 15: BASE applied to relative IRIs
+@testset "Regression: BASE resolution" begin
+    q = RDFLib.sparql_parse("BASE <http://example.org/base/> SELECT ?s WHERE { ?s <rel> <#frag> }")
+    pat = first(p for p in q.patterns if p isa RDFLib.PatTriple)
+    @test pat.predicate isa RDFLib.PathURI || pat.predicate isa URIRef
+    pred_uri = pat.predicate isa RDFLib.PathURI ? pat.predicate.uri : pat.predicate
+    @test pred_uri == URIRef("http://example.org/base/rel")
+    @test pat.object == URIRef("http://example.org/base/#frag")
+
+    # Absolute IRIs unaffected
+    q2 = RDFLib.sparql_parse("BASE <http://example.org/> SELECT ?s WHERE { ?s <http://other.org/p> ?o }")
+    pat2 = first(p for p in q2.patterns if p isa RDFLib.PatTriple)
+    pred2 = pat2.predicate isa RDFLib.PathURI ? pat2.predicate.uri : pat2.predicate
+    @test pred2 == URIRef("http://other.org/p")
+
+    # PREFIX IRIs resolve against BASE
+    q3 = RDFLib.sparql_parse("BASE <http://example.org/ns/> PREFIX : <vocab#> SELECT ?s WHERE { ?s :p ?o }")
+    @test q3.prefixes[""] == "http://example.org/ns/vocab#"
 end
 
 end # outer testset

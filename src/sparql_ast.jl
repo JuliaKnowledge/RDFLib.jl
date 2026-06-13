@@ -60,7 +60,9 @@ DAY, HOURS, MINUTES, SECONDS, TIMEZONE, TZ, MD5, SHA1, SHA256, SHA384,
 SHA512, ENCODE_FOR_URI, STRUUID, UUID, TRIPLE, SUBJECT, PREDICATE, OBJECT,
 isTRIPLE, sameTerm, ADJUST, plus GeoSPARQL functions."""
 struct ExprFunctionCall <: SparqlExpr
-    name::String       # uppercase canonical name
+    name::String       # uppercase canonical name for bare builtins;
+                       # full IRI (original case) for IRI-named functions,
+                       # e.g. "http://www.w3.org/2001/XMLSchema#integer"
     args::Vector{SparqlExpr}
 end
 
@@ -202,9 +204,14 @@ struct PathZeroOrOne <: PathExpr
     path::PathExpr
 end
 
+"""Negated property set: `!(:p|^:q|...)`.
+`uris` holds forward members, `inverse` holds inverse (`^`-prefixed) members."""
 struct PathNegatedSet <: PathExpr
     uris::Vector{URIRef}
+    inverse::Vector{URIRef}
 end
+
+PathNegatedSet(uris::Vector{URIRef}) = PathNegatedSet(uris, URIRef[])
 
 # ─── Select expression (computed column) ──────────────────────────
 
@@ -289,5 +296,22 @@ struct UpdateLoad
     target::Union{String, Nothing}
 end
 
+"""
+Graph-management UPDATE operation (SPARQL 1.1 Update §3.2):
+COPY / MOVE / ADD / CREATE / DROP / CLEAR.
+
+- `op`     — one of `:copy`, `:move`, `:add`, `:create`, `:drop`, `:clear`
+- `silent` — SILENT flag
+- `source` — for COPY/MOVE/ADD: `:default` or a graph `URIRef`; otherwise `nothing`
+- `target` — destination (COPY/MOVE/ADD) or operand (CREATE/DROP/CLEAR):
+             `:default`, `:named`, `:all`, or a graph `URIRef`
+"""
+struct UpdateGraphOp
+    op::Symbol
+    silent::Bool
+    source::Union{URIRef, Symbol, Nothing}
+    target::Union{URIRef, Symbol, Nothing}
+end
+
 const SparqlUpdate = Union{UpdateInsertData, UpdateDeleteData, UpdateModify,
-                           UpdateClear, UpdateLoad}
+                           UpdateClear, UpdateLoad, UpdateGraphOp}
