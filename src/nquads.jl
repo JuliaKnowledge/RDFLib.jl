@@ -39,39 +39,20 @@ end
 
 # ─── Parsing ────────────────────────────────────────────────────────
 
-const _NQ_LINE = r"^\s*((?:<[^>]*>)|(?:_:[A-Za-z0-9_]+))\s+((?:<[^>]*>))\s+((?:<[^>]*>)|(?:_:[A-Za-z0-9_]+)|(?:\"(?:[^\"\\]|\\.)*\"(?:@[a-zA-Z\-]+|\^\^<[^>]*>)?))\s*(?:((?:<[^>]*>)|(?:_:[A-Za-z0-9_]+))\s*)?\.\s*$"
-
 """
     parse_nquads!(ds::Dataset, io::IO) -> Dataset
 
-Parse N-Quads from an IO stream into a dataset.
+Parse N-Quads from an IO stream into a dataset. Graph labels may be IRIs
+or blank nodes. Malformed lines raise an `ArgumentError` reporting the
+line number.
 """
 function parse_nquads!(ds::Dataset, io::IO)
+    lineno = 0
     for line in eachline(io)
-        stripped = strip(line)
-        isempty(stripped) && continue
-        startswith(stripped, '#') && continue
-
-        m = match(_NQ_LINE, stripped)
-        if isnothing(m)
-            @warn "Skipping invalid N-Quads line: $stripped"
-            continue
-        end
-
-        subj = _parse_nt_node(m.captures[1])
-        pred_match = match(_NT_URIREF, m.captures[2])
-        pred = URIRef(pred_match.captures[1])
-        obj = _parse_nt_object(m.captures[3])
-
-        # 4th component: graph name (optional)
-        graph_name = nothing
-        if !isnothing(m.captures[4])
-            graph_node = _parse_nt_node(m.captures[4])
-            if graph_node isa URIRef
-                graph_name = graph_node
-            end
-        end
-
+        lineno += 1
+        st = _nt_parse_statement(line, lineno, "N-Quads"; allow_graph=true)
+        isnothing(st) && continue
+        subj, pred, obj, graph_name = st
         add!(ds, Triple(subj, pred, obj), graph_name)
     end
     ds

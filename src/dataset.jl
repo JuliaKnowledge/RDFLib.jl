@@ -1,18 +1,24 @@
 # ─── Quad ───────────────────────────────────────────────────────────
 
+# A named graph can be labelled by an IRI or a blank node (per RDF 1.1
+# datasets and the N-Quads grammar). `Nothing` denotes the default graph.
+const GraphName = Union{URIRef, BNode}
+const OptGraphName = Union{URIRef, BNode, Nothing}
+
 """
     Quad(subject, predicate, object, graph)
 
-An RDF quad — a triple with a graph context.
+An RDF quad — a triple with a graph context. The graph label may be a
+`URIRef`, a `BNode`, or `nothing` for the default graph.
 """
 struct Quad
     subject::Node
     predicate::URIRef
     object::Identifier
-    graph::Union{URIRef, Nothing}  # nothing = default graph
+    graph::OptGraphName  # nothing = default graph
 end
 
-Quad(t::Triple, g::Union{URIRef, Nothing}=nothing) = Quad(t.subject, t.predicate, t.object, g)
+Quad(t::Triple, g::OptGraphName=nothing) = Quad(t.subject, t.predicate, t.object, g)
 Triple(q::Quad) = Triple(q.subject, q.predicate, q.object)
 
 Base.show(io::IO, q::Quad) = print(io, "(", q.subject, ", ", q.predicate, ", ", q.object, ", ", something(q.graph, "default"), ")")
@@ -41,27 +47,28 @@ end
 """
 mutable struct Dataset
     default_graph::RDFGraph
-    named_graphs::Dict{URIRef, RDFGraph}
+    named_graphs::Dict{GraphName, RDFGraph}
     namespace_manager::NamespaceManager
 end
 
 function Dataset()
     nsm = NamespaceManager()
-    Dataset(RDFGraph(), Dict{URIRef, RDFGraph}(), nsm)
+    Dataset(RDFGraph(), Dict{GraphName, RDFGraph}(), nsm)
 end
 
 """
     add!(ds::Dataset, triple, graph_name=nothing)
 
 Add a triple to the default graph (graph_name=nothing) or a named graph.
+Graph names may be `URIRef`s or `BNode`s.
 """
-function add!(ds::Dataset, t::Triple, graph_name::Union{URIRef, Nothing}=nothing)
+function add!(ds::Dataset, t::Triple, graph_name::OptGraphName=nothing)
     g = _get_or_create_graph!(ds, graph_name)
     add!(g, t)
     ds
 end
 
-function add!(ds::Dataset, s::Node, p::URIRef, o::Identifier, graph_name::Union{URIRef, Nothing}=nothing)
+function add!(ds::Dataset, s::Node, p::URIRef, o::Identifier, graph_name::OptGraphName=nothing)
     add!(ds, Triple(s, p, o), graph_name)
 end
 
@@ -70,7 +77,7 @@ end
 
 Remove matching triples from a specific graph or all graphs if graph_name is nothing.
 """
-function remove!(ds::Dataset, pattern::TriplePattern, graph_name::Union{URIRef, Nothing}=nothing)
+function remove!(ds::Dataset, pattern::TriplePattern, graph_name::OptGraphName=nothing)
     if isnothing(graph_name)
         # Remove from all graphs
         remove!(ds.default_graph, pattern)
@@ -89,25 +96,25 @@ end
 
 Get the default graph (name=nothing) or a named graph.
 """
-function get_graph(ds::Dataset, name::Union{URIRef, Nothing}=nothing)
+function get_graph(ds::Dataset, name::OptGraphName=nothing)
     isnothing(name) ? ds.default_graph : get(ds.named_graphs, name, nothing)
 end
 
 """
-    add_graph(ds::Dataset, name::URIRef) -> RDFGraph
+    add_graph(ds::Dataset, name) -> RDFGraph
 
-Add a named graph and return it.
+Add a named graph (named by a `URIRef` or `BNode`) and return it.
 """
-function add_graph(ds::Dataset, name::URIRef)
+function add_graph(ds::Dataset, name::GraphName)
     _get_or_create_graph!(ds, name)
 end
 
 """
-    remove_graph(ds::Dataset, name::URIRef)
+    remove_graph(ds::Dataset, name)
 
 Remove a named graph.
 """
-function remove_graph(ds::Dataset, name::URIRef)
+function remove_graph(ds::Dataset, name::GraphName)
     delete!(ds.named_graphs, name)
     ds
 end
@@ -118,7 +125,7 @@ end
 Iterate over all (name, graph) pairs. Default graph has name=nothing.
 """
 function graphs(ds::Dataset)
-    Channel{Tuple{Union{URIRef, Nothing}, RDFGraph}}() do ch
+    Channel{Tuple{OptGraphName, RDFGraph}}() do ch
         put!(ch, (nothing, ds.default_graph))
         for (name, g) in ds.named_graphs
             put!(ch, (name, g))
@@ -132,7 +139,7 @@ end
 Iterate over all graph identifiers (including nothing for default graph).
 """
 function contexts(ds::Dataset)
-    Channel{Union{URIRef, Nothing}}() do ch
+    Channel{OptGraphName}() do ch
         put!(ch, nothing)
         for name in keys(ds.named_graphs)
             put!(ch, name)
@@ -163,7 +170,7 @@ end
 
 Iterate quads matching a pattern (s, p, o, graph_name).
 """
-function quads(ds::Dataset, pattern::Tuple{Union{Node,Nothing}, Union{URIRef,Nothing}, Union{Identifier,Nothing}, Union{URIRef,Nothing}})
+function quads(ds::Dataset, pattern::Tuple{Union{Node,Nothing}, Union{URIRef,Nothing}, Union{Identifier,Nothing}, OptGraphName})
     s, p, o, gname = pattern
     triple_pattern = (s, p, o)
     Channel{Quad}() do ch
@@ -225,7 +232,7 @@ function _get_or_create_graph!(ds::Dataset, name::Nothing)
     ds.default_graph
 end
 
-function _get_or_create_graph!(ds::Dataset, name::URIRef)
+function _get_or_create_graph!(ds::Dataset, name::GraphName)
     if !haskey(ds.named_graphs, name)
         ds.named_graphs[name] = RDFGraph(identifier=name)
     end

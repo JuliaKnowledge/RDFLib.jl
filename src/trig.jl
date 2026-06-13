@@ -29,8 +29,8 @@ function serialize_trig(io::IO, ds::Dataset)
         write(io, "}\n")
     end
 
-    # Write named graphs
-    for (name, g) in sort(collect(ds.named_graphs), by=p -> p.first.value)
+    # Write named graphs (names may be URIRefs or BNodes)
+    for (name, g) in sort(collect(ds.named_graphs), by=p -> string(first(p)))
         length(g) == 0 && continue
         write(io, "\n")
         write(io, _trig_format_uri(ds.namespace_manager, name))
@@ -101,6 +101,9 @@ function _trig_format_uri(nsm::NamespaceManager, u::URIRef)
         return n3(u)
     end
 end
+
+# Blank-node graph labels serialize as _:label
+_trig_format_uri(nsm::NamespaceManager, b::BNode) = n3(b)
 
 function _trig_format_term(nsm::NamespaceManager, u::URIRef)
     _trig_format_uri(nsm, u)
@@ -203,7 +206,7 @@ function _trig_parse_document!(p::_TriGParser)
             graph_name = _trig_parse_term!(p)
             _trig_skip_ws!(p)
             if _trig_peek(p) == '{'
-                _trig_parse_graph_block!(p, graph_name isa URIRef ? graph_name : nothing)
+                _trig_parse_graph_block!(p, graph_name isa GraphName ? graph_name : nothing)
             else
                 # Bare triples in default graph (no GRAPH keyword, no braces)
                 _trig_parse_triples_in_graph!(p, nothing, graph_name)
@@ -217,12 +220,12 @@ function _trig_parse_named_graph!(p::_TriGParser)
     # Consume "GRAPH"
     for _ in 1:5; p.pos = nextind(p.input, p.pos); end
     _trig_skip_ws!(p)
-    graph_name = _trig_parse_term!(p)::URIRef
+    graph_name = _trig_parse_term!(p)::GraphName
     _trig_skip_ws!(p)
     _trig_parse_graph_block!(p, graph_name)
 end
 
-function _trig_parse_graph_block!(p::_TriGParser, graph_name::Union{URIRef, Nothing})
+function _trig_parse_graph_block!(p::_TriGParser, graph_name::OptGraphName)
     _trig_consume!(p, '{')
     _trig_skip_ws!(p)
 
@@ -236,7 +239,7 @@ function _trig_parse_graph_block!(p::_TriGParser, graph_name::Union{URIRef, Noth
     _trig_consume!(p, '}')
 end
 
-function _trig_parse_triples_in_graph!(p::_TriGParser, graph_name::Union{URIRef, Nothing}, first_subject)
+function _trig_parse_triples_in_graph!(p::_TriGParser, graph_name::OptGraphName, first_subject)
     # Use the Turtle parser infrastructure to parse triples
     # Create a temporary graph
     temp_g = RDFGraph()
@@ -319,8 +322,23 @@ function _trig_parse_triples_in_graph!(p::_TriGParser, graph_name::Union{URIRef,
 
     # Add parsed triples to the appropriate graph in the dataset
     for t in temp_g
-        add!(p.dataset, t, graph_name)
+        add!(p.dataset, _trig_fix_dirlang(t), graph_name)
     end
+end
+
+# SPARQL 1.2 directional literals ("x"@en--ltr) are scanned by the Turtle
+# lang-tag reader as a single language tag "en--ltr". Split the base
+# direction back out into the Literal `direction` field.
+function _trig_fix_dirlang(t::Triple)
+    o = t.object
+    if o isa Literal && !isnothing(o.language)
+        m = match(r"^(.+?)--(ltr|rtl)$", o.language)
+        if !isnothing(m)
+            return Triple(t.subject, t.predicate,
+                          Literal(o.lexical, lang=m.captures[1], direction=m.captures[2]))
+        end
+    end
+    t
 end
 
 # ─── TriG parser helpers ───────────────────────────────────────────
@@ -441,6 +459,22 @@ function _trig_parse_term!(p::_TriGParser)
     c = _trig_peek(p)
     if c == '<'
         return URIRef(_trig_read_iriref!(p))
+    elseif c == '_' && _trig_at(p, "_:")
+        # Blank node label (e.g. a blank-node-named graph)
+        p.pos = nextind(p.input, p.pos)  # '_'
+        p.pos = nextind(p.input, p.pos)  # ':'
+        start = p.pos
+        while p.pos <= lastindex(p.input)
+            ch = p.input[p.pos]
+            (_nt_is_pn_chars(ch) || ch == '.') || break
+            p.pos = nextind(p.input, p.pos)
+        end
+        # A label cannot end with '.'
+        while p.pos > start && p.input[prevind(p.input, p.pos)] == '.'
+            p.pos = prevind(p.input, p.pos)
+        end
+        p.pos == start && throw(ArgumentError("TriG: empty blank node label at pos $(p.pos)"))
+        return BNode(p.input[start:prevind(p.input, p.pos)])
     else
         # Prefixed name
         buf = IOBuffer()

@@ -102,4 +102,20 @@ using RDFLib
             @test t in g2
         end
     end
+
+    @testset "invalid lines throw instead of being skipped" begin
+        # A malformed non-blank, non-comment line is a parse error, not data loss
+        @test_throws ArgumentError parse_rdf("not a valid triple line", NTriplesFormat())
+        @test_throws ArgumentError parse_rdf("<http://example.org/s> <http://example.org/p> .", NTriplesFormat())
+
+        # Error message carries the (1-based) line number
+        err = try
+            parse_rdf("# fine\n<http://example.org/s> <http://example.org/p> \"ok\" .\nbroken line here\n", NTriplesFormat())
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test contains(err.msg, "line 3")
+    end
 end

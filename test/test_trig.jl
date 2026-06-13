@@ -91,4 +91,58 @@ using RDFLib
         @test length(get_graph(ds, EX("g1"))) == 1
         @test length(get_graph(ds, EX("g2"))) == 1
     end
+
+    @testset "blank node graph labels" begin
+        trig = """
+        @prefix ex: <http://example.org/> .
+
+        _:g1 {
+            ex:s ex:p "in bnode graph" .
+        }
+        """
+        ds = parse_trig(trig)
+        g = get_graph(ds, BNode("g1"))
+        @test !isnothing(g)
+        @test length(g) == 1
+        @test first(objects(g, EX("s"), EX("p"))) == Literal("in bnode graph")
+
+        # serialization emits the _: label and round-trips
+        out = serialize_trig(ds)
+        @test contains(out, "_:g1")
+        ds2 = parse_trig(out)
+        g2 = get_graph(ds2, BNode("g1"))
+        @test !isnothing(g2)
+        @test length(g2) == 1
+    end
+
+    @testset "GRAPH keyword with blank node label" begin
+        trig = """
+        @prefix ex: <http://example.org/> .
+
+        GRAPH _:g {
+            ex:s ex:p "x" .
+        }
+        """
+        ds = parse_trig(trig)
+        g = get_graph(ds, BNode("g"))
+        @test !isnothing(g)
+        @test length(g) == 1
+    end
+
+    @testset "directional literals round-trip" begin
+        ds = Dataset()
+        bind!(ds, "ex", EX)
+        add!(ds, EX("s"), EX("p"), Literal("hello", lang="en", direction="ltr"), EX("g1"))
+        add!(ds, EX("s"), EX("q"), Literal("שלום", lang="he", direction="rtl"))
+
+        trig = serialize_trig(ds)
+        @test contains(trig, "@en--ltr")
+        @test contains(trig, "@he--rtl")
+
+        ds2 = parse_trig(trig)
+        obj1 = first(objects(get_graph(ds2, EX("g1")), EX("s"), EX("p")))
+        @test obj1 == Literal("hello", lang="en", direction="ltr")
+        obj2 = first(objects(get_graph(ds2), EX("s"), EX("q")))
+        @test obj2 == Literal("שלום", lang="he", direction="rtl")
+    end
 end
