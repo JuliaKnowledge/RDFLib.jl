@@ -24,6 +24,11 @@ Each term (URI, literal, blank node) is stored once in a dictionary and referenc
 by a compact 8-byte integer ID. Triples are stored as 24-byte keys in three sorted
 indices, enabling efficient prefix-based range scans for pattern matching.
 
+`map_size` (bytes) sets the maximum size of the memory map and may exceed
+4 GiB (it is passed to LMDB as a `size_t`). The in-memory term↔id caches
+are bounded by `_LMDB_TERM_CACHE_MAX` entries and fully evicted when the
+cap is reached.
+
 # Examples
 ```julia
 store = LMDBStore(mktempdir())
@@ -53,11 +58,34 @@ const _LMDB_READONLY = Cuint(0x20000)  # MDB_RDONLY
 const _LMDB_KEY_BYTES = 24  # 3 × 8 bytes (UInt64 big-endian)
 const _LMDB_EMPTY_VAL = UInt8[0]
 
+# Soft cap on the in-memory term↔id caches (number of entries). When the
+# cap is reached both caches are cleared (simple full eviction — terms are
+# re-cached from LMDB on demand). `add_bulk!` may temporarily exceed the
+# cap within a single batch because it requires all of the batch's terms
+# to stay cached between its phases; the cap is re-applied on the next
+# cache insert. A `Ref` so it can be tuned (and tested) at runtime.
+const _LMDB_TERM_CACHE_MAX = Ref(1_000_000)
+
+# Insert into both caches, applying the size cap first.
+function _lmdb_cache_put!(store, term::Identifier, id::UInt64)
+    if length(store._term2id_cache) >= _LMDB_TERM_CACHE_MAX[]
+        empty!(store._term2id_cache)
+        empty!(store._id2term_cache)
+    end
+    store._term2id_cache[term] = id
+    store._id2term_cache[id] = term
+    nothing
+end
+
 function LMDBStore(path::AbstractString; map_size::Integer=1_073_741_824)
+    map_size > 0 || throw(ArgumentError("map_size must be positive"))
     mkpath(String(path))
     env = LMDB.create()
     env[:DBs] = 8
-    env[:MapSize] = Cuint(map_size)
+    # mdb_env_set_mapsize takes a size_t, but LMDB.jl's setindex! only
+    # accepts Cuint, which throws InexactError for map sizes ≥ 4 GiB.
+    # Call the C API wrapper directly with the correct integer type.
+    LMDB.LibLMDB.mdb_env_set_mapsize(env.handle, Csize_t(map_size))
     LMDB.open(env, String(path))
     store = LMDBStore(env, String(path), nothing, nothing, nothing, nothing, nothing, nothing,
                       UInt64(1), 0, nothing, Dict{Identifier,UInt64}(), Dict{UInt64,Identifier}())
@@ -200,7 +228,9 @@ function _lmdb_term_to_id!(store::LMDBStore, txn::LMDB.Transaction, term::Identi
     !isnothing(cached) && return cached
 
     term_bytes = _lmdb_serialize_term(term)
-    # Try to find existing in LMDB
+    # Try to find existing in LMDB. Note: LMDB.jl's txn-level `get` has no
+    # non-throwing variant (it throws MDB_NOTFOUND), so try/catch is the
+    # only available existence check.
     existing_id = try
         val = LMDB.get(txn, store._db_term2id, term_bytes, Vector{UInt8})
         ntoh(reinterpret(UInt64, val)[1])
@@ -208,8 +238,7 @@ function _lmdb_term_to_id!(store::LMDBStore, txn::LMDB.Transaction, term::Identi
         nothing
     end
     if !isnothing(existing_id)
-        store._term2id_cache[term] = existing_id
-        store._id2term_cache[existing_id] = term
+        _lmdb_cache_put!(store, term, existing_id)
         return existing_id
     end
 
@@ -219,8 +248,7 @@ function _lmdb_term_to_id!(store::LMDBStore, txn::LMDB.Transaction, term::Identi
     id_bytes = reinterpret(UInt8, [hton(id)])
     LMDB.put!(txn, store._db_term2id, term_bytes, id_bytes)
     LMDB.put!(txn, store._db_id2term, id_bytes, term_bytes)
-    store._term2id_cache[term] = id
-    store._id2term_cache[id] = term
+    _lmdb_cache_put!(store, term, id)
     id
 end
 
@@ -232,8 +260,7 @@ function _lmdb_term_to_id(store::LMDBStore, txn::LMDB.Transaction, term::Identif
     try
         val = LMDB.get(txn, store._db_term2id, term_bytes, Vector{UInt8})
         id = ntoh(reinterpret(UInt64, val)[1])
-        store._term2id_cache[term] = id
-        store._id2term_cache[id] = term
+        _lmdb_cache_put!(store, term, id)
         id
     catch
         nothing
@@ -247,8 +274,7 @@ function _lmdb_id_to_term(store::LMDBStore, txn::LMDB.Transaction, id::UInt64)
     id_bytes = reinterpret(UInt8, [hton(id)])
     data = LMDB.get(txn, store._db_id2term, id_bytes, Vector{UInt8})
     term = _lmdb_deserialize_term(data)
-    store._id2term_cache[id] = term
-    store._term2id_cache[term] = id
+    _lmdb_cache_put!(store, term, id)
     term
 end
 
@@ -533,6 +559,14 @@ function add_bulk!(store::LMDBStore, triples_iter)
     triples_vec = triples_iter isa AbstractVector ? triples_iter : collect(triples_iter)
     isempty(triples_vec) && return 0
     is_empty = store._count == 0
+
+    # Apply the term cache cap up-front: the phases below require every
+    # term of this batch to remain cached, so eviction must not happen
+    # mid-batch (the cap may be temporarily exceeded by one batch's terms).
+    if length(store._term2id_cache) >= _LMDB_TERM_CACHE_MAX[]
+        empty!(store._term2id_cache)
+        empty!(store._id2term_cache)
+    end
 
     # Phase 1: Pre-collect unique terms not already in cache
     new_terms = Dict{Identifier, Vector{UInt8}}()

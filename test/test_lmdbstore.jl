@@ -219,6 +219,45 @@ using RDFLib
             close(store)
         end
 
+        @testset "map_size >= 4 GiB (regression)" begin
+            # Cuint(map_size) used to throw InexactError for sizes ≥ 4 GiB;
+            # map_size is now passed to LMDB as a size_t. The map is virtual
+            # address space, not allocated memory, so this is cheap.
+            store = LMDBStore(joinpath(dir, "bigmap"); map_size=5 * 1024^3)
+            g = RDFGraph(store=store)
+            add!(g, Triple(URIRef("http://ex.org/s"), URIRef("http://ex.org/p"), Literal("big")))
+            @test length(g) == 1
+            r = triples(g, (nothing, nothing, nothing))
+            @test length(r) == 1
+            close(store)
+
+            @test_throws ArgumentError LMDBStore(joinpath(dir, "badmap"); map_size=0)
+        end
+
+        @testset "Term cache bounding" begin
+            old_cap = RDFLib._LMDB_TERM_CACHE_MAX[]
+            try
+                RDFLib._LMDB_TERM_CACHE_MAX[] = 8
+                store = LMDBStore(joinpath(dir, "cachebound"))
+                g = RDFGraph(store=store)
+                for i in 1:20
+                    add!(g, Triple(URIRef("http://ex.org/s$i"), URIRef("http://ex.org/p"), Literal("v$i")))
+                end
+                # Cache stays bounded (cap + at most one in-flight insert)
+                @test length(store._term2id_cache) <= 9
+                @test length(store._id2term_cache) <= 9
+                # Data is still complete and correct after evictions
+                @test length(g) == 20
+                r = triples(g, (URIRef("http://ex.org/s7"), nothing, nothing))
+                @test length(r) == 1
+                @test r[1].object == Literal("v7")
+                @test length(triples(g, (nothing, nothing, nothing))) == 20
+                close(store)
+            finally
+                RDFLib._LMDB_TERM_CACHE_MAX[] = old_cap
+            end
+        end
+
         @testset "Dataset with LMDBStore graph" begin
             store = LMDBStore(joinpath(dir, "ds_graph"))
             g = RDFGraph(store=store)

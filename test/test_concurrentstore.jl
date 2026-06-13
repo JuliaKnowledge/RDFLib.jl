@@ -1,7 +1,7 @@
 using Test
 using RDFLib
 
-include(joinpath(@__DIR__, "..", "src", "concurrentstore.jl"))
+# ConcurrentStore is included and exported by the RDFLib module itself.
 
 @testset "ConcurrentStore" begin
     s1 = URIRef("http://example.org/s1")
@@ -49,6 +49,20 @@ include(joinpath(@__DIR__, "..", "src", "concurrentstore.jl"))
         @test length(result) == 2
         result_s1 = collect(triples(store, (s1, nothing, nothing)))
         @test length(result_s1) == 1
+    end
+
+    @testset "triples returns a materialized snapshot" begin
+        store = ConcurrentStore(MemoryStore())
+        add!(store, t1)
+        add!(store, t2)
+        snapshot = triples(store, (nothing, nothing, nothing))
+        # Direct vector — no Channel replay
+        @test snapshot isa Vector{Triple}
+        @test length(snapshot) == 2
+        # Mutating the store after the call does not affect the snapshot
+        remove!(store, (s1, p, o1))
+        @test length(snapshot) == 2
+        @test length(triples(store, (nothing, nothing, nothing))) == 1
     end
 
     @testset "isempty" begin

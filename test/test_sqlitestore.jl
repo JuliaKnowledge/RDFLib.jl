@@ -175,6 +175,101 @@
         @test length(g) == 100
     end
 
+    @testset "add_bulk!" begin
+        store = SQLiteStore()
+        EX = Namespace("http://example.org/")
+        ts = [Triple(EX("s$i"), EX("p"), Literal("v$i")) for i in 1:500]
+        # Include duplicates within the input
+        append!(ts, [Triple(EX("s1"), EX("p"), Literal("v1")),
+                     Triple(EX("s2"), EX("p"), Literal("v2"))])
+        ret = RDFLib.add_bulk!(store, ts)
+        @test ret === store
+        @test length(store) == 500
+
+        # Bulk-adding the same triples again is a no-op (INSERT OR IGNORE)
+        RDFLib.add_bulk!(store, ts)
+        @test length(store) == 500
+
+        # Mixed term types round-trip through the bulk path
+        store2 = SQLiteStore()
+        b = BNode("bulk1")
+        ts2 = [Triple(EX("s"), EX("p"), b),
+               Triple(b, EX("q"), Literal("42", datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))),
+               Triple(EX("s"), RDFS.label, Literal("hi", lang="en"))]
+        RDFLib.add_bulk!(store2, ts2)
+        @test length(store2) == 3
+        got = collect(triples(store2, (nothing, nothing, nothing)))
+        @test Set(got) == Set(ts2)
+        close(store2)
+        close(store)
+    end
+
+    @testset "triples returns materialized vector" begin
+        store = SQLiteStore()
+        EX = Namespace("http://example.org/")
+        add!(store, Triple(EX("s"), EX("p"), Literal("a")))
+        add!(store, Triple(EX("s"), EX("p"), Literal("b")))
+        r = triples(store, (EX("s"), EX("p"), nothing))
+        @test r isa Vector{Triple}
+        @test length(r) == 2
+        close(store)
+    end
+
+    @testset "schema migration drops redundant single-column indexes" begin
+        db_path = tempname() * ".db"
+        try
+            # Simulate a database created by an older version with the
+            # redundant single-column indexes
+            old_store = SQLiteStore(db_path)
+            EX = Namespace("http://example.org/")
+            add!(old_store, Triple(EX("s"), EX("p"), Literal("v")))
+            RDFLib.DBInterface.execute(old_store.db, "CREATE INDEX IF NOT EXISTS idx_s ON triples(subject)")
+            RDFLib.DBInterface.execute(old_store.db, "CREATE INDEX IF NOT EXISTS idx_p ON triples(predicate)")
+            RDFLib.DBInterface.execute(old_store.db, "CREATE INDEX IF NOT EXISTS idx_o ON triples(object)")
+            close(old_store)
+
+            # Re-opening migrates: redundant indexes dropped, composite kept
+            store = SQLiteStore(db_path)
+            result = RDFLib.DBInterface.execute(store.db,
+                "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'")
+            names = Set{String}()
+            for r in result
+                push!(names, String(r.name))
+            end
+            @test "idx_spo" in names
+            @test "idx_pos" in names
+            @test "idx_osp" in names
+            @test !("idx_s" in names)
+            @test !("idx_p" in names)
+            @test !("idx_o" in names)
+            @test length(store) == 1
+            close(store)
+        finally
+            rm(db_path, force=true)
+        end
+    end
+
+    @testset "prepared statement reuse across operations" begin
+        store = SQLiteStore()
+        EX = Namespace("http://example.org/")
+        for i in 1:50
+            add!(store, Triple(EX("s$i"), EX("p"), Literal("v$i")))
+        end
+        # The insert statement is prepared once and reused
+        @test haskey(store._stmts, RDFLib._SQL_INSERT_TRIPLE)
+        n_after_adds = length(store._stmts)
+        for i in 1:50
+            add!(store, Triple(EX("t$i"), EX("p"), Literal("w$i")))
+        end
+        @test length(store._stmts) == n_after_adds  # no new statements prepared
+        @test length(store) == 100
+        remove!(store, (EX("s1"), nothing, nothing))
+        remove!(store, (EX("s2"), nothing, nothing))
+        @test length(store) == 98
+        close(store)
+        @test isempty(store._stmts)
+    end
+
     @testset "SPARQL query" begin
         store = SQLiteStore()
         g = RDFLib.RDFGraph(store=store)

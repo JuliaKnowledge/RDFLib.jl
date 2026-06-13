@@ -111,10 +111,24 @@ triples(g::RDFGraph, pattern::TriplePattern) = triples(g.store, pattern)
 
 """
     triples(g::RDFGraph)
+    triples(g::RDFGraph; subject=nothing, predicate=nothing, object=nothing)
 
-Iterate all triples in the graph.
+Iterate all triples in the graph, or those matching the given keyword
+pattern (omitted keywords act as wildcards). Equivalent to the tuple form
+`triples(g, (subject, predicate, object))`.
+
+# Examples
+```julia
+triples(g)                                            # all triples
+triples(g; predicate=URIRef("http://example.org/p"))  # match predicate
+```
 """
-triples(g::RDFGraph) = triples(g, (nothing, nothing, nothing))
+function triples(g::RDFGraph;
+                 subject::Union{Identifier,Nothing}=nothing,
+                 predicate::Union{Identifier,Nothing}=nothing,
+                 object::Union{Identifier,Nothing}=nothing)
+    triples(g, (subject, predicate, object))
+end
 
 # ─── Convenience accessors (mirror rdflib) ──────────────────────────
 
@@ -178,10 +192,13 @@ Base.length(g::RDFGraph) = length(g.store)
 Base.isempty(g::RDFGraph) = isempty(g.store)
 
 function Base.iterate(g::RDFGraph)
-    # Fast path for MemoryStore: iterate insertion_order directly
+    # Fast path for MemoryStore: iterate insertion_order directly.
+    # The modification counter is snapshotted so that add!/remove! during
+    # iteration raises an error instead of silently skipping/repeating
+    # triples (mirrors Julia's Dict behavior).
     if g.store isa MemoryStore
         isempty(g.store.insertion_order) && return nothing
-        return (g.store.insertion_order[1], (g.store, 2))
+        return (g.store.insertion_order[1], (g.store, 2, g.store._mod_count))
     end
     if g.store isa EncodedStore
         enc = g.store.insertion_order_enc
@@ -196,10 +213,12 @@ end
 
 function Base.iterate(g::RDFGraph, state)
     # Fast path for MemoryStore
-    if state isa Tuple{MemoryStore, Int}
-        store, idx = state
+    if state isa Tuple{MemoryStore, Int, Int}
+        store, idx, mod_count = state
+        store._mod_count == mod_count ||
+            error("RDFGraph was modified (add!/remove!) during iteration; collect(g) first if you need to mutate while iterating")
         idx > length(store.insertion_order) && return nothing
-        return (store.insertion_order[idx], (store, idx + 1))
+        return (store.insertion_order[idx], (store, idx + 1, mod_count))
     end
     if state isa Tuple{EncodedStore, Int}
         store, idx = state
