@@ -51,13 +51,18 @@ function _encode_one_binding(store::EncodedStore, b::Dict{String,Identifier})
     return eb
 end
 
-"""Encode a vector of Identifier-bindings, dropping infeasible ones."""
+"""Encode a vector of Identifier-bindings. Returns `nothing` if ANY binding
+contains a value that is not interned in the store (e.g. a BIND/VALUES-computed
+value). Such rows can still produce results through projection or through
+joins on their *other* variables, so the caller must fall back to the
+unencoded (Identifier-mode) path rather than silently dropping rows."""
 function _encode_bindings(store::EncodedStore, bs::Vector{Dict{String,Identifier}})
     out = EncBinding[]
     sizehint!(out, length(bs))
     for b in bs
         eb = _encode_one_binding(store, b)
-        eb === nothing || push!(out, eb)
+        eb === nothing && return nothing
+        push!(out, eb)
     end
     out
 end
@@ -320,6 +325,13 @@ end
                 if bv !== nothing
                     bv_id = _enc_id(store, bv)
                     bv_id == obj_id || return
+                end
+                # Object var same as the subject var: must equal the subject
+                pat_obj == subj_var && obj_id != s_id && return
+                # Repeated object var across patterns: values must agree
+                for j in (i + 1):n
+                    pj = pats[j].object
+                    pj isa String && pj == pat_obj && obj_firsts[j] != obj_id && return
                 end
             elseif pat_obj isa Identifier
                 pat_id = _enc_id(store, pat_obj)
@@ -620,6 +632,13 @@ end
             if pat_obj isa String
                 bv_id = get(eb, pat_obj, UInt32(0))
                 bv_id != 0 && bv_id != obj_id && return
+                # Object var same as the subject var: must equal the subject
+                pat_obj == subj_var && obj_id != s_id && return
+                # Repeated object var across patterns: values must agree
+                for j in (i + 1):n
+                    pj = pats[j].object
+                    pj isa String && pj == pat_obj && obj_firsts[j] != obj_id && return
+                end
             elseif pat_obj isa Identifier
                 static_obj_ids[i] != obj_id && return
             else
@@ -756,7 +775,25 @@ function _eval_patterns_eb_inner(g::RDFGraph, patterns::Vector{SparqlPattern},
             is_last = (j > n)
             eff_limit = is_last ? limit : 0
             if !using_eb
-                ebs = _encode_bindings(store, bindings)
+                enc = _encode_bindings(store, bindings)
+                if enc === nothing
+                    # Some binding holds a value not interned in the store
+                    # (BIND/VALUES-computed). Stay in Identifier mode for this
+                    # star group — the Identifier-mode star evaluator handles
+                    # non-interned carried values correctly.
+                    if isempty(filters)
+                        bindings = _ast_eval_star_encoded(store, star_pats,
+                                                          bindings, eff_limit)
+                    else
+                        bindings = _ast_eval_star_filter_encoded(g, store, star_pats,
+                                                                 filters, bindings,
+                                                                 eff_limit)
+                    end
+                    i = j
+                    isempty(bindings) && return (EncBinding[], bindings, false)
+                    continue
+                end
+                ebs = enc
                 using_eb = true
             end
             if isempty(ebs)
@@ -792,13 +829,19 @@ end
 # Public entry: evaluate patterns and return raw EncBindings if the
 # pipeline ended in EB mode; otherwise encode the final Identifier
 # bindings on demand. Used by the encoded streaming-aggregate path.
+# If the result contains values that cannot be interned (BIND/VALUES-
+# computed values not present in the store dictionary), returns the
+# Identifier-mode bindings unchanged — callers must type-check the
+# result and fall back rather than dropping those rows.
 function _ast_eval_patterns_star_encoded_eb(g::RDFGraph, patterns::Vector{SparqlPattern},
                                              bindings::Vector{Dict{String,Identifier}}, limit::Int)
     ebs, leftover_bindings, ended_in_eb = _eval_patterns_eb_inner(g, patterns, bindings, limit)
     if ended_in_eb
         return ebs
     else
-        return _encode_bindings(g.store::EncodedStore, leftover_bindings)
+        enc = _encode_bindings(g.store::EncodedStore, leftover_bindings)
+        enc === nothing && return leftover_bindings
+        return enc
     end
 end
 
@@ -939,16 +982,18 @@ end
                                       eb::EncBinding, store::EncodedStore)
     f, distinct, var, is_star = plan
     if distinct
-        # DISTINCT uses Set{UInt32} — much cheaper hash/eq than Identifier.
-        s = acc::Set{UInt32}
         if is_star
-            # COUNT(DISTINCT *): treat each row as distinct via row hash;
-            # use binding identity (rare path).
-            push!(s, UInt32(hash(eb) & 0xFFFFFFFF))
-        else
-            id = get(eb, var, UInt32(0))
-            id != 0 && push!(s, id)
+            # COUNT(DISTINCT *): dedupe by the exact row contents (no
+            # truncated hashing — hash collisions must not change counts).
+            srows = acc::Set{EncBinding}
+            push!(srows, copy(eb))
+            return srows
         end
+        # DISTINCT over a var uses Set{UInt32} — ids are interned 1:1 with
+        # terms, so id-dedupe is exact.
+        s = acc::Set{UInt32}
+        id = get(eb, var, UInt32(0))
+        id != 0 && push!(s, id)
         return s
     end
     if f == 1  # COUNT
@@ -956,20 +1001,22 @@ end
             return (acc::Int) + 1
         end
         return haskey(eb, var) ? (acc::Int) + 1 : acc
-    elseif f == 2  # SUM
+    elseif f == 2  # SUM (typed-numeric semantics — mirrors _agg_update_fast)
         id = isempty(var) ? UInt32(0) : get(eb, var, UInt32(0))
         id == 0 && return acc
-        nv = _enc_numeric(store, id)
-        nv === nothing && return acc
-        s, ai = acc::Tuple{Float64,Bool}
-        return (s + nv, ai)
-    elseif f == 3  # AVG
+        s, kr, err = acc::Tuple{Float64,Int,Bool}
+        err && return acc
+        tn = _typed_numeric(store.id_to_term[id])
+        tn === nothing && return (s, kr, true)  # type error poisons the aggregate
+        return (s + Float64(tn[2]), max(kr, _kind_rank(tn[1])), false)
+    elseif f == 3  # AVG (typed-numeric semantics)
         id = isempty(var) ? UInt32(0) : get(eb, var, UInt32(0))
         id == 0 && return acc
-        nv = _enc_numeric(store, id)
-        nv === nothing && return acc
-        s, c = acc::Tuple{Float64,Int}
-        return (s + nv, c + 1)
+        s, c, kr, err = acc::Tuple{Float64,Int,Int,Bool}
+        err && return acc
+        tn = _typed_numeric(store.id_to_term[id])
+        tn === nothing && return (s, c, kr, true)
+        return (s + Float64(tn[2]), c + 1, max(kr, _kind_rank(tn[1])), false)
     elseif f == 4  # MIN
         id = isempty(var) ? UInt32(0) : get(eb, var, UInt32(0))
         id == 0 && return acc
@@ -992,21 +1039,26 @@ end
     return acc
 end
 
-# Initial accumulator state — DISTINCT uses Set{UInt32} (encoded-friendly).
+# Initial accumulator state — DISTINCT uses Set{UInt32} (encoded-friendly);
+# DISTINCT * dedupes whole rows exactly via Set{EncBinding}.
 @inline function _agg_init_eb(agg::ExprAggregate)
     f = agg.func
     if agg.distinct
-        return Set{UInt32}()
+        return agg.arg isa ExprStar ? Set{EncBinding}() : Set{UInt32}()
     end
     if f == "COUNT";  return 0; end
-    if f == "SUM";    return (0.0, false); end
-    if f == "AVG";    return (0.0, 0); end
+    if f == "SUM";    return (0.0, 1, false); end       # (sum, kind_rank, error)
+    if f == "AVG";    return (0.0, 0, 1, false); end    # (sum, count, kind_rank, error)
     if f == "MIN" || f == "MAX" || f == "SAMPLE"; return nothing; end
     return nothing
 end
 
 @inline function _agg_finalize_eb(acc, agg::ExprAggregate, store::EncodedStore)
     if agg.distinct
+        if acc isa Set{EncBinding}
+            # COUNT(DISTINCT *) — exact row dedupe
+            return Literal(length(acc))
+        end
         s_id = acc::Set{UInt32}
         agg.func == "COUNT" && return Literal(length(s_id))
         s_ident = Set{Identifier}()
@@ -1031,7 +1083,8 @@ function _ast_eval_group_aggregate_streaming_eb(q::SparqlSelect,
     if isempty(ebs) && isempty(q.group_by)
         result = Dict{String,Identifier}()
         for sa in q.aggregates
-            result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+            v = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+            v === nothing || (result[sa.alias] = v)
         end
         return Dict{String,Identifier}[result]
     end
@@ -1084,6 +1137,9 @@ function _ast_eval_group_aggregate_streaming_eb(q::SparqlSelect,
     end
 
     # Finalize: decode gvals UInt32 -> Identifier, finalize aggregates.
+    # id == 0 means the group var was unbound — the result row omits it
+    # (mirrors the main evaluator). Aggregates finalizing to `nothing`
+    # (errored SUM/AVG, empty MIN/MAX/...) are likewise left unbound.
     new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_order))
     @inbounds for gi in eachindex(group_order)
         key = group_order[gi]
@@ -1091,15 +1147,26 @@ function _ast_eval_group_aggregate_streaming_eb(q::SparqlSelect,
         result = Dict{String,Identifier}()
         for (i, name) in enumerate(gb_vars)
             id = gvals[i]
-            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+            id == 0 || (result[name] = store.id_to_term[id])
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
-            result[q.aggregates[i].alias] = _agg_finalize_eb(accs[i], agg, store)
+            v = _agg_finalize_eb(accs[i], agg, store)
+            v === nothing || (result[q.aggregates[i].alias] = v)
         end
         new_bindings[gi] = result
     end
     new_bindings
+end
+
+# Fallback method: the EB pipeline returned Identifier-mode bindings
+# (some values could not be interned, e.g. BIND/VALUES-computed terms).
+# Delegate to the generic (main-path) group/aggregate evaluator so the
+# answer matches the main evaluator exactly.
+function _ast_eval_group_aggregate_streaming_eb(q::SparqlSelect,
+                                                  bindings::Vector{Dict{String,Identifier}},
+                                                  store::EncodedStore, g)
+    return _ast_eval_group_aggregate(q, bindings, g)
 end
 
 # ─── Fused BGP+aggregate fast path (Q2-shape) ─────────────────────────
@@ -1119,14 +1186,18 @@ end
     end
     if f == 1
         return (acc::Int) + 1
-    elseif f == 2
-        nv = _enc_numeric(store, id); nv === nothing && return acc
-        s, ai = acc::Tuple{Float64,Bool}
-        return (s + nv, ai)
-    elseif f == 3
-        nv = _enc_numeric(store, id); nv === nothing && return acc
-        s, c = acc::Tuple{Float64,Int}
-        return (s + nv, c + 1)
+    elseif f == 2  # SUM (typed-numeric semantics)
+        s, kr, err = acc::Tuple{Float64,Int,Bool}
+        err && return acc
+        tn = _typed_numeric(store.id_to_term[id])
+        tn === nothing && return (s, kr, true)
+        return (s + Float64(tn[2]), max(kr, _kind_rank(tn[1])), false)
+    elseif f == 3  # AVG (typed-numeric semantics)
+        s, c, kr, err = acc::Tuple{Float64,Int,Int,Bool}
+        err && return acc
+        tn = _typed_numeric(store.id_to_term[id])
+        tn === nothing && return (s, c, kr, true)
+        return (s + Float64(tn[2]), c + 1, max(kr, _kind_rank(tn[1])), false)
     elseif f == 4
         v = store.id_to_term[id]
         acc === nothing && return v
@@ -1147,12 +1218,10 @@ end
                                     id::UInt32, store::EncodedStore)
     f, distinct, _, is_star = plan
     if is_star
-        if distinct
-            s = acc::Set{UInt32}
-            push!(s, UInt32(length(s) + 1))
-            return s
-        end
-        f == 1 && return (acc::Int) + 1
+        # COUNT(DISTINCT *) is not supported by slot-based kernels (the full
+        # row is never materialized, so exact dedupe is impossible) — callers
+        # gate it out. Only plain COUNT(*) is handled here.
+        (!distinct && f == 1) && return (acc::Int) + 1
         return acc
     end
     id == 0 && return acc
@@ -1330,6 +1399,25 @@ function _try_direct_two_star_count_sum_eb(q::SparqlSelect, g::RDFGraph)
         end
     end
 
+    # Variable-aliasing safety: the ONLY variable shared between the two
+    # stars must be the link (outer object var == last star subject). Any
+    # other sharing (incl. subject vars reused as object vars) requires
+    # join checks this kernel doesn't perform — fall back.
+    @inbounds for i in 1:n_outer
+        ov = outer_obj_var[i]
+        isempty(ov) && continue
+        ov == outer_subj && return nothing
+        if i != link_idx
+            (ov == last_subj || haskey(last_var_slot, ov)) && return nothing
+        end
+    end
+    @inbounds for i in 1:n_last
+        lv = last_obj_var[i]
+        isempty(lv) && continue
+        (lv == last_subj || lv == outer_subj) && return nothing
+        haskey(outer_var_slot, lv) && return nothing
+    end
+
     gb = q.group_by[1]
     gb isa ExprVar || return nothing
     gb_var = (gb::ExprVar).name
@@ -1361,6 +1449,8 @@ function _try_direct_two_star_count_sum_eb(q::SparqlSelect, g::RDFGraph)
     group_keys = UInt32[]
     count_accs = [Int[] for _ in 1:n_agg]
     sum_accs = [Float64[] for _ in 1:n_agg]
+    sum_kr   = [Int[] for _ in 1:n_agg]      # numeric kind rank (typed SUM)
+    sum_err  = [Bool[] for _ in 1:n_agg]     # type-error poisoning (typed SUM)
     outer_obj_firsts = Vector{UInt32}(undef, n_outer)
     last_obj_firsts = Vector{UInt32}(undef, n_last)
 
@@ -1386,18 +1476,13 @@ function _try_direct_two_star_count_sum_eb(q::SparqlSelect, g::RDFGraph)
                 end
             end
 
-            gi = get(groups, label_id, 0)
-            if gi == 0
-                push!(group_keys, label_id)
-                gi = length(group_keys)
-                groups[label_id] = gi
-                @inbounds for i in 1:n_agg
-                    agg_kind[i] == Int8(2) ? push!(sum_accs[i], 0.0) : push!(count_accs[i], 0)
-                end
-            end
-
+            # Groups must come from JOINED rows, not from the label star
+            # alone: only create the group once the first outer (order) row
+            # actually joins. A labeled customer with no joining orders must
+            # not produce a zero-count group.
             orders = get(link_po, customer_id, nothing)
             orders === nothing && @goto next_customer
+            gi = 0
             for order_id in orders
                 sp_outer = get(store.spo_enc, order_id, nothing)
                 sp_outer === nothing && continue
@@ -1421,12 +1506,34 @@ function _try_direct_two_star_count_sum_eb(q::SparqlSelect, g::RDFGraph)
                         outer_obj_var[j] == ov && outer_obj_firsts[j] != outer_obj_firsts[i] && @goto next_order
                     end
                 end
+                if gi == 0
+                    gi = get(groups, label_id, 0)
+                    if gi == 0
+                        push!(group_keys, label_id)
+                        gi = length(group_keys)
+                        groups[label_id] = gi
+                        @inbounds for i in 1:n_agg
+                            if agg_kind[i] == Int8(2)
+                                push!(sum_accs[i], 0.0)
+                                push!(sum_kr[i], 1)
+                                push!(sum_err[i], false)
+                            else
+                                push!(count_accs[i], 0)
+                            end
+                        end
+                    end
+                end
                 @inbounds for i in 1:n_agg
                     if agg_kind[i] == Int8(1)
                         count_accs[i][gi] += 1
-                    else
-                        nv = _enc_numeric(store, outer_obj_firsts[agg_slot[i]])
-                        nv !== nothing && (sum_accs[i][gi] += nv)
+                    elseif !sum_err[i][gi]
+                        tn = _typed_numeric(store.id_to_term[outer_obj_firsts[agg_slot[i]]])
+                        if tn === nothing
+                            sum_err[i][gi] = true  # type error → unbound SUM
+                        else
+                            sum_accs[i][gi] += Float64(tn[2])
+                            sum_kr[i][gi] = max(sum_kr[i][gi], _kind_rank(tn[1]))
+                        end
                     end
                 end
                 @label next_order
@@ -1443,10 +1550,10 @@ function _try_direct_two_star_count_sum_eb(q::SparqlSelect, g::RDFGraph)
             alias = q.aggregates[i].alias
             if agg_kind[i] == Int8(1)
                 result[alias] = Literal(count_accs[i][gi])
-            else
-                s = sum_accs[i][gi]
-                result[alias] = isinteger(s) ? Literal(Int(s)) : Literal(s)
-            end
+            elseif !sum_err[i][gi]
+                v = _numeric_literal(_rank_kind(sum_kr[i][gi]), sum_accs[i][gi])
+                v === nothing || (result[alias] = v)
+            end  # errored SUM → unbound (alias omitted)
         end
         results[gi] = result
     end
@@ -1506,7 +1613,7 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
     @inbounds for i in 1:n_outer
         pat = outer_pats[i]::PatTriple
         pid = _enc_id(store, pat.predicate::URIRef)
-        pid == 0 && return Dict{String,Identifier}[]
+        pid == 0 && return _empty_fused_groups(q)
         outer_pred_ids[i] = pid
         obj = pat.object
         if obj isa String
@@ -1514,7 +1621,7 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
             outer_obj_const_id[i] = 0
         elseif obj isa Identifier
             oid = _enc_id(store, obj)
-            oid == 0 && return Dict{String,Identifier}[]
+            oid == 0 && return _empty_fused_groups(q)
             outer_obj_var[i] = ""
             outer_obj_const_id[i] = oid
         else
@@ -1529,7 +1636,7 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
     @inbounds for i in 1:n_last
         pat = last_pats[i]::PatTriple
         pid = _enc_id(store, pat.predicate::URIRef)
-        pid == 0 && return Dict{String,Identifier}[]
+        pid == 0 && return _empty_fused_groups(q)
         last_pred_ids[i] = pid
         obj = pat.object
         if obj isa String
@@ -1537,7 +1644,7 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
             last_obj_const_id[i] = 0
         elseif obj isa Identifier
             oid = _enc_id(store, obj)
-            oid == 0 && return Dict{String,Identifier}[]
+            oid == 0 && return _empty_fused_groups(q)
             last_obj_var[i] = ""
             last_obj_const_id[i] = oid
         else
@@ -1614,16 +1721,16 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
 
     # Aggregate kind classification:
     #   1 COUNT, 2 SUM, 3 AVG, 4 MIN, 5 MAX, 6 SAMPLE
-    # When all aggs are non-distinct + (COUNT or SUM/AVG of numeric var), use
-    # typed parallel vectors per group (no per-row Any boxing).
+    # The typed-parallel-vector fast path is COUNT-only: SUM/AVG need the
+    # full typed-numeric semantics (kind promotion + type-error poisoning)
+    # of the generic accumulators to match the main evaluator.
     fast_agg = true
     @inbounds for i in 1:n_agg
         p = agg_plan[i]
         if p[2]  # distinct
             fast_agg = false; break
         end
-        f = p[1]
-        if f == 0 || f >= 4
+        if p[1] != 1  # not COUNT
             fast_agg = false; break
         end
     end
@@ -1658,18 +1765,22 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
     # Iterate driver: prefer static_driver Set; else scan all spo_enc subjects.
     # In q2 case (no const objs in outer), we scan all subjects — but we filter
     # to those with all outer pred ids present, so misses are cheap.
+    # Returns `false` to abort the ENTIRE kernel (multi-valued predicate —
+    # the single-valued assumption is violated, so any partial aggregate
+    # would be wrong; caller must return `nothing` to trigger fallback).
+    # Returns `true` when the subject was processed or simply didn't match.
     function process_subject(s_outer::UInt32)
         sp = get(store.spo_enc, s_outer, nothing)
-        sp === nothing && return
+        sp === nothing && return true
         # Validate outer star + collect outer_obj_firsts
         @inbounds for i in 1:n_outer
             os = get(sp, outer_pred_ids[i], nothing)
-            os === nothing && return
-            length(os) == 1 || return  # multi-valued — bail (fallback path)
+            os === nothing && return true
+            length(os) == 1 || return false  # multi-valued — abort kernel
             o = first(os)
             cid = outer_obj_const_id[i]
             if cid != 0 && cid != o
-                return
+                return true
             end
             outer_obj_firsts[i] = o
         end
@@ -1677,9 +1788,10 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
         @inbounds for i in 1:n_outer
             ov = outer_obj_var[i]
             isempty(ov) && continue
+            ov == outer_subj && outer_obj_firsts[i] != s_outer && return true
             for j in (i+1):n_outer
                 if outer_obj_var[j] == ov && outer_obj_firsts[i] != outer_obj_firsts[j]
-                    return
+                    return true
                 end
             end
         end
@@ -1687,25 +1799,34 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
         # Now last star: subject = outer_obj_firsts[last_subj_outer_idx]
         s_last = outer_obj_firsts[last_subj_outer_idx]
         sp_last = get(store.spo_enc, s_last, nothing)
-        sp_last === nothing && return
+        sp_last === nothing && return true
         @inbounds for j in 1:n_last
             os = get(sp_last, last_pred_ids[j], nothing)
-            os === nothing && return
-            length(os) == 1 || return
+            os === nothing && return true
+            length(os) == 1 || return false  # multi-valued — abort kernel
             o = first(os)
             cid = last_obj_const_id[j]
             if cid != 0 && cid != o
-                return
+                return true
             end
             last_obj_firsts[j] = o
         end
-        # Validate last_obj vars against outer_obj vars (cross-star consistency)
+        # Validate last_obj vars: against outer subject/object vars
+        # (cross-star consistency), the last-star subject, and repeats
+        # within the last star itself.
         @inbounds for j in 1:n_last
             lv = last_obj_var[j]
             isempty(lv) && continue
+            lv == outer_subj && last_obj_firsts[j] != s_outer && return true
+            lv == last_subj && last_obj_firsts[j] != s_last && return true
             for i in 1:n_outer
                 if outer_obj_var[i] == lv && outer_obj_firsts[i] != last_obj_firsts[j]
-                    return
+                    return true
+                end
+            end
+            for j2 in (j+1):n_last
+                if last_obj_var[j2] == lv && last_obj_firsts[j2] != last_obj_firsts[j]
+                    return true
                 end
             end
         end
@@ -1791,11 +1912,12 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
                 id != 0 && (accs[i] = _agg_update_uint32(accs[i], agg_plan[i], id, store))
             end
         end
+        return true
     end
 
     if static_driver !== nothing
         for s in static_driver
-            process_subject(s)
+            process_subject(s) || return nothing
         end
     else
         # Predicate-pivot driver: pick the outer predicate with the smallest
@@ -1819,49 +1941,35 @@ function _exec_full_fused_bgp_agg(q::SparqlSelect, g::RDFGraph,
             po = store.pos_enc[best_p]
             for (_, ss) in po
                 for s in ss
-                    process_subject(s)
+                    process_subject(s) || return nothing
                 end
             end
         else
             for (s, _) in store.spo_enc
-                process_subject(s)
+                process_subject(s) || return nothing
             end
         end
     end
 
-    # Finalize
+    # Finalize. No groups + no GROUP BY → one aggregate-over-empty row
+    # (matches the main evaluator).
+    isempty(group_keys) && n_gb == 0 && return _empty_fused_groups(q)
     new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_keys))
     @inbounds for gi in eachindex(group_keys)
         gvals = group_gvals[gi]
         result = Dict{String,Identifier}()
         for (i, name) in enumerate(gb_vars)
             id = gvals[i]
-            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+            id == 0 || (result[name] = store.id_to_term[id])
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
             if fast_agg
-                f = agg_plan[i][1]
-                local v::Identifier
-                if f == 1
-                    v = Literal(string(count_accs[i][gi]); datatype=XSD.integer)
-                elseif f == 2
-                    s = sum_accs[i][gi]
-                    v = (s == round(s)) ?
-                        Literal(string(Int(s)); datatype=XSD.integer) :
-                        Literal(string(s); datatype=XSD.double)
-                elseif f == 3
-                    c = avg_count[i][gi]
-                    v = c == 0 ? Literal("0"; datatype=XSD.double) :
-                        Literal(string(sum_accs[i][gi] / c); datatype=XSD.double)
-                else
-                    v = Literal("")
-                end
-                result[q.aggregates[i].alias] = v
-            elseif agg.distinct
-                result[q.aggregates[i].alias] = _agg_finalize_eb(fallback_accs[gi][i], agg, store)
+                # fast_agg ⇒ all aggregates are non-distinct COUNT
+                result[q.aggregates[i].alias] = Literal(count_accs[i][gi])
             else
-                result[q.aggregates[i].alias] = _agg_finalize(fallback_accs[gi][i], agg)
+                v = _agg_finalize_eb(fallback_accs[gi][i], agg, store)
+                v === nothing || (result[q.aggregates[i].alias] = v)
             end
         end
         new_bindings[gi] = result
@@ -1907,6 +2015,9 @@ function _exec_fused_bgp_agg_eb(q::SparqlSelect, g::RDFGraph,
         _reorder_star_groups_encoded(store, outer_pats) : outer_pats
     outer_ebs = _ast_eval_patterns_star_encoded_eb(g, outer_pats_re,
         Dict{String,Identifier}[Dict{String,Identifier}()], 0)
+    # Pipeline may return Identifier-mode bindings (unencodable values) —
+    # this kernel needs raw EncBindings; fall back.
+    outer_ebs isa Vector{EncBinding} || return nothing
     if isempty(outer_ebs)
         return _empty_fused_groups(q)
     end
@@ -2071,11 +2182,12 @@ function _exec_fused_bgp_agg_eb(q::SparqlSelect, g::RDFGraph,
         result = Dict{String,Identifier}()
         for (i, name) in enumerate(gb_vars)
             id = gvals[i]
-            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+            id == 0 || (result[name] = store.id_to_term[id])
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
-            result[q.aggregates[i].alias] = _agg_finalize_eb(accs[i], agg, store)
+            v = _agg_finalize_eb(accs[i], agg, store)
+            v === nothing || (result[q.aggregates[i].alias] = v)
         end
         new_bindings[gi] = result
     end
@@ -2086,7 +2198,8 @@ function _empty_fused_groups(q::SparqlSelect)
     if isempty(q.group_by)
         result = Dict{String,Identifier}()
         for sa in q.aggregates
-            result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+            v = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+            v === nothing || (result[sa.alias] = v)
         end
         return Dict{String,Identifier}[result]
     end
@@ -2105,6 +2218,11 @@ function _enc_streaming_agg_eligible(q::SparqlSelect, g::RDFGraph)
     g.store isa EncodedStore || return false
     _streaming_aggregate_safe(q) || return false
     isempty(q.select_exprs) || return false
+    # COUNT(DISTINCT *) requires whole-row dedupe semantics; route it
+    # through the shared main-path aggregate code so all stores agree.
+    for sa in q.aggregates
+        (sa.agg.distinct && sa.agg.arg isa ExprStar) && return false
+    end
     for gb in q.group_by
         gb isa ExprVar || return false
     end
@@ -2122,276 +2240,11 @@ end
 # EncodedStore's UInt32-id indices end-to-end. Outer BGP is evaluated
 # via the EB pipeline; inner OPTIONAL star-join is performed per outer
 # row using pos_enc/spo_enc lookups; aggregates accumulate UInt32 ids.
-function _try_direct_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
-                                       outer_pats::Vector{SparqlPattern},
-                                       inner_pats::Vector{SparqlPattern},
-                                       inner_triples::Vector{PatTriple},
-                                       inner_subj::String)
-    # High-risk direct kernel for the trainmarks q4 shape:
-    #   outer single-subject star; OPTIONAL inner single-subject star;
-    #   GROUP BY outer vars; COUNT(DISTINCT outer subject),
-    #   COUNT(DISTINCT inner subject), SUM(inner object var).
-    # It avoids outer EncBinding materialization and DISTINCT Set accumulators.
-    for p in outer_pats
-        p isa PatFilter && return nothing
-    end
-    for p in inner_pats
-        p isa PatFilter && return nothing
-    end
-
-    store = g.store::EncodedStore
-    _ensure_all_indexed!(store)
-
-    outer_triples = PatTriple[]
-    for p in outer_pats
-        p isa PatTriple || return nothing
-        push!(outer_triples, p::PatTriple)
-    end
-    isempty(outer_triples) && return nothing
-    outer_subj = outer_triples[1].subject
-    outer_subj isa String || return nothing
-    n_outer = length(outer_triples)
-    n_inner = length(inner_triples)
-    n_agg = length(q.aggregates)
-    n_gb = length(q.group_by)
-
-    outer_pred_ids = Vector{UInt32}(undef, n_outer)
-    outer_obj_var = Vector{String}(undef, n_outer)
-    outer_obj_const_id = Vector{UInt32}(undef, n_outer)
-    outer_var_slot = Dict{String,Int}(outer_subj => -1)
-    @inbounds for i in 1:n_outer
-        pat = outer_triples[i]
-        pat.subject == outer_subj || return nothing
-        pat.predicate isa URIRef || return nothing
-        pid = _enc_id(store, pat.predicate::URIRef)
-        pid == 0 && return Dict{String,Identifier}[]
-        outer_pred_ids[i] = pid
-        obj = pat.object
-        if obj isa String
-            outer_obj_var[i] = obj
-            outer_obj_const_id[i] = 0
-            !haskey(outer_var_slot, obj) && (outer_var_slot[obj] = i)
-        elseif obj isa Identifier
-            oid = _enc_id(store, obj)
-            oid == 0 && return Dict{String,Identifier}[]
-            outer_obj_var[i] = ""
-            outer_obj_const_id[i] = oid
-        else
-            return nothing
-        end
-    end
-
-    inner_pred_ids = Vector{UInt32}(undef, n_inner)
-    inner_obj_var = Vector{String}(undef, n_inner)
-    inner_obj_const_id = Vector{UInt32}(undef, n_inner)
-    inner_var_slot = Dict{String,Int}(inner_subj => -1)
-    driver_idx = 0
-    @inbounds for i in 1:n_inner
-        pat = inner_triples[i]
-        pat.subject == inner_subj || return nothing
-        pat.predicate isa URIRef || return nothing
-        pid = _enc_id(store, pat.predicate::URIRef)
-        pid == 0 && return Dict{String,Identifier}[]
-        inner_pred_ids[i] = pid
-        obj = pat.object
-        if obj isa String
-            inner_obj_var[i] = obj
-            inner_obj_const_id[i] = 0
-            if obj == outer_subj
-                driver_idx == 0 || return nothing
-                driver_idx = i
-            else
-                !haskey(inner_var_slot, obj) && (inner_var_slot[obj] = i)
-            end
-        elseif obj isa Identifier
-            oid = _enc_id(store, obj)
-            oid == 0 && return Dict{String,Identifier}[]
-            inner_obj_var[i] = ""
-            inner_obj_const_id[i] = oid
-        else
-            return nothing
-        end
-    end
-    driver_idx == 0 && return nothing
-    driver_po = get(store.pos_enc, inner_pred_ids[driver_idx], nothing)
-    driver_po === nothing && return Dict{String,Identifier}[]
-
-    gb_vars = String[]
-    gb_src = Vector{Int}(undef, n_gb)
-    @inbounds for i in 1:n_gb
-        gb = q.group_by[i]
-        gb isa ExprVar || return nothing
-        v = (gb::ExprVar).name
-        push!(gb_vars, v)
-        src = get(outer_var_slot, v, 0)
-        src == 0 && return nothing
-        gb_src[i] = src
-    end
-
-    # agg kind: 1=count outer subject, 2=count inner subject, 3=sum inner object slot
-    agg_kind = Vector{Int8}(undef, n_agg)
-    agg_slot = Vector{Int}(undef, n_agg)
-    @inbounds for i in 1:n_agg
-        agg = q.aggregates[i].agg
-        agg.arg isa ExprVar || return nothing
-        v = (agg.arg::ExprVar).name
-        if agg.func == "COUNT" && agg.distinct && v == outer_subj
-            agg_kind[i] = Int8(1); agg_slot[i] = 0
-        elseif agg.func == "COUNT" && agg.distinct && v == inner_subj
-            agg_kind[i] = Int8(2); agg_slot[i] = 0
-        elseif agg.func == "SUM" && !agg.distinct && haskey(inner_var_slot, v)
-            slot = inner_var_slot[v]
-            slot > 0 || return nothing
-            agg_kind[i] = Int8(3); agg_slot[i] = slot
-        else
-            return nothing
-        end
-    end
-
-    static_driver = nothing
-    @inbounds for i in 1:n_outer
-        cid = outer_obj_const_id[i]
-        cid == 0 && continue
-        po = get(store.pos_enc, outer_pred_ids[i], nothing)
-        po === nothing && return Dict{String,Identifier}[]
-        ss = get(po, cid, nothing)
-        ss === nothing && return Dict{String,Identifier}[]
-        if static_driver === nothing || length(ss) < length(static_driver)
-            static_driver = ss
-        end
-    end
-
-    groups = Dict{NTuple,Int}()
-    group_keys = NTuple[]
-    group_gvals = Vector{Vector{UInt32}}()
-    count_accs = [Int[] for _ in 1:n_agg]
-    sum_accs = [Float64[] for _ in 1:n_agg]
-    outer_obj_firsts = Vector{UInt32}(undef, n_outer)
-    inner_obj_firsts = Vector{UInt32}(undef, n_inner)
-    gkey_buf = Vector{UInt32}(undef, max(n_gb, 1))
-
-    function process_outer(s_outer::UInt32)
-        sp = get(store.spo_enc, s_outer, nothing)
-        sp === nothing && return 0
-        @inbounds for i in 1:n_outer
-            os = get(sp, outer_pred_ids[i], nothing)
-            os === nothing && return 0
-            length(os) == 1 || return -1
-            oid = first(os)
-            cid = outer_obj_const_id[i]
-            cid != 0 && cid != oid && return 0
-            outer_obj_firsts[i] = oid
-        end
-        @inbounds for i in 1:n_outer
-            ov = outer_obj_var[i]
-            isempty(ov) && continue
-            for j in (i + 1):n_outer
-                outer_obj_var[j] == ov && outer_obj_firsts[j] != outer_obj_firsts[i] && return 0
-            end
-        end
-
-        @inbounds for i in 1:n_gb
-            src = gb_src[i]
-            gkey_buf[i] = src == -1 ? s_outer : outer_obj_firsts[src]
-        end
-        key::NTuple = if n_gb == 0
-            ()
-        elseif n_gb == 1
-            (gkey_buf[1],)
-        elseif n_gb == 2
-            (gkey_buf[1], gkey_buf[2])
-        elseif n_gb == 3
-            (gkey_buf[1], gkey_buf[2], gkey_buf[3])
-        else
-            Tuple(gkey_buf)
-        end
-        gi = get(groups, key, 0)
-        if gi == 0
-            gvals = Vector{UInt32}(undef, n_gb)
-            @inbounds for i in 1:n_gb
-                gvals[i] = key[i]
-            end
-            push!(group_keys, key)
-            push!(group_gvals, gvals)
-            gi = length(group_keys)
-            groups[key] = gi
-            @inbounds for i in 1:n_agg
-                agg_kind[i] == Int8(3) ? push!(sum_accs[i], 0.0) : push!(count_accs[i], 0)
-            end
-        end
-
-        @inbounds for i in 1:n_agg
-            agg_kind[i] == Int8(1) && (count_accs[i][gi] += 1)
-        end
-
-        orders = get(driver_po, s_outer, nothing)
-        orders === nothing && return 1
-        for s_inner in orders
-            sp_inner = get(store.spo_enc, s_inner, nothing)
-            sp_inner === nothing && continue
-            ok = true
-            @inbounds for i in 1:n_inner
-                if i == driver_idx
-                    inner_obj_firsts[i] = s_outer
-                    continue
-                end
-                os = get(sp_inner, inner_pred_ids[i], nothing)
-                if os === nothing
-                    ok = false; break
-                end
-                length(os) == 1 || return -1
-                oid = first(os)
-                cid = inner_obj_const_id[i]
-                if cid != 0 && cid != oid
-                    ok = false; break
-                end
-                inner_obj_firsts[i] = oid
-            end
-            ok || continue
-            @inbounds for i in 1:n_agg
-                k = agg_kind[i]
-                if k == Int8(2)
-                    count_accs[i][gi] += 1
-                elseif k == Int8(3)
-                    nv = _enc_numeric(store, inner_obj_firsts[agg_slot[i]])
-                    nv !== nothing && (sum_accs[i][gi] += nv)
-                end
-            end
-        end
-        return 1
-    end
-
-    if static_driver !== nothing
-        for s in static_driver
-            process_outer(s) < 0 && return nothing
-        end
-    else
-        for (s, _) in store.spo_enc
-            process_outer(s) < 0 && return nothing
-        end
-    end
-
-    results = Vector{Dict{String,Identifier}}(undef, length(group_keys))
-    @inbounds for gi in eachindex(group_keys)
-        result = Dict{String,Identifier}()
-        gvals = group_gvals[gi]
-        for (i, name) in enumerate(gb_vars)
-            id = gvals[i]
-            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
-        end
-        for i in 1:n_agg
-            alias = q.aggregates[i].alias
-            if agg_kind[i] == Int8(3)
-                s = sum_accs[i][gi]
-                result[alias] = isinteger(s) ? Literal(Int(s)) : Literal(s)
-            else
-                result[alias] = Literal(count_accs[i][gi])
-            end
-        end
-        results[gi] = result
-    end
-    return results
-end
+# NOTE: a "direct" Q4 kernel (`_try_direct_stream_opt_agg_eb`) used to live
+# here. It was removed: it skipped inner-object-vs-outer-var join validation
+# and double-counted COUNT(DISTINCT ?inner) when the same inner subject
+# joined multiple outer rows of one group. The generic
+# `_exec_stream_opt_agg_eb` below covers the same shapes correctly.
 
 function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
                                    outer_pats::Vector{SparqlPattern},
@@ -2401,8 +2254,6 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
                                    agg_sources::Vector{Symbol})
     store = g.store::EncodedStore
     _ensure_all_indexed!(store)
-    direct = _try_direct_stream_opt_agg_eb(q, g, outer_pats, inner_pats, inner_triples, inner_subj)
-    direct !== nothing && return direct
     n_agg = length(q.aggregates)
     n_gb = length(q.group_by)
     n_inner = length(inner_triples)
@@ -2412,12 +2263,16 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
         _reorder_star_groups_encoded(store, outer_pats) : outer_pats
     outer_ebs = _ast_eval_patterns_star_encoded_eb(g, pats_re,
         Dict{String,Identifier}[Dict{String,Identifier}()], 0)
+    # Pipeline may return Identifier-mode bindings (unencodable values) —
+    # this kernel needs raw EncBindings; fall back to the generic path.
+    outer_ebs isa Vector{EncBinding} || return nothing
 
     if isempty(outer_ebs)
         if n_gb == 0
             result = Dict{String,Identifier}()
             for sa in q.aggregates
-                result[sa.alias] = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+                v = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
+                v === nothing || (result[sa.alias] = v)
             end
             return Dict{String,Identifier}[result]
         else
@@ -2692,7 +2547,9 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
         end
     end
 
-    # Finalize groups: decode UInt32 group ids to Identifier
+    # Finalize groups: decode UInt32 group ids to Identifier. Unbound group
+    # vars (id == 0) and `nothing` aggregate results are omitted from the
+    # row (mirrors the main evaluator).
     new_bindings = Vector{Dict{String,Identifier}}(undef, length(group_order))
     @inbounds for gi in eachindex(group_order)
         key = group_order[gi]
@@ -2700,11 +2557,12 @@ function _exec_stream_opt_agg_eb(q::SparqlSelect, g::RDFGraph,
         result = Dict{String,Identifier}()
         for (i, name) in enumerate(gb_vars)
             id = gvals[i]
-            result[name] = id == 0 ? Literal("") : store.id_to_term[id]
+            id == 0 || (result[name] = store.id_to_term[id])
         end
         for i in 1:n_agg
             agg = q.aggregates[i].agg
-            result[q.aggregates[i].alias] = _agg_finalize_eb(accs[i], agg, store)
+            v = _agg_finalize_eb(accs[i], agg, store)
+            v === nothing || (result[q.aggregates[i].alias] = v)
         end
         new_bindings[gi] = result
     end

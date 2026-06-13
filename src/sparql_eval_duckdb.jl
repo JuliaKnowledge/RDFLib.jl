@@ -1,20 +1,42 @@
 # ─── DuckDB SPARQL BGP pushdown ──────────────────────────────────────
 #
-# Translate pure-BGP SELECT queries (with optional GROUP BY, aggregates,
-# trailing OPTIONAL, ORDER BY, LIMIT/OFFSET, DISTINCT) into a single
-# SQL query executed by DuckDB. This collapses what was N round-trips
+# Translate pure-BGP SELECT queries (with optional GROUP BY, COUNT
+# aggregates, trailing OPTIONAL, DISTINCT/REDUCED) into a single SQL
+# query executed by DuckDB. This collapses what was N round-trips
 # (one per pattern) into one vectorized columnar query plan.
+#
+# CORRECTNESS CONTRACT: the pushdown must return exactly the same
+# answers as the main SPARQL evaluator. Anything whose SQL semantics
+# could diverge from SPARQL term semantics (typed literals, language
+# tags, value-vs-lexical comparison, SPARQL ORDER BY total order,
+# numeric aggregate typing) is rejected by the eligibility gate and
+# falls back to the generic evaluator.
 #
 # Eligibility (gate) — the pushdown handles queries where:
 #   - all WHERE patterns are PatTriple, optionally followed by a
 #     trailing PatOptional whose body is also pure PatTriple;
-#   - no FILTER, BIND, UNION, MINUS, VALUES, SERVICE, LATERAL,
-#     subquery, property paths, or RDF-star;
-#   - all aggregates are COUNT/SUM/AVG/MIN/MAX/SAMPLE over a var or
-#     COUNT(*) — no GROUP_CONCAT/MEDIAN/MODE;
+#   - no FILTER (SQL comparisons over the bare `object` VARCHAR ignore
+#     datatype/language and TRY_CAST silently NULLs strings — both
+#     diverge from SPARQL), no BIND, UNION, MINUS, VALUES, SERVICE,
+#     LATERAL, subquery, property paths, or RDF-star;
+#   - aggregates are limited to the COUNT family: COUNT(*), COUNT(?v),
+#     and COUNT(DISTINCT ?v) when ?v is provably a URI/BNode-valued
+#     variable (appears in a subject or predicate position) so that
+#     lexical-distinct equals term-distinct. SUM/AVG/MIN/MAX/SAMPLE
+#     fall back (SQL MIN/MAX are VARCHAR-lexicographic; SUM/AVG typing
+#     and error semantics differ from the SPARQL evaluator);
 #   - no SELECT expressions (BIND-as-projection);
-#   - GROUP BY / ORDER BY only reference plain variables or aggregate
-#     aliases.
+#   - GROUP BY only references variables bound by the *required* body
+#     (not the OPTIONAL part);
+#   - no ORDER BY (SPARQL ordering is a typed total order with
+#     unbound-first semantics that SQL ORDER BY does not reproduce);
+#   - no LIMIT/OFFSET (without ORDER BY the selected subset would be
+#     nondeterministic and differ from the main evaluator).
+#
+# Joins, GROUP BY and DISTINCT over object-position variables compare
+# the full term — (object, object_type, datatype, language) — never the
+# bare lexical. Projected object variables fetch the same metadata so
+# terms decode back exactly (no heuristic URI guessing).
 #
 # Anything else falls back to the generic SPARQL evaluator.
 
@@ -27,28 +49,25 @@ function _duckdb_pushdown_eligible(q::SparqlSelect, g::RDFGraph)
     g.store isa DuckDBStore || return false
     isnothing(q.having) || return false
     isempty(q.select_exprs) || return false
+    isempty(q.order_by) || return false
+    isnothing(q.limit) || return false
+    q.offset == 0 || return false
 
     pats = q.patterns
     isempty(pats) && return false
     n = length(pats)
 
-    # Find tail OPTIONAL boundary; everything before must be PatTriple or
-    # PatFilter (translatable). Trailing PatOptional must contain only
-    # PatTriple.
+    # Find tail OPTIONAL boundary; everything before must be PatTriple.
+    # Trailing PatOptional must contain only PatTriple.
     has_opt = pats[end] isa PatOptional
     body_end = has_opt ? n - 1 : n
     body_end >= 1 || return false
     @inbounds for i in 1:body_end
         p = pats[i]
-        if p isa PatTriple
-            _is_simple_triple_term(p.subject)   || return false
-            _is_simple_pred(p.predicate)        || return false
-            _is_simple_triple_term(p.object)    || return false
-        elseif p isa PatFilter
-            _is_translatable_filter(p.expr)     || return false
-        else
-            return false
-        end
+        p isa PatTriple || return false
+        _is_simple_triple_term(p.subject)   || return false
+        _is_simple_pred(p.predicate)        || return false
+        _is_simple_triple_term(p.object)    || return false
     end
     if has_opt
         for ip in (pats[end]::PatOptional).patterns
@@ -59,47 +78,67 @@ function _duckdb_pushdown_eligible(q::SparqlSelect, g::RDFGraph)
         end
     end
 
-    # Aggregates
-    for sa in q.aggregates
-        f = sa.agg.func
-        f in ("COUNT","SUM","AVG","MIN","MAX","SAMPLE") || return false
-        a = sa.agg.arg
-        (a isa ExprStar || a isa ExprVar) || return false
+    # Variable classification over the whole pattern set:
+    #   body_vars: vars bound by the required body
+    #   node_vars: vars that occur in a subject or predicate position
+    #              anywhere (values are always URIs/BNodes)
+    body_vars = Set{String}()
+    node_vars = Set{String}()
+    all_vars  = Set{String}()
+    function _scan_triple!(p::PatTriple, in_body::Bool)
+        s = p.subject
+        if s isa AbstractString
+            push!(all_vars, String(s)); push!(node_vars, String(s))
+            in_body && push!(body_vars, String(s))
+        end
+        pr = p.predicate
+        if pr isa AbstractString
+            push!(all_vars, String(pr)); push!(node_vars, String(pr))
+            in_body && push!(body_vars, String(pr))
+        end
+        o = p.object
+        if o isa AbstractString
+            push!(all_vars, String(o))
+            in_body && push!(body_vars, String(o))
+        end
+        nothing
+    end
+    @inbounds for i in 1:body_end
+        _scan_triple!(pats[i]::PatTriple, true)
+    end
+    if has_opt
+        for ip in (pats[end]::PatOptional).patterns
+            _scan_triple!(ip::PatTriple, false)
+        end
     end
 
-    # GROUP BY: only variables
+    # Aggregates: COUNT family only (see header for rationale).
+    for sa in q.aggregates
+        agg = sa.agg
+        agg.func == "COUNT" || return false
+        a = agg.arg
+        if a isa ExprStar
+            agg.distinct && return false  # COUNT(DISTINCT *): row dedupe — fall back
+        elseif a isa ExprVar
+            a.name in all_vars || return false
+            if agg.distinct
+                # Lexical DISTINCT is only exact for URI/BNode-valued vars.
+                a.name in node_vars || return false
+            end
+        else
+            return false
+        end
+    end
+
+    # GROUP BY: only variables bound by the required body (an OPTIONAL-
+    # sourced group key would group SQL NULLs in ways the main evaluator
+    # does not reproduce).
     for gb in q.group_by
         gb isa ExprVar || return false
-    end
-
-    # ORDER BY: variable only
-    for ob in q.order_by
-        ob[1] isa ExprVar || return false
+        (gb::ExprVar).name in body_vars || return false
     end
 
     return true
-end
-
-# Translatable filters: comparison/logic over variables and literals.
-# Conservative list — anything else falls back.
-function _is_translatable_filter(e::SparqlExpr)
-    if e isa ExprBinaryOp
-        e.op in (:&&, :||, :(==), :!=, :<, :>, :<=, :>=, :+, :-, :*, :/) || return false
-        return _is_translatable_filter(e.left) && _is_translatable_filter(e.right)
-    elseif e isa ExprUnaryOp
-        e.op in (:!, :+, :-) || return false
-        return _is_translatable_filter(e.arg)
-    elseif e isa ExprVar
-        return true
-    elseif e isa ExprLiteral
-        # Numeric and string literals only — datatypes we can map to SQL.
-        return true
-    elseif e isa ExprBool
-        return true
-    elseif e isa ExprURI
-        return true
-    end
-    return false
 end
 
 @inline _is_simple_triple_term(x) =
@@ -159,37 +198,34 @@ function _ddb_object_constraints(alias::String, t::Identifier)
     end
 end
 
-# Map an aggregate's variable reference to a SQL expression suitable
-# for COUNT/SUM/AVG/MIN/MAX. For SUM/AVG we cast object to DOUBLE (with
-# TRY_CAST so non-numeric rows become NULL rather than errors).
-function _ddb_agg_sql(sa::SelectAggregate, var_refs::Dict{String,_DDBVarRef})
-    f = sa.agg.func
-    a = sa.agg.arg
-    if a isa ExprStar
-        return "COUNT(*)"
+# Shared-variable join condition between a new occurrence at
+# `(alias, col)` and the variable's source `ref`. Object columns carry
+# term metadata; subject/predicate columns are URI/BNode strings. The
+# condition must compare TERMS, not bare lexicals:
+#   object  = object   → all four columns must agree
+#   object  = subject  → lexicals equal AND object is a uri/bnode
+#   object  = predicate→ lexicals equal AND object is a uri
+#   subject/predicate vs subject/predicate → plain string equality
+function _ddb_join_conds(alias::String, col::Symbol, ref::_DDBVarRef)
+    conds = String["$alias.$col = $(ref.alias).$(ref.col)"]
+    if col === :object && ref.col === :object
+        push!(conds, "$alias.object_type = $(ref.alias).object_type")
+        push!(conds, "$alias.datatype = $(ref.alias).datatype")
+        push!(conds, "$alias.language = $(ref.alias).language")
+    elseif col === :object && ref.col === :subject
+        push!(conds, "$alias.object_type IN ('uri','bnode')")
+    elseif col === :object && ref.col === :predicate
+        push!(conds, "$alias.object_type = 'uri'")
+    elseif col === :subject && ref.col === :object
+        push!(conds, "$(ref.alias).object_type IN ('uri','bnode')")
+    elseif col === :predicate && ref.col === :object
+        push!(conds, "$(ref.alias).object_type = 'uri'")
     end
-    var = (a::ExprVar).name
-    ref = var_refs[var]
-    src = "$(ref.alias).$(ref.col)"
-    distinct = sa.agg.distinct ? "DISTINCT " : ""
-    if f == "COUNT"
-        return "COUNT($(distinct)$src)"
-    elseif f == "SUM"
-        return "SUM($(distinct)TRY_CAST($src AS DOUBLE))"
-    elseif f == "AVG"
-        return "AVG($(distinct)TRY_CAST($src AS DOUBLE))"
-    elseif f == "MIN"
-        return "MIN($(distinct)$src)"
-    elseif f == "MAX"
-        return "MAX($(distinct)$src)"
-    elseif f == "SAMPLE"
-        return "ANY_VALUE($src)"
-    end
-    error("unhandled aggregate $f")
+    conds
 end
 
 # Build the SQL for a single BGP (list of PatTriple). Returns:
-#   (from_clause::String, where_clauses::Vector{String}, var_refs::Dict)
+#   (aliases::Vector{String}, where_clauses::Vector{String}, var_refs::Dict)
 # where var_refs maps variable name -> _DDBVarRef giving source col.
 function _ddb_build_bgp(pats::AbstractVector,
                          start_alias::Int,
@@ -201,15 +237,6 @@ function _ddb_build_bgp(pats::AbstractVector,
     alias_idx = start_alias
 
     for pat in pats
-        if pat isa PatFilter
-            # Defer until vars known? Filters reference vars from earlier
-            # patterns. We translate eagerly using the current var_refs map;
-            # if a referenced var isn't bound yet, the WHERE evaluates with
-            # NULL and the row drops — same as SPARQL semantics.
-            sql = _ddb_translate_expr(pat.expr, var_refs)
-            push!(where_clauses, "(" * sql * ")")
-            continue
-        end
         p = pat::PatTriple
         a = "t" * string(alias_idx)
         alias_idx += 1
@@ -222,7 +249,7 @@ function _ddb_build_bgp(pats::AbstractVector,
             if ref === nothing
                 var_refs[String(s)] = _DDBVarRef(a, :subject)
             else
-                push!(where_clauses, "$a.subject = $(ref.alias).$(ref.col)")
+                append!(where_clauses, _ddb_join_conds(a, :subject, ref))
             end
         else
             push!(where_clauses, "$a.subject = $(_ddb_sp_lit(s))")
@@ -235,7 +262,7 @@ function _ddb_build_bgp(pats::AbstractVector,
             if ref === nothing
                 var_refs[String(pr)] = _DDBVarRef(a, :predicate)
             else
-                push!(where_clauses, "$a.predicate = $(ref.alias).$(ref.col)")
+                append!(where_clauses, _ddb_join_conds(a, :predicate, ref))
             end
         else
             push!(where_clauses, "$a.predicate = $(_ddb_sp_lit(pr::URIRef))")
@@ -248,8 +275,7 @@ function _ddb_build_bgp(pats::AbstractVector,
             if ref === nothing
                 var_refs[String(o)] = _DDBVarRef(a, :object)
             else
-                # Cross-position: just compare lexicals (URIs/BNodes match).
-                push!(where_clauses, "$a.object = $(ref.alias).$(ref.col)")
+                append!(where_clauses, _ddb_join_conds(a, :object, ref))
             end
         else
             for c in _ddb_object_constraints(a, o::Identifier)
@@ -260,60 +286,26 @@ function _ddb_build_bgp(pats::AbstractVector,
     return aliases, where_clauses, var_refs
 end
 
-# ─── Filter expression → SQL ─────────────────────────────────────────
-
-const _DDB_BIN_OP = Dict{Symbol,String}(
-    :(==) => "=", :!= => "<>",
-    :< => "<", :> => ">", :<= => "<=", :>= => ">=",
-    :+ => "+", :- => "-", :* => "*", :/ => "/",
-    :&& => " AND ", :|| => " OR ",
-)
-
-function _ddb_translate_expr(e::SparqlExpr, var_refs)
-    if e isa ExprBinaryOp
-        l = _ddb_translate_expr(e.left, var_refs)
-        r = _ddb_translate_expr(e.right, var_refs)
-        op = get(_DDB_BIN_OP, e.op, nothing)
-        op === nothing && error("unhandled op $(e.op)")
-        # Numeric ops: cast both sides to DOUBLE for safe comparison.
-        if e.op in (:<, :>, :<=, :>=, :+, :-, :*, :/)
-            return "TRY_CAST($l AS DOUBLE) $op TRY_CAST($r AS DOUBLE)"
-        elseif e.op in (:(==), :!=)
-            return "$l $op $r"
-        else
-            return "($l)$op($r)"
-        end
-    elseif e isa ExprUnaryOp
-        a = _ddb_translate_expr(e.arg, var_refs)
-        if e.op === :!
-            return "NOT ($a)"
-        else
-            return string(e.op) * "(" * a * ")"
-        end
-    elseif e isa ExprVar
-        ref = get(var_refs, e.name, nothing)
-        ref === nothing && error("unbound var $(e.name)")
-        return "$(ref.alias).$(ref.col)"
-    elseif e isa ExprLiteral
-        v = e.value::Literal
-        dt = v.datatype
-        if !isnothing(dt) && (occursin("integer", dt.value) ||
-                              occursin("decimal", dt.value) ||
-                              occursin("double",  dt.value) ||
-                              occursin("float",   dt.value))
-            return v.lexical
-        end
-        return _sql_str_lit(v.lexical)
-    elseif e isa ExprBool
-        return e.value ? "TRUE" : "FALSE"
-    elseif e isa ExprURI
-        return _sql_str_lit(e.uri.value)
-    end
-    error("untranslatable expr $(typeof(e))")
+# Map an aggregate to a SQL expression. Gate guarantees COUNT family only.
+function _ddb_agg_sql(sa::SelectAggregate, var_refs::Dict{String,_DDBVarRef})
+    f = sa.agg.func
+    f == "COUNT" || error("unhandled aggregate $f")
+    a = sa.agg.arg
+    a isa ExprStar && return "COUNT(*)"
+    var = (a::ExprVar).name
+    ref = get(var_refs, var, nothing)
+    # Var never bound by the BGP: COUNT over an unbound var is 0.
+    ref === nothing && return "COUNT(NULL)"
+    src = "$(ref.alias).$(ref.col)"
+    distinct = sa.agg.distinct ? "DISTINCT " : ""
+    return "COUNT($(distinct)$src)"
 end
 
 # Build the full SQL statement for a SparqlSelect. Returns
-# (sql::String, projected_var_names::Vector{String}, var_refs::Dict).
+# (sql, projected::Vector{String}, var_refs, obj_meta::Dict{String,String},
+#  agg_aliases::Set{String}).
+# `obj_meta[v]` is the column-alias prefix under which the object_type/
+# datatype/language companion columns for variable `v` were selected.
 function _duckdb_pushdown_sql(q::SparqlSelect)
     pats = q.patterns
     has_opt = pats[end] isa PatOptional
@@ -330,16 +322,11 @@ function _duckdb_pushdown_sql(q::SparqlSelect)
     end
 
     if has_opt && !isempty(opt_pats)
-        # OPTIONAL: LEFT JOIN with a scope-limited subquery so the
-        # outer body var_refs are visible in the join condition. Easier:
-        # generate a LEFT JOIN with multiple `triples` aliases on TRUE
-        # plus AND'd join predicates including refs to outer.
+        # OPTIONAL: LEFT JOIN; outer body var_refs are visible in the join
+        # condition.
         opt_aliases, opt_where, var_refs = _ddb_build_bgp(opt_pats,
                                                             length(body_aliases) + 1,
                                                             var_refs)
-        # All opt aliases together as cross-joined LEFT join with combined
-        # condition. DuckDB supports this when written as
-        #   LEFT JOIN (triples o1 JOIN triples o2 ON TRUE ...) ON (cond)
         if length(opt_aliases) == 1
             cond = isempty(opt_where) ? "TRUE" : join(opt_where, " AND ")
             push!(from_parts, "LEFT JOIN triples $(opt_aliases[1]) ON ($cond)")
@@ -355,108 +342,79 @@ function _duckdb_pushdown_sql(q::SparqlSelect)
 
     from_sql = join(from_parts, " ")
 
-    # Build SELECT list
+    # Build SELECT list. Object-sourced variables additionally select the
+    # term metadata columns so that decoding is exact (and DISTINCT /
+    # GROUP BY operate on full terms, not bare lexicals).
     select_parts = String[]
     projected = String[]
+    obj_meta = Dict{String,String}()
+    group_cols = String[]
+
+    function _select_var!(v::String; grouped::Bool=false)
+        ref = var_refs[v]
+        push!(select_parts, "$(ref.alias).$(ref.col) AS \"$v\"")
+        push!(projected, v)
+        grouped && push!(group_cols, "\"$v\"")
+        if ref.col === :object
+            tag = "__$(v)_meta_"
+            push!(select_parts, "$(ref.alias).object_type AS \"$(tag)t\"")
+            push!(select_parts, "$(ref.alias).datatype AS \"$(tag)d\"")
+            push!(select_parts, "$(ref.alias).language AS \"$(tag)l\"")
+            obj_meta[v] = tag
+            if grouped
+                push!(group_cols, "\"$(tag)t\"")
+                push!(group_cols, "\"$(tag)d\"")
+                push!(group_cols, "\"$(tag)l\"")
+            end
+        end
+        nothing
+    end
+
+    agg_aliases = Set{String}()
     if !isempty(q.aggregates) || !isempty(q.group_by)
         # Aggregate query: GROUP BY vars first, then aggregates.
         for gb in q.group_by
-            v = (gb::ExprVar).name
-            ref = var_refs[v]
-            push!(select_parts, "$(ref.alias).$(ref.col) AS \"$v\"")
-            push!(projected, v)
+            _select_var!((gb::ExprVar).name; grouped=true)
         end
         for sa in q.aggregates
             push!(select_parts, _ddb_agg_sql(sa, var_refs) * " AS \"$(sa.alias)\"")
             push!(projected, sa.alias)
+            push!(agg_aliases, sa.alias)
         end
     else
         # Plain SELECT (vars or *)
-        sel_vars = isempty(q.variables) ? collect(keys(var_refs)) : q.variables
+        sel_vars = isempty(q.variables) ? sort!(collect(keys(var_refs))) : q.variables
         for v in sel_vars
-            ref = get(var_refs, v, nothing)
-            ref === nothing && continue  # Var not bound by BGP — skip
-            push!(select_parts, "$(ref.alias).$(ref.col) AS \"$v\"")
-            push!(projected, v)
+            haskey(var_refs, v) || continue  # Var not bound by BGP — skip
+            _select_var!(v)
         end
     end
-    distinct_kw = q.distinct ? "DISTINCT " : ""
+    isempty(select_parts) && error("no projectable columns")
+    # REDUCED permits dedup; the main evaluator dedupes it like DISTINCT.
+    distinct_kw = (q.distinct || q.reduced) ? "DISTINCT " : ""
     select_sql = "SELECT " * distinct_kw * join(select_parts, ", ")
 
     # WHERE
     where_sql = isempty(body_where) ? "" : " WHERE " * join(body_where, " AND ")
 
-    # GROUP BY
-    group_sql = if !isempty(q.group_by)
-        " GROUP BY " * join(["\"$((gb::ExprVar).name)\"" for gb in q.group_by], ", ")
-    else
-        ""
-    end
+    # GROUP BY (over full terms — includes metadata columns)
+    group_sql = isempty(group_cols) ? "" : " GROUP BY " * join(group_cols, ", ")
 
-    # ORDER BY
-    order_sql = if !isempty(q.order_by)
-        parts = String[]
-        for (e, dir) in q.order_by
-            v = (e::ExprVar).name
-            ref = get(var_refs, v, nothing)
-            d = dir === :desc ? "DESC" : "ASC"
-            if ref !== nothing && ref.col === :object
-                # Numeric-aware sort: cast to DOUBLE first, fall back to lex.
-                src = "$(ref.alias).object"
-                push!(parts, "TRY_CAST($src AS DOUBLE) $d NULLS LAST, $src $d")
-            else
-                push!(parts, "\"$v\" $d")
-            end
-        end
-        " ORDER BY " * join(parts, ", ")
-    else
-        ""
-    end
-
-    # LIMIT / OFFSET
-    limit_sql = isnothing(q.limit) ? "" : " LIMIT $(q.limit)"
-    offset_sql = q.offset > 0 ? " OFFSET $(q.offset)" : ""
-
-    sql = select_sql * " FROM " * from_sql * where_sql * group_sql *
-           order_sql * limit_sql * offset_sql
-    return sql, projected, var_refs
+    sql = select_sql * " FROM " * from_sql * where_sql * group_sql
+    return sql, projected, var_refs, obj_meta, agg_aliases
 end
 
 # ─── Result decoding ─────────────────────────────────────────────────
 #
-# DuckDB returns each row as a NamedTuple with the column aliases. We
-# decode each cell back to an Identifier:
-#   - aggregate alias: numeric or text → Literal
-#   - bound variable: look up the var_ref's column type (subject/predicate
-#     are always URIs or BNodes; object needs richer decoding using the
-#     companion object_type/datatype/language columns — but our SQL
-#     doesn't fetch those for projected variables, so we apply a best-
-#     effort decode based on the string form).
-#
-# To keep decoding correct for object-position variables (which may be
-# URIs, BNodes, or literals), we extend the SELECT to also fetch the
-# accompanying object_type/datatype/language for each projected var that
-# sources from an :object column.
+# Every cell decodes EXACTLY:
+#   - object-sourced variable: via the companion object_type/datatype/
+#     language metadata columns (same reconstruction as the store API);
+#   - subject/predicate-sourced variable: URI or BNode by the "_:"
+#     encoding (no heuristics — these positions hold nothing else);
+#   - COUNT aggregate alias: integer literal (matches `_agg_finalize`).
 
 function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
-    sql, projected, var_refs = _duckdb_pushdown_sql(q)
-    obj_meta = Dict{String,String}()  # var -> alias name
-    extra_selects = String[]
-    has_aggs = !isempty(q.aggregates) || !isempty(q.group_by)
-    for v in projected
-        ref = get(var_refs, v, nothing)
-        ref === nothing && continue
-        if ref.col === :object && !has_aggs
-            tag = "__$(v)_meta_"
-            push!(extra_selects, "$(ref.alias).object_type AS \"$(tag)t\"")
-            push!(extra_selects, "$(ref.alias).datatype AS \"$(tag)d\"")
-            push!(extra_selects, "$(ref.alias).language AS \"$(tag)l\"")
-            obj_meta[v] = tag
-        end
-    end
-    if !isempty(extra_selects)
-        sql = replace(sql, " FROM " => ", " * join(extra_selects, ", ") * " FROM ", count=1)
-    end
+    sql, projected, var_refs, obj_meta, agg_aliases = _duckdb_pushdown_sql(q)
 
     store = g.store::DuckDBStore
     qres = DBInterface.execute(store.con, sql)
@@ -471,7 +429,7 @@ function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
     meta_t_cols  = Vector{Any}(undef, n)
     meta_d_cols  = Vector{Any}(undef, n)
     meta_l_cols  = Vector{Any}(undef, n)
-    is_obj       = Vector{Bool}(undef, n)
+    kind         = Vector{Symbol}(undef, n)  # :object, :node, :agg
     @inbounds for (i, v) in enumerate(projected)
         val_cols[i] = cols[Symbol(v)]
         if haskey(obj_meta, v)
@@ -479,9 +437,11 @@ function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
             meta_t_cols[i] = cols[Symbol(tag * "t")]
             meta_d_cols[i] = cols[Symbol(tag * "d")]
             meta_l_cols[i] = cols[Symbol(tag * "l")]
-            is_obj[i] = true
+            kind[i] = :object
+        elseif v in agg_aliases
+            kind[i] = :agg
         else
-            is_obj[i] = false
+            kind[i] = :node
         end
     end
 
@@ -492,7 +452,8 @@ function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
             v = projected[i]
             val = val_cols[i][r]
             val === missing && continue
-            if is_obj[i]
+            k = kind[i]
+            if k === :object
                 ot = meta_t_cols[i][r]
                 dt = meta_d_cols[i][r]
                 lg = meta_l_cols[i][r]
@@ -500,8 +461,10 @@ function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
                                               ot === missing ? "" : string(ot),
                                               dt === missing ? "" : string(dt),
                                               lg === missing ? "" : string(lg))
+            elseif k === :agg
+                b[v] = _ddb_decode_count(val)
             else
-                b[v] = _decode_pushdown_value(val)
+                b[v] = _duckdb_decode_node(string(val))
             end
         end
         bindings[r] = b
@@ -509,32 +472,10 @@ function _duckdb_pushdown_run(g::RDFGraph, q::SparqlSelect)
     return bindings
 end
 
-# Decode a generic SQL value (string/number) back to an Identifier.
-@inline function _decode_pushdown_value(val)
-    if val isa AbstractString
-        s = String(val)
-        return startswith(s, "_:") ? BNode(s[3:end]) :
-                _looks_like_uri(s) ? URIRef(s) : Literal(s)
-    elseif val isa Integer
-        return Literal(string(val),
-                        datatype=URIRef("http://www.w3.org/2001/XMLSchema#integer"))
-    elseif val isa AbstractFloat
-        return Literal(string(val),
-                        datatype=URIRef("http://www.w3.org/2001/XMLSchema#double"))
-    elseif val isa Bool
-        return Literal(val ? "true" : "false",
-                        datatype=URIRef("http://www.w3.org/2001/XMLSchema#boolean"))
-    elseif val === nothing || val === missing
-        return Literal("")
-    else
-        return Literal(string(val))
-    end
-end
-
-@inline function _looks_like_uri(s::AbstractString)
-    # Crude heuristic — sufficient for projected subject/predicate vars
-    # (which are always URIs or BNodes; BNodes already handled).
-    occursin(":", s) && (startswith(s, "http://") || startswith(s, "https://") ||
-                         startswith(s, "urn:") || startswith(s, "file://") ||
-                         startswith(s, "ftp://") || occursin("://", s))
+# COUNT results come back as SQL integers; mirror the main evaluator's
+# `Literal(::Integer)` (xsd:integer) finalization exactly.
+@inline function _ddb_decode_count(val)
+    val isa Integer && return Literal(Int(val))
+    val isa AbstractFloat && return Literal(Int(round(val)))
+    return Literal(string(val))
 end
