@@ -126,20 +126,27 @@ n3(b::BNode) = string("_:", b.id)
 # ─── Literal ────────────────────────────────────────────────────────
 
 """
-    Literal(value; datatype=nothing, lang=nothing)
+    Literal(value; datatype=nothing, lang=nothing, direction=nothing)
     Literal(value::Number)
     Literal(value::Bool)
     Literal(value::DateTime)
 
-An RDF literal value with optional datatype URI or language tag.
+An RDF literal value with optional datatype URI, language tag, and (SPARQL 1.2)
+base direction (`"ltr"` or `"rtl"`, only allowed together with `lang`).
 
 Language tags and datatypes are mutually exclusive (per RDF spec, a language-tagged
-literal implicitly has datatype `rdf:langString`).
+literal implicitly has datatype `rdf:langString`, or `rdf:dirLangString` when a base
+direction is present).
+
+Per RDF 1.1, a simple literal and an `xsd:string`-typed literal with the same lexical
+form denote the same term: `Literal("a") == Literal("a", datatype=XSD.string)`.
+Internally both are stored in the canonical simple form (`datatype === nothing`).
 
 # Examples
 ```julia
 Literal("hello")
 Literal("bonjour", lang="fr")
+Literal("שלום", lang="he", direction="rtl")
 Literal(42)                        # auto-typed as xsd:integer
 Literal("3.14", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decimal"))
 ```
@@ -148,23 +155,43 @@ struct Literal <: Identifier
     lexical::String
     datatype::Union{URIRef, Nothing}
     language::Union{String, Nothing}
+    direction::Union{String, Nothing}
     _hash::UInt
 
     function Literal(lexical::AbstractString;
                      datatype::Union{URIRef, Nothing}=nothing,
-                     lang::Union{AbstractString, Nothing}=nothing)
+                     lang::Union{AbstractString, Nothing}=nothing,
+                     direction::Union{AbstractString, Nothing}=nothing)
         if !isnothing(lang) && !isnothing(datatype)
-            rdf_langString = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
-            if datatype != rdf_langString
-                throw(ArgumentError("Language-tagged literals cannot have an explicit datatype other than rdf:langString"))
+            if datatype != _RDF_LANGSTRING_DT && datatype != _RDF_DIRLANGSTRING_DT
+                throw(ArgumentError("Language-tagged literals cannot have an explicit datatype other than rdf:langString or rdf:dirLangString"))
             end
         end
+        dir = nothing
+        if !isnothing(direction)
+            isnothing(lang) && throw(ArgumentError("Literal base direction requires a language tag"))
+            d = String(direction)
+            d in ("ltr", "rtl") || throw(ArgumentError("Literal base direction must be \"ltr\" or \"rtl\", got \"$d\""))
+            dir = d
+        end
         language = isnothing(lang) ? nothing : lowercase(String(lang))
+        # Canonical internal form:
+        #  - RDF 1.1: a simple literal IS an xsd:string literal, so an explicit
+        #    xsd:string datatype is normalized away (stored as `nothing`)
+        #  - the implicit rdf:langString / rdf:dirLangString datatype of
+        #    language-tagged literals is likewise stored as `nothing`
+        dt = datatype
+        if !isnothing(language)
+            dt = nothing
+        elseif dt == _XSD_STRING_DT
+            dt = nothing
+        end
         lex = String(lexical)
         h = hash(lex, hash(:Literal, zero(UInt)))
-        h = hash(datatype, h)
+        h = hash(dt, h)
         h = hash(language, h)
-        new(lex, datatype, language, h)
+        h = hash(dir, h)
+        new(lex, dt, language, dir, h)
     end
 end
 
@@ -178,18 +205,36 @@ const _XSD_DOUBLE   = URIRef(_XSD * "double")
 const _XSD_DATETIME = URIRef(_XSD * "dateTime")
 const _XSD_DATE     = URIRef(_XSD * "date")
 const _XSD_TIME     = URIRef(_XSD * "time")
+const _XSD_STRING_DT = URIRef(_XSD * "string")
+const _RDF_LANGSTRING_DT = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+const _RDF_DIRLANGSTRING_DT = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString")
+
+"""
+    _float_lexical(v::AbstractFloat) -> String
+
+Canonical XSD lexical form for a float: `INF`, `-INF`, `NaN` for the special
+values, otherwise Julia's decimal representation.
+"""
+function _float_lexical(v::AbstractFloat)
+    isnan(v) && return "NaN"
+    isinf(v) && return v > 0 ? "INF" : "-INF"
+    string(v)
+end
 
 Literal(v::Bool) = Literal(v ? "true" : "false", datatype=_XSD_BOOLEAN)
 Literal(v::Integer) = Literal(string(v), datatype=_XSD_INTEGER)
-Literal(v::AbstractFloat) = Literal(string(v), datatype=_XSD_DOUBLE)
-Literal(v::DateTime) = Literal(Dates.format(v, dateformat"yyyy-mm-ddTHH:MM:SS"), datatype=_XSD_DATETIME)
-Literal(v::Date) = Literal(Dates.format(v, dateformat"yyyy-mm-dd"), datatype=_XSD_DATE)
-Literal(v::Time) = Literal(Dates.format(v, dateformat"HH:MM:SS"), datatype=_XSD_TIME)
+Literal(v::AbstractFloat) = Literal(_float_lexical(v), datatype=_XSD_DOUBLE)
+Literal(v::DateTime) = Literal(format_xsd_datetime(v), datatype=_XSD_DATETIME)
+Literal(v::Date) = Literal(format_xsd_date(v), datatype=_XSD_DATE)
+Literal(v::Time) = Literal(format_xsd_time(v), datatype=_XSD_TIME)
 
 function Base.show(io::IO, lit::Literal)
     print(io, "Literal(\"", lit.lexical, "\"")
     if !isnothing(lit.language)
         print(io, ", lang=\"", lit.language, "\"")
+        if !isnothing(lit.direction)
+            print(io, ", direction=\"", lit.direction, "\"")
+        end
     elseif !isnothing(lit.datatype)
         print(io, ", datatype=", lit.datatype)
     end
@@ -199,7 +244,8 @@ end
 Base.string(lit::Literal) = lit.lexical
 
 function Base.:(==)(a::Literal, b::Literal)
-    a.lexical == b.lexical && a.datatype == b.datatype && a.language == b.language
+    a.lexical == b.lexical && a.datatype == b.datatype &&
+        a.language == b.language && a.direction == b.direction
 end
 
 function Base.hash(a::Literal, h::UInt)
@@ -214,9 +260,20 @@ Return the language tag, or `nothing`.
 lang(lit::Literal) = lit.language
 
 """
+    direction(lit::Literal) -> Union{String, Nothing}
+
+Return the base direction (`"ltr"` or `"rtl"`) of a directional language-tagged
+literal (SPARQL 1.2), or `nothing`.
+"""
+direction(lit::Literal) = lit.direction
+
+"""
     datatype(lit::Literal) -> Union{URIRef, Nothing}
 
-Return the datatype URI, or `nothing`.
+Return the datatype URI, or `nothing` for simple (plain) literals and
+language-tagged literals. Note that per RDF 1.1 simple literals denote
+`xsd:string` values and language-tagged literals have implicit datatype
+`rdf:langString` (`rdf:dirLangString` when a base direction is present).
 """
 datatype(lit::Literal) = lit.datatype
 
@@ -246,7 +303,7 @@ function _literal_to_julia(lit::Literal)
     elseif dtval == _XSD * "dateTime"
         return parse_xsd_datetime(lit.lexical)
     elseif dtval == _XSD * "date"
-        return Date(lit.lexical, dateformat"yyyy-mm-dd")
+        return parse_xsd_date(lit.lexical)
     elseif dtval == _XSD * "string"
         return lit.lexical
     else
@@ -259,7 +316,7 @@ Base.convert(::Type{Int}, lit::Literal) = parse(Int, lit.lexical)
 Base.convert(::Type{Float64}, lit::Literal) = parse(Float64, lit.lexical)
 Base.convert(::Type{Bool}, lit::Literal) = lit.lexical in ("true", "1")
 Base.convert(::Type{DateTime}, lit::Literal) = parse_xsd_datetime(lit.lexical)
-Base.convert(::Type{Date}, lit::Literal) = Date(lit.lexical, dateformat"yyyy-mm-dd")
+Base.convert(::Type{Date}, lit::Literal) = parse_xsd_date(lit.lexical)
 Base.convert(::Type{String}, lit::Literal) = lit.lexical
 
 """
@@ -272,6 +329,9 @@ function n3(lit::Literal)
     s = string("\"", escaped, "\"")
     if !isnothing(lit.language)
         s *= "@" * lit.language
+        if !isnothing(lit.direction)
+            s *= "--" * lit.direction
+        end
     elseif !isnothing(lit.datatype)
         s *= "^^<" * lit.datatype.value * ">"
     end
@@ -460,13 +520,33 @@ end
 
 # ─── BCP 47 Language Tag Validation (RFC 5646) ─────────────────────
 
-const _LANGTAG_RE = r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
-const _LANGTAG_FULL_RE = r"^(?<language>[A-Za-z]{2,3})(-(?<script>[A-Za-z]{4}))?(-(?<region>[A-Za-z]{2}|[0-9]{3}))?(-(?<variant>[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*$"
+# Quick structural check: hyphen-separated alphanumeric subtags of 1-8 chars,
+# starting with an alphabetic subtag.
+const _LANGTAG_RE = r"^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+# Full BCP 47 (RFC 5646) well-formedness:
+#   langtag    = language ["-" script] ["-" region] *("-" variant)
+#                *("-" extension) ["-" privateuse]
+#   language   = 2*3ALPHA ["-" extlang] / 4ALPHA / 5*8ALPHA
+#   extension  = singleton 1*("-" 2*8alphanum)   (singleton != x)
+#   privateuse = "x" 1*("-" 1*8alphanum)
+# A tag may also consist solely of a private-use sequence.
+const _LANGTAG_FULL_RE = r"""^
+(?:
+    (?<language>[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4,8})
+    (?:-(?<script>[A-Za-z]{4}))?
+    (?:-(?<region>[A-Za-z]{2}|[0-9]{3}))?
+    (?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*
+    (?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*
+    (?:-[Xx](?:-[A-Za-z0-9]{1,8})+)?
+  |
+    [Xx](?:-[A-Za-z0-9]{1,8})+
+)$"""x
 
 """
     validate_langtag(tag::AbstractString) -> Bool
 
-Validate a BCP 47 language tag per RFC 5646.
+Validate a BCP 47 language tag per RFC 5646 (well-formedness, including
+extension and private-use subtags).
 """
 function validate_langtag(tag::AbstractString)::Bool
     isempty(tag) && return false
@@ -477,15 +557,23 @@ end
 """
     normalize_langtag(tag::AbstractString) -> String
 
-Normalize a BCP 47 language tag: language lowercase, script titlecase, region uppercase.
+Normalize a BCP 47 language tag: language lowercase, script titlecase, region
+uppercase. Subtags following a singleton (extension or private-use marker)
+are left lowercase, per RFC 5646 conventions.
 """
 function normalize_langtag(tag::AbstractString)::String
     parts = split(tag, '-')
-    isempty(parts) && return tag
+    isempty(parts) && return String(tag)
     result = String[lowercase(parts[1])]
+    seen_singleton = length(parts[1]) == 1  # private-use-only tag ("x-...")
     for i in 2:length(parts)
         p = parts[i]
-        if length(p) == 4 && all(isletter, p)
+        if seen_singleton
+            push!(result, lowercase(p))
+        elseif length(p) == 1
+            seen_singleton = true
+            push!(result, lowercase(p))
+        elseif length(p) == 4 && all(isletter, p)
             push!(result, titlecase(p))
         elseif length(p) == 2 && all(isletter, p)
             push!(result, uppercase(p))

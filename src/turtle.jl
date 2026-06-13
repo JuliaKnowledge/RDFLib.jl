@@ -93,6 +93,12 @@ function _turtle_try_qname!(ctx::_TurtleSerContext, term::URIRef)
     end
 end
 
+function _turtle_try_qname!(ctx::_TurtleSerContext, term::TripleTerm)
+    _turtle_try_qname!(ctx, term.subject)
+    _turtle_try_qname!(ctx, term.predicate)
+    _turtle_try_qname!(ctx, term.object)
+end
+
 _turtle_try_qname!(::_TurtleSerContext, ::Identifier) = nothing
 
 function _turtle_write_prefixes(io::IO, ctx::_TurtleSerContext)
@@ -110,7 +116,8 @@ function _turtle_write_triples(io::IO, ctx::_TurtleSerContext)
     subjects = collect(keys(ctx.subject_props))
     urirefs = sort(filter(s -> s isa URIRef, subjects), by=s -> s.value)
     bnodes = filter(s -> s isa BNode, subjects)
-    ordered = vcat(urirefs, bnodes)
+    others = filter(s -> !(s isa URIRef || s isa BNode), subjects)  # e.g. TripleTerm
+    ordered = vcat(urirefs, bnodes, others)
 
     first_subject = true
     for subject in ordered
@@ -205,6 +212,91 @@ function _turtle_write_inline_bnode(io::IO, ctx::_TurtleSerContext, node::BNode)
     write(io, " ]")
 end
 
+# ─── PN character classes (Turtle/N3 grammar, shared with n3.jl) ────
+
+function _is_pn_chars_base(c::Char)
+    ('A' <= c <= 'Z') || ('a' <= c <= 'z') ||
+    ('À' <= c <= 'Ö') || ('Ø' <= c <= 'ö') ||
+    ('ø' <= c <= '˿') || ('Ͱ' <= c <= 'ͽ') ||
+    ('Ϳ' <= c <= '῿') || ('‌' <= c <= '‍') ||
+    ('⁰' <= c <= '↏') || ('Ⰰ' <= c <= '⿯') ||
+    ('、' <= c <= '퟿') || ('豈' <= c <= '﷏') ||
+    ('ﷰ' <= c <= '�') || ('\U00010000' <= c <= '\U000EFFFF')
+end
+
+_is_pn_chars_u(c::Char) = c == '_' || _is_pn_chars_base(c)
+
+function _is_pn_chars(c::Char)
+    _is_pn_chars_u(c) || c == '-' || ('0' <= c <= '9') || c == '·' ||
+    ('̀' <= c <= 'ͯ') || ('‿' <= c <= '⁀')
+end
+
+_is_hex_digit(c::Char) = ('0' <= c <= '9') || ('A' <= c <= 'F') || ('a' <= c <= 'f')
+
+# Characters that may appear escaped (\\,) inside a PN_LOCAL (PN_LOCAL_ESC)
+const _PN_LOCAL_ESC_CHARS = Set{Char}("_~.-!\$&'()*+,;=/?#@%")
+
+"""
+    _escape_pn_local(localname) -> Union{String, Nothing}
+
+Escape a qname local part so it is a valid Turtle PN_LOCAL token
+(applying PN_LOCAL_ESC backslash escapes where needed). Returns `nothing`
+if the local name cannot be represented as a PN_LOCAL at all, in which
+case the serializer must fall back to the full `<IRI>` form.
+"""
+function _escape_pn_local(localname::AbstractString)
+    isempty(localname) && return ""  # "prefix:" (PNAME_NS) is valid Turtle
+    buf = IOBuffer()
+    lastidx = lastindex(localname)
+    i = firstindex(localname)
+    is_first = true
+    while i <= lastidx
+        c = localname[i]
+        nxt = nextind(localname, i)
+        is_last = nxt > lastidx
+        if c == '%'
+            # A valid %HH sequence is kept verbatim (PERCENT); a bare '%' is escaped
+            if nxt <= lastidx
+                h2 = nextind(localname, nxt)
+                if h2 <= lastidx && _is_hex_digit(localname[nxt]) && _is_hex_digit(localname[h2])
+                    write(buf, '%')
+                    is_first = false
+                    i = nxt
+                    continue
+                end
+            end
+            write(buf, "\\%")
+        elseif c == ':'
+            write(buf, c)
+        elseif c == '.'
+            # Dots are legal mid-name but not first or last
+            if is_first || is_last
+                write(buf, "\\.")
+            else
+                write(buf, c)
+            end
+        elseif _is_pn_chars(c)
+            if is_first && !(_is_pn_chars_u(c) || isdigit(c))
+                # '-', U+00B7, combining marks cannot start a PN_LOCAL
+                if c == '-'
+                    write(buf, "\\-")
+                else
+                    return nothing  # not escapable in first position
+                end
+            else
+                write(buf, c)
+            end
+        elseif c in _PN_LOCAL_ESC_CHARS
+            write(buf, '\\', c)
+        else
+            return nothing  # character cannot appear in a PN_LOCAL
+        end
+        is_first = false
+        i = nxt
+    end
+    String(take!(buf))
+end
+
 # ─── Term formatting ────────────────────────────────────────────────
 
 function _turtle_format_node(ctx::_TurtleSerContext, u::URIRef)
@@ -216,13 +308,24 @@ function _turtle_format_node(ctx::_TurtleSerContext, u::URIRef)
     # Try prefixed name
     try
         prefix, _, localname = compute_qname(ctx.graph.namespace_manager, u)
-        result = string(prefix, ":", localname)
+        escaped = _escape_pn_local(localname)
+        if escaped === nothing
+            ctx.qname_cache[u.value] = nothing
+            return n3(u)
+        end
+        result = string(prefix, ":", escaped)
         ctx.qname_cache[u.value] = result
         return result
     catch
         ctx.qname_cache[u.value] = nothing
         return n3(u)
     end
+end
+
+function _turtle_format_node(ctx::_TurtleSerContext, tt::TripleTerm)
+    string("<< ", _turtle_format_node(ctx, tt.subject), " ",
+           _turtle_format_node(ctx, tt.predicate), " ",
+           _turtle_format_node(ctx, tt.object), " >>")
 end
 
 function _turtle_format_node(ctx::_TurtleSerContext, b::BNode)
@@ -247,8 +350,10 @@ function _turtle_format_node(ctx::_TurtleSerContext, lit::Literal)
             # Use prefixed datatype if possible
             try
                 prefix, _, localname = compute_qname(ctx.graph.namespace_manager, dt)
+                local_esc = _escape_pn_local(localname)
+                local_esc === nothing && return n3(lit)
                 escaped = _escape_literal(lit.lexical)
-                return string("\"", escaped, "\"^^", prefix, ":", localname)
+                return string("\"", escaped, "\"^^", prefix, ":", local_esc)
             catch
                 return n3(lit)
             end
@@ -320,10 +425,43 @@ mutable struct _TurtleParser
     prefixes::Dict{String, String}
     base::Union{String, Nothing}
     bnodecounter::Int
+    doc_bnode_labels::Set{String}  # labels appearing as _:label in the document
+end
+
+# Collect a superset of the blank node labels used in the document. Every
+# PN_CHARS character is either ASCII alphanumeric, '_', '-', or >= U+0080;
+# '.' is allowed mid-label. Over-matching (e.g. inside string literals) is
+# harmless — the set is only used to keep generated anonymous blank node IDs
+# from colliding with document labels.
+function _scan_doc_bnode_labels(input::String)
+    labels = Set{String}()
+    i = firstindex(input)
+    lastidx = lastindex(input)
+    while true
+        r = findnext("_:", input, i)
+        r === nothing && break
+        k = nextind(input, last(r))
+        buf = IOBuffer()
+        while k <= lastidx
+            c = input[k]
+            if c == '_' || c == '-' || c == '.' || isdigit(c) ||
+               ('A' <= c <= 'Z') || ('a' <= c <= 'z') || c >= '\x80'
+                write(buf, c)
+                k = nextind(input, k)
+            else
+                break
+            end
+        end
+        label = rstrip(String(take!(buf)), '.')
+        isempty(label) || push!(labels, label)
+        i = max(k, nextind(input, last(r)))
+    end
+    labels
 end
 
 function _TurtleParser(g::RDFGraph, input::String)
-    _TurtleParser(g, input, 1, Dict{String,String}(), nothing, 0)
+    _TurtleParser(g, input, 1, Dict{String,String}(), nothing, 0,
+                  _scan_doc_bnode_labels(input))
 end
 
 function _turtle_parse_document!(p::_TurtleParser)
@@ -494,7 +632,7 @@ function _parse_iriref!(p::_TurtleParser)
             return uri
         elseif c == '\\'
             p.pos = nextind(p.input, p.pos)
-            write(buf, _parse_escape_char!(p))
+            write(buf, _parse_iri_escape!(p))
         else
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
@@ -530,6 +668,7 @@ end
 function _parse_subject!(p::_TurtleParser)
     c = _peek(p)
     if c == '<'
+        _at_string(p, "<<") && return _parse_quoted_triple!(p)
         return URIRef(_parse_iriref!(p))
     elseif c == '_'
         return _parse_blank_node_label!(p)
@@ -569,9 +708,11 @@ end
 function _parse_verb!(p::_TurtleParser)
     c = _peek(p)
     if c == 'a'
-        # Check if it's the 'a' keyword (not start of a prefixed name)
+        # 'a' is the rdf:type keyword unless it continues as a prefixed name;
+        # any non-name character (e.g. '[', '<', '"', whitespace) is a boundary.
         next_pos = nextind(p.input, p.pos)
-        if next_pos > lastindex(p.input) || p.input[next_pos] in (' ', '\t', '\n', '\r')
+        if next_pos > lastindex(p.input) ||
+           !(_is_pn_chars(p.input[next_pos]) || p.input[next_pos] in (':', '.'))
             p.pos = next_pos
             return URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
         end
@@ -586,6 +727,17 @@ function _parse_object_list!(p::_TurtleParser, subject::Node, predicate::URIRef)
         add!(p.graph, Triple(subject, predicate, object))
 
         _skip_ws_and_comments!(p)
+        # Turtle-star annotation block: `:s :p :o {| :a :b |}` asserts the
+        # base triple and annotates the corresponding quoted triple term.
+        if _at_string(p, "{|")
+            _consume_str!(p, "{|")
+            _skip_ws_and_comments!(p)
+            tt = TripleTerm(subject, predicate, object)
+            _parse_predicate_object_list!(p, tt)
+            _skip_ws_and_comments!(p)
+            _consume_str!(p, "|}")
+            _skip_ws_and_comments!(p)
+        end
         c = _peek(p)
         if c == ','
             p.pos = nextind(p.input, p.pos)
@@ -606,6 +758,7 @@ function _parse_node!(p::_TurtleParser)::Identifier
     c === nothing && throw(ArgumentError("Unexpected end of input"))
 
     if c == '<'
+        _at_string(p, "<<") && return _parse_quoted_triple!(p)
         return URIRef(_parse_iriref!(p))
     elseif c == '_'
         return _parse_blank_node_label!(p)
@@ -615,12 +768,13 @@ function _parse_node!(p::_TurtleParser)::Identifier
         return _parse_collection!(p)
     elseif c == '"' || c == '\''
         return _parse_literal!(p)
-    elseif c == '+' || c == '-' || isdigit(c)
+    elseif c == '+' || c == '-' || isdigit(c) ||
+           (c == '.' && _next_char_is_digit(p.input, p.pos))
         return _parse_numeric_literal!(p)
-    elseif _at_string(p, "true")
+    elseif _at_keyword(p, "true")
         _consume_str!(p, "true")
         return Literal(true)
-    elseif _at_string(p, "false")
+    elseif _at_keyword(p, "false")
         _consume_str!(p, "false")
         return Literal(false)
     else
@@ -628,25 +782,75 @@ function _parse_node!(p::_TurtleParser)::Identifier
     end
 end
 
+# Is the character after `pos` a digit? (for leading-dot decimals like `.5`)
+function _next_char_is_digit(input::String, pos::Int)
+    next_pos = nextind(input, pos)
+    next_pos <= lastindex(input) && isdigit(input[next_pos])
+end
+
+# Match a keyword (`true`/`false`) only at a token boundary, so that e.g.
+# `trueblue:x` or `true:x` parse as prefixed names.
+function _at_keyword(p::_TurtleParser, word::AbstractString)
+    _at_string(p, word) || return false
+    endpos = p.pos
+    for _ in 1:length(word)
+        endpos = nextind(p.input, endpos)
+    end
+    endpos > lastindex(p.input) && return true
+    c = p.input[endpos]
+    !(_is_pn_chars(c) || c == ':')
+end
+
+# ─── Quoted triple parsing (Turtle-star / RDF 1.2) ─────────────────
+
+function _parse_quoted_triple!(p::_TurtleParser)
+    _consume_str!(p, "<<")
+    _skip_ws_and_comments!(p)
+    s = _parse_node!(p)
+    s isa Node ||
+        throw(ArgumentError("Quoted triple subject must be an IRI, blank node, or quoted triple"))
+    _skip_ws_and_comments!(p)
+    pred = _parse_verb!(p)
+    _skip_ws_and_comments!(p)
+    o = _parse_node!(p)
+    _skip_ws_and_comments!(p)
+    _consume_str!(p, ">>")
+    TripleTerm(s, pred, o)
+end
+
 # ─── Blank node parsing ────────────────────────────────────────────
 
 function _parse_blank_node_label!(p::_TurtleParser)
     _consume!(p, '_')
     _consume!(p, ':')
+    c = _peek(p)
+    (c === nothing || !(_is_pn_chars_u(c) || isdigit(c))) &&
+        throw(ArgumentError("Invalid blank node label at position $(p.pos)"))
     buf = IOBuffer()
+    write(buf, c)
+    p.pos = nextind(p.input, p.pos)
+    # Dots are only allowed mid-label: buffer them and flush when another
+    # label character follows; trailing dots are left unconsumed (they
+    # belong to the surrounding syntax, e.g. the statement terminator).
+    pending_dots = 0
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
-        if isletter(c) || isdigit(c) || c in ('_', '-', '.', '·')
+        if c == '.'
+            pending_dots += 1
+            p.pos = nextind(p.input, p.pos)
+        elseif _is_pn_chars(c)
+            while pending_dots > 0
+                write(buf, '.')
+                pending_dots -= 1
+            end
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
         else
             break
         end
     end
-    label = String(take!(buf))
-    # Remove trailing dots (not allowed at end of blank node label)
-    label = rstrip(label, '.')
-    BNode(label)
+    p.pos -= pending_dots  # '.' is a single byte; rewind unconsumed dots
+    BNode(String(take!(buf)))
 end
 
 function _parse_blank_node_property_list!(p::_TurtleParser)
@@ -666,6 +870,10 @@ end
 
 function _new_bnode!(p::_TurtleParser)
     p.bnodecounter += 1
+    # Never collide with a blank node label used explicitly in the document
+    while "b$(p.bnodecounter)" in p.doc_bnode_labels
+        p.bnodecounter += 1
+    end
     BNode("b$(p.bnodecounter)")
 end
 
@@ -730,21 +938,8 @@ function _parse_prefixed_name!(p::_TurtleParser)
     end
     prefix = String(take!(buf))
 
-    # Read local part (after :)
-    local_buf = IOBuffer()
-    while p.pos <= lastindex(p.input)
-        c = p.input[p.pos]
-        if c in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}', '#')
-            break
-        elseif c == '\\'
-            p.pos = nextind(p.input, p.pos)
-            write(local_buf, _parse_pname_escape!(p))
-        else
-            write(local_buf, c)
-            p.pos = nextind(p.input, p.pos)
-        end
-    end
-    localname = String(take!(local_buf))
+    # Read local part (after :) following the PN_LOCAL grammar
+    localname = _parse_pn_local!(p)
 
     # Resolve prefix
     ns_uri = get(p.prefixes, prefix, nothing)
@@ -754,10 +949,59 @@ function _parse_prefixed_name!(p::_TurtleParser)
     URIRef(ns_uri * localname)
 end
 
-function _parse_pname_escape!(p::_TurtleParser)
-    c = p.input[p.pos]
-    p.pos = nextind(p.input, p.pos)
-    c  # In Turtle, PN_LOCAL_ESC just passes through the escaped char
+# PN_LOCAL ::= (PN_CHARS_U | ':' | [0-9] | PLX)
+#              ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+# PLX ::= PERCENT | PN_LOCAL_ESC
+# Percent sequences are kept verbatim; PN_LOCAL_ESC escapes are unescaped.
+# Shared by the Turtle and N3 parsers (both expose `input`/`pos` fields).
+function _parse_pn_local!(p)
+    buf = IOBuffer()
+    is_first = true
+    pending_dots = 0
+    flush_dots!() = (while pending_dots > 0; write(buf, '.'); pending_dots -= 1; end)
+    while p.pos <= lastindex(p.input)
+        c = p.input[p.pos]
+        if c == '%'
+            # PERCENT: '%' HEX HEX, kept verbatim
+            h1 = nextind(p.input, p.pos)
+            h2 = h1 <= lastindex(p.input) ? nextind(p.input, h1) : h1
+            if h1 > lastindex(p.input) || h2 > lastindex(p.input) ||
+               !_is_hex_digit(p.input[h1]) || !_is_hex_digit(p.input[h2])
+                throw(ArgumentError("Invalid percent-encoding in prefixed name at position $(p.pos)"))
+            end
+            flush_dots!()
+            write(buf, '%', p.input[h1], p.input[h2])
+            p.pos = nextind(p.input, h2)
+        elseif c == '\\'
+            # PN_LOCAL_ESC: '\' followed by a reserved character
+            esc_pos = nextind(p.input, p.pos)
+            esc_pos > lastindex(p.input) &&
+                throw(ArgumentError("Truncated escape in prefixed name at position $(p.pos)"))
+            ec = p.input[esc_pos]
+            ec in _PN_LOCAL_ESC_CHARS ||
+                throw(ArgumentError("Invalid local-name escape '\\$ec' at position $(p.pos)"))
+            flush_dots!()
+            write(buf, ec)
+            p.pos = nextind(p.input, esc_pos)
+        elseif c == ':' || _is_pn_chars(c)
+            # First char must be PN_CHARS_U | ':' | digit (not '-', U+00B7, marks)
+            if is_first && !(_is_pn_chars_u(c) || isdigit(c) || c == ':')
+                break
+            end
+            flush_dots!()
+            write(buf, c)
+            p.pos = nextind(p.input, p.pos)
+        elseif c == '.' && !is_first
+            # Dots are only allowed mid-name; trailing dots stay unconsumed
+            pending_dots += 1
+            p.pos = nextind(p.input, p.pos)
+        else
+            break
+        end
+        is_first = false
+    end
+    p.pos -= pending_dots  # '.' is a single byte; rewind unconsumed dots
+    String(take!(buf))
 end
 
 # ─── Literal parsing ───────────────────────────────────────────────
@@ -776,6 +1020,19 @@ function _parse_literal!(p::_TurtleParser)
     if c == '@'
         p.pos = nextind(p.input, p.pos)
         lang_tag = _parse_lang_tag!(p)
+        # Optional base direction (RDF 1.2): "x"@en--ltr / "x"@ar--rtl
+        if _at_string(p, "--")
+            p.pos = nextind(p.input, nextind(p.input, p.pos))
+            dir_buf = IOBuffer()
+            while p.pos <= lastindex(p.input) && isletter(p.input[p.pos])
+                write(dir_buf, p.input[p.pos])
+                p.pos = nextind(p.input, p.pos)
+            end
+            dir = String(take!(dir_buf))
+            dir in ("ltr", "rtl") ||
+                throw(ArgumentError("Invalid base direction '$dir'; expected 'ltr' or 'rtl'"))
+            return Literal(lexical, lang=lang_tag, direction=dir)
+        end
         return Literal(lexical, lang=lang_tag)
     elseif c == '^'
         _consume_str!(p, "^^")
@@ -812,14 +1069,26 @@ function _parse_long_string!(p::_TurtleParser)
     quote_char = p.input[p.pos]
     _consume_str!(p, string(quote_char, quote_char, quote_char))
     buf = IOBuffer()
-    end_pattern = string(quote_char, quote_char, quote_char)
     while p.pos <= lastindex(p.input)
-        if _at_string(p, end_pattern)
-            _consume_str!(p, end_pattern)
-            return String(take!(buf))
-        end
         c = p.input[p.pos]
-        if c == '\\'
+        if c == quote_char
+            # Longest match: in a run of n >= 3 quotes, the final three close
+            # the string and any preceding quotes belong to the content.
+            run = 0
+            while p.pos <= lastindex(p.input) && p.input[p.pos] == quote_char
+                run += 1
+                p.pos = nextind(p.input, p.pos)
+            end
+            if run >= 3
+                for _ in 1:(run - 3)
+                    write(buf, quote_char)
+                end
+                return String(take!(buf))
+            end
+            for _ in 1:run
+                write(buf, quote_char)
+            end
+        elseif c == '\\'
             p.pos = nextind(p.input, p.pos)
             write(buf, _parse_escape_char!(p))
         else
@@ -831,34 +1100,76 @@ function _parse_long_string!(p::_TurtleParser)
 end
 
 function _parse_escape_char!(p::_TurtleParser)
+    p.pos > lastindex(p.input) &&
+        throw(ArgumentError("Truncated escape sequence at end of input"))
     c = p.input[p.pos]
     p.pos = nextind(p.input, p.pos)
     if c == 'n'; return '\n'
     elseif c == 'r'; return '\r'
     elseif c == 't'; return '\t'
+    elseif c == 'b'; return '\b'
+    elseif c == 'f'; return '\f'
     elseif c == '\\'; return '\\'
     elseif c == '"'; return '"'
     elseif c == '\''; return '\''
     elseif c == 'u'
-        hex = p.input[p.pos:nextind(p.input, p.pos, 3)]
-        p.pos = nextind(p.input, p.pos, 4)
-        return Char(parse(UInt32, hex, base=16))
+        return _parse_hex_escape!(p, 4)
     elseif c == 'U'
-        hex = p.input[p.pos:nextind(p.input, p.pos, 7)]
-        p.pos = nextind(p.input, p.pos, 8)
-        return Char(parse(UInt32, hex, base=16))
+        return _parse_hex_escape!(p, 8)
     else
         return c
     end
+end
+
+# Parse exactly `n` hex digits of a \\u/\\U escape, with clean errors on
+# truncation, non-hex characters, surrogates, and out-of-range code points.
+function _parse_hex_escape!(p::_TurtleParser, n::Int)
+    cp = UInt32(0)
+    for _ in 1:n
+        p.pos > lastindex(p.input) &&
+            throw(ArgumentError("Truncated \\u escape at end of input"))
+        c = p.input[p.pos]
+        _is_hex_digit(c) ||
+            throw(ArgumentError("Invalid hex digit '$c' in \\u escape at position $(p.pos)"))
+        cp = cp * 0x10 + UInt32(parse(UInt8, string(c), base=16))
+        p.pos = nextind(p.input, p.pos)
+    end
+    (0xD800 <= cp <= 0xDFFF) &&
+        throw(ArgumentError("Surrogate code point U+$(string(cp, base=16, pad=4)) in \\u escape"))
+    cp > 0x10FFFF &&
+        throw(ArgumentError("Code point out of range in \\U escape"))
+    Char(cp)
+end
+
+# Inside an IRIREF (<...>) only \\u and \\U escapes are legal.
+function _parse_iri_escape!(p::_TurtleParser)
+    p.pos > lastindex(p.input) &&
+        throw(ArgumentError("Truncated escape sequence in IRI reference"))
+    c = p.input[p.pos]
+    p.pos = nextind(p.input, p.pos)
+    c == 'u' && return _parse_hex_escape!(p, 4)
+    c == 'U' && return _parse_hex_escape!(p, 8)
+    throw(ArgumentError("Invalid escape '\\$c' in IRI reference; only \\u and \\U are allowed"))
 end
 
 function _parse_lang_tag!(p::_TurtleParser)
     buf = IOBuffer()
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
-        if isletter(c) || c == '-' || isdigit(c)
+        if isletter(c) || isdigit(c)
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
+        elseif c == '-'
+            # A '-' only continues the tag when followed by an alphanumeric
+            # subtag; "--" introduces a base direction (handled by the caller).
+            next_pos = nextind(p.input, p.pos)
+            if next_pos <= lastindex(p.input) &&
+               (isletter(p.input[next_pos]) || isdigit(p.input[next_pos]))
+                write(buf, c)
+                p.pos = nextind(p.input, p.pos)
+            else
+                break
+            end
         else
             break
         end

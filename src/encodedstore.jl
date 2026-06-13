@@ -185,9 +185,47 @@ end
     store.count += 1
 end
 
+"""
+    add_bulk!(store::EncodedStore, triples_vec) -> store
+
+Bulk insertion: batch-interns all terms and appends encoded triples in one
+pass. Avoids the per-triple overhead of `add!` (repeated index checks,
+un-hinted Dict/Vector growth). Duplicates are skipped, mirroring `add!`.
+"""
 function add_bulk!(store::EncodedStore, triples_vec::Vector{Triple})
-    for t in triples_vec
-        add!(store, t)
+    isempty(triples_vec) && return store
+    n = length(triples_vec)
+    _ensure_indexed!(store)
+
+    # Pre-size dictionaries/vectors for the incoming batch.
+    sizehint!(store.term_to_id, length(store.term_to_id) + 2 * n)
+    sizehint!(store.id_to_term, length(store.id_to_term) + 2 * n)
+    sizehint!(store.insertion_order_enc, length(store.insertion_order_enc) + n)
+    sizehint!(store.spo_enc, length(store.spo_enc) + n ÷ 3 + 1)
+
+    secondary = store.secondary_indexed
+    @inbounds for t in triples_vec
+        # Batch intern (terms repeat heavily across a batch; `_intern!` is a
+        # single hash lookup when already present).
+        s_id = _intern!(store, t.subject)
+        p_id = _intern!(store, t.predicate)
+        o_id = _intern!(store, t.object)
+        # Dedup check shares the SPO bucket lookup with the insert.
+        sp = get!(Dict{UInt32, Set{UInt32}}, store.spo_enc, s_id)
+        objs = get!(Set{UInt32}, sp, p_id)
+        o_id in objs && continue
+        push!(objs, o_id)
+        et = (s_id, p_id, o_id)
+        if secondary
+            po = get!(Dict{UInt32, Set{UInt32}}, store.pos_enc, p_id)
+            push!(get!(Set{UInt32}, po, o_id), s_id)
+            os = get!(Dict{UInt32, Set{UInt32}}, store.osp_enc, o_id)
+            push!(get!(Set{UInt32}, os, s_id), p_id)
+            push!(get!(Vector{NTuple{3, UInt32}}, store.subj_flat_enc, s_id), et)
+            push!(get!(Vector{NTuple{3, UInt32}}, store.pred_flat_enc, p_id), et)
+        end
+        push!(store.insertion_order_enc, et)
+        store.count += 1
     end
     store
 end

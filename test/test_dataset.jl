@@ -90,4 +90,43 @@ using RDFLib
         @test nothing in names
         @test EX("g1") in names
     end
+
+    @testset "blank node graph names" begin
+        ds = Dataset()
+        b = BNode("g")
+        add!(ds, Triple(EX("s"), EX("p"), Literal("x")), b)
+        @test length(ds) == 1
+
+        g = get_graph(ds, b)
+        @test !isnothing(g)
+        @test length(g) == 1
+        @test length(get_graph(ds)) == 0
+
+        # contexts and graphs expose the BNode name
+        @test b in collect(contexts(ds))
+        @test b in [name for (name, _) in graphs(ds)]
+
+        # quads carry the BNode graph
+        qs = collect(quads(ds))
+        @test length(qs) == 1
+        @test qs[1].graph == b
+
+        # pattern matching by BNode graph name
+        matched = collect(quads(ds, (nothing, nothing, nothing, b)))
+        @test length(matched) == 1
+
+        # add_graph / remove_graph accept BNode names
+        g2 = add_graph(ds, BNode("h"))
+        @test g2 isa RDFGraph
+        remove_graph(ds, b)
+        @test isnothing(get_graph(ds, b))
+    end
+
+    @testset "Quad with BNode graph" begin
+        q1 = Quad(EX("s"), EX("p"), EX("o"), BNode("g"))
+        q2 = Quad(Triple(EX("s"), EX("p"), EX("o")), BNode("g"))
+        @test q1 == q2
+        @test hash(q1) == hash(q2)
+        @test q1 != Quad(EX("s"), EX("p"), EX("o"), EX("g"))
+    end
 end

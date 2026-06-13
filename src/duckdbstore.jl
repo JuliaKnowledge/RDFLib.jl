@@ -104,14 +104,13 @@ function add!(store::DuckDBStore, t::Triple)
     s = _duckdb_encode_node(t.subject)
     p = t.predicate.value
     o_val, o_type, o_dt, o_lang = _duckdb_encode_object(t.object)
-    try
-        DBInterface.execute(store.con,
-            "INSERT INTO triples (subject, predicate, object, object_type, datatype, language) VALUES (?, ?, ?, ?, ?, ?)",
-            (s, p, o_val, o_type, o_dt, o_lang))
-    catch e
-        # Ignore unique constraint violations (duplicate triples)
-        e isa DuckDB.QueryException || rethrow(e)
-    end
+    # INSERT OR IGNORE: duplicates (per the table's UNIQUE constraint) are
+    # skipped by the engine itself. Real errors (I/O, constraint violations
+    # other than duplicate-key, closed connections, ...) propagate — never
+    # swallow arbitrary QueryExceptions to emulate ignore-on-conflict.
+    DBInterface.execute(store.con,
+        "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language) VALUES (?, ?, ?, ?, ?, ?)",
+        (s, p, o_val, o_type, o_dt, o_lang))
     store._count = -1
     store
 end
@@ -180,21 +179,19 @@ function triples(store::DuckDBStore, pattern::TriplePattern)
         sql *= " WHERE " * join(conditions, " AND ")
     end
 
-    # Collect results eagerly to avoid holding the cursor open
+    # Materialize eagerly (avoids holding the cursor open) and return the
+    # vector directly — callers only iterate/collect, so a Channel replay
+    # would add a task round-trip per triple for nothing (mirrors
+    # SQLiteStore's `triples`).
     result = DBInterface.execute(store.con, sql, params)
-    rows = [
-        (row.subject, row.predicate, row.object, row.object_type, row.datatype, row.language)
-        for row in Tables.namedtupleiterator(result)
-    ]
-
-    Channel{Triple}() do ch
-        for (subj, pred, obj, obj_type, dt, lang) in rows
-            s_node = _duckdb_decode_node(subj)
-            p_node = URIRef(pred)
-            o_node = _duckdb_decode_object(obj, obj_type, dt, lang)
-            put!(ch, Triple(s_node, p_node, o_node))
-        end
+    out = Triple[]
+    for row in Tables.namedtupleiterator(result)
+        s_node = _duckdb_decode_node(row.subject)
+        p_node = URIRef(row.predicate)
+        o_node = _duckdb_decode_object(row.object, row.object_type, row.datatype, row.language)
+        push!(out, Triple(s_node, p_node, o_node))
     end
+    out
 end
 
 function Base.length(store::DuckDBStore)

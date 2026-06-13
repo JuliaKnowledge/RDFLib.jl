@@ -59,12 +59,42 @@ end
     @test validate_langtag("sr-Latn")
     @test validate_langtag("es-419")
 
+    # 4-8 character primary language subtags (RFC 5646)
+    @test validate_langtag("abcd")
+    @test validate_langtag("abcde")
+    @test validate_langtag("abcdefgh")
+
+    # Extended language subtags
+    @test validate_langtag("zh-cmn-Hans-CN")
+    @test validate_langtag("zh-yue")
+
+    # Variants
+    @test validate_langtag("sl-rozaj")
+    @test validate_langtag("de-CH-1901")
+
+    # Extension singletons
+    @test validate_langtag("en-a-bbb")
+    @test validate_langtag("en-a-bbb-x-y")
+    @test validate_langtag("en-u-islamcal")
+    @test validate_langtag("zh-CN-a-myext-x-private")
+
+    # Private-use subtags
+    @test validate_langtag("de-x-foo")
+    @test validate_langtag("en-US-x-twain")
+    @test validate_langtag("x-private")
+    @test validate_langtag("x-a-b-c")
+
     # Invalid tags
     @test !validate_langtag("")
-    @test !validate_langtag("x")           # too short
+    @test !validate_langtag("x")           # private-use marker without subtags
     @test !validate_langtag("toolonglangtag")  # too long for primary
     @test !validate_langtag("en_US")       # underscore not allowed
     @test !validate_langtag("123")         # must start with letters
+    @test !validate_langtag("en-")         # trailing hyphen
+    @test !validate_langtag("en-a")        # extension singleton with no subtag
+    @test !validate_langtag("de-x")        # private-use marker with no subtag
+    @test !validate_langtag("en-a-b")      # extension subtag too short (1 char)
+    @test !validate_langtag("a-x-foo")     # primary subtag too short
 end
 
 @testset "Language Tag Normalization" begin
@@ -75,4 +105,17 @@ end
     @test normalize_langtag("de-de") == "de-DE"
     @test normalize_langtag("es-419") == "es-419"
     @test normalize_langtag("en") == "en"
+
+    # Subtags after a singleton stay lowercase (no fake script/region casing)
+    @test normalize_langtag("de-x-FOO") == "de-x-foo"
+    @test normalize_langtag("en-US-x-TWAIN") == "en-US-x-twain"
+    @test normalize_langtag("en-A-BBB-X-AB") == "en-a-bbb-x-ab"
+    @test normalize_langtag("X-PRIV") == "x-priv"
+
+    # normalize and validate agree: normalized valid tags stay valid
+    for tag in ["en-us", "zh-hans-cn", "de-x-FOO", "en-A-BBB-X-AB",
+                "EN-US-X-TWAIN", "es-419", "x-private"]
+        @test validate_langtag(tag)
+        @test validate_langtag(normalize_langtag(tag))
+    end
 end

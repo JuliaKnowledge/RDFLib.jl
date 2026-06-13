@@ -164,3 +164,102 @@ const G = RDFLib.RDFGraph
         @test md5s[1] == Literal("5eb63bbbe01eeed093cb22bb8f5acdc3")
     end
 end
+
+@testset "N3 parser regression fixes" begin
+    EX = Namespace("http://example.org/")
+
+    @testset "generated bnode IDs do not collide with document labels" begin
+        g = parse_n3("""
+            @prefix ex: <http://example.org/> .
+            _:b1 ex:x ex:y .
+            [ ex:p ex:o ] ex:q ex:r .
+        """)
+        @test length(g) == 3
+        @test BNode("b1") in Set(t.subject for t in g)
+        anon_q = [t.subject for t in triples(g, (nothing, EX("q"), EX("r")))]
+        @test length(anon_q) == 1
+        @test anon_q[1] != BNode("b1")
+    end
+
+    @testset "bnode label does not consume terminating dot" begin
+        g = parse_n3("""
+            @prefix ex: <http://example.org/> .
+            ex:s ex:p _:b1.
+            ex:s2 ex:p2 ex:o2 .
+        """)
+        @test length(g) == 2
+        @test Triple(EX("s"), EX("p"), BNode("b1")) in g
+        @test Triple(EX("s2"), EX("p2"), EX("o2")) in g
+    end
+
+    @testset "PN_LOCAL dots and escapes" begin
+        g = parse_n3("""
+            @prefix ex: <http://example.org/> .
+            ex:a.b ex:v1.0 ex:c\\,d .
+            ex:e%20f ex:p ex:o.
+        """)
+        @test Triple(EX("a.b"), EX("v1.0"), EX("c,d")) in g
+        @test Triple(EX("e%20f"), EX("p"), EX("o")) in g
+    end
+
+    @testset "true/false token boundary" begin
+        g = parse_n3("""
+            @prefix trueblue: <http://example.org/tb#> .
+            @prefix ex: <http://example.org/> .
+            ex:s ex:p trueblue:x .
+            ex:s ex:q true .
+        """)
+        @test Triple(EX("s"), EX("p"), URIRef("http://example.org/tb#x")) in g
+        @test Triple(EX("s"), EX("q"), Literal(true)) in g
+    end
+
+    @testset "leading-dot decimals" begin
+        g = parse_n3("@prefix ex: <http://example.org/> . ex:s ex:p .5 .")
+        xsd_decimal = URIRef("http://www.w3.org/2001/XMLSchema#decimal")
+        @test Triple(EX("s"), EX("p"), Literal(".5", datatype=xsd_decimal)) in g
+    end
+
+    @testset "'a' keyword boundary" begin
+        rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        g = parse_n3("@prefix ex: <http://example.org/> . ex:s a[ex:p ex:o] .")
+        @test length(g) == 2
+        @test length(collect(triples(g, (EX("s"), rdf_type, nothing)))) == 1
+    end
+
+    @testset "long string greedy termination" begin
+        g = parse_n3("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\" .")
+        @test Triple(EX("s"), EX("p"), Literal("a\"")) in g
+    end
+
+    @testset "unicode escape errors" begin
+        @test_throws ArgumentError parse_n3("@prefix ex: <http://example.org/> . ex:s ex:p \"\\u00")
+        @test_throws ArgumentError parse_n3("@prefix ex: <http://example.org/> . ex:s ex:p \"\\uD800\" .")
+        # only \\u/\\U escapes inside IRIs
+        @test_throws ArgumentError parse_n3("<http://example.org/s\\n> <http://example.org/p> <http://example.org/o> .")
+    end
+
+    @testset "directional literals" begin
+        g = parse_n3("@prefix ex: <http://example.org/> . ex:s ex:p \"x\"@en--ltr . ex:s ex:q \"y\"@ar--rtl .")
+        lits = Dict(t.predicate => t.object for t in g)
+        @test lits[EX("p")] == Literal("x", lang="en", direction="ltr")
+        @test lits[EX("q")] == Literal("y", lang="ar", direction="rtl")
+
+        # round-trip through the N3 serializer
+        g2 = RDFGraph()
+        bind!(g2, "ex", EX)
+        add!(g2, Triple(EX("s"), EX("p"), Literal("x", lang="en", direction="ltr")))
+        out = serialize_n3(g2)
+        g3 = parse_n3(out)
+        @test Triple(EX("s"), EX("p"), Literal("x", lang="en", direction="ltr")) in g3
+    end
+
+    @testset "serializer escapes PN_LOCAL reserved characters" begin
+        g = RDFGraph()
+        bind!(g, "ex", EX)
+        add!(g, Triple(EX("a,b"), EX("p"), Literal("v")))
+        out = serialize_n3(g)
+        g2 = parse_n3(out)
+        @test length(g2) == 1
+        @test Triple(EX("a,b"), EX("p"), Literal("v")) in g2
+    end
+end

@@ -30,17 +30,21 @@ add!(g, Triple(URIRef("http://example.org/s"), URIRef("http://example.org/p"), L
 mutable struct SQLiteStore <: AbstractStore
     db::SQLite.DB
     _count::Int  # cached count, -1 means needs refresh
+    # Prepared statement cache keyed by SQL text. Only a small, bounded set
+    # of SQL strings is ever generated (one INSERT plus the 8/16 pattern
+    # variants of SELECT/DELETE), so this never grows unbounded.
+    _stmts::Dict{String, SQLite.Stmt}
 end
 
 function SQLiteStore(db_path::AbstractString=":memory:")
     db = SQLite.DB(db_path)
     _init_schema!(db)
-    SQLiteStore(db, -1)
+    SQLiteStore(db, -1, Dict{String, SQLite.Stmt}())
 end
 
 function SQLiteStore(db::SQLite.DB)
     _init_schema!(db)
-    SQLiteStore(db, -1)
+    SQLiteStore(db, -1, Dict{String, SQLite.Stmt}())
 end
 
 function _init_schema!(db::SQLite.DB)
@@ -58,11 +62,24 @@ function _init_schema!(db::SQLite.DB)
     DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_spo ON triples(subject, predicate, object)")
     DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_pos ON triples(predicate, object, subject)")
     DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_osp ON triples(object, subject, predicate)")
-    DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_s ON triples(subject)")
-    DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_p ON triples(predicate)")
-    DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_o ON triples(object)")
+    # Migration: drop single-column indexes from older schema versions —
+    # each is a leftmost prefix of one of the composite indexes above
+    # (idx_s ⊂ idx_spo, idx_p ⊂ idx_pos, idx_o ⊂ idx_osp), so they only
+    # waste space and slow down writes.
+    DBInterface.execute(db, "DROP INDEX IF EXISTS idx_s")
+    DBInterface.execute(db, "DROP INDEX IF EXISTS idx_p")
+    DBInterface.execute(db, "DROP INDEX IF EXISTS idx_o")
     nothing
 end
+
+# Return a cached prepared statement for `sql`, preparing it on first use.
+function _prepared(store::SQLiteStore, sql::String)
+    get!(store._stmts, sql) do
+        DBInterface.prepare(store.db, sql)
+    end
+end
+
+const _SQL_INSERT_TRIPLE = "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language) VALUES (?, ?, ?, ?, ?, ?)"
 
 # ─── Term encoding/decoding ──────────────────────────────────────────
 
@@ -115,9 +132,30 @@ function add!(store::SQLiteStore, t::Triple)
     s = _sql_encode_node(t.subject)
     p = t.predicate.value
     o_val, o_type, o_dt, o_lang = _sql_encode_object(t.object)
-    DBInterface.execute(store.db,
-        "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language) VALUES (?, ?, ?, ?, ?, ?)",
+    DBInterface.execute(_prepared(store, _SQL_INSERT_TRIPLE),
         (s, p, o_val, o_type, o_dt, o_lang))
+    store._count = -1
+    store
+end
+
+"""
+    add_bulk!(store::SQLiteStore, triples_iter) -> store
+
+Add many triples in a single transaction using one prepared INSERT
+statement. Orders of magnitude faster than repeated `add!` calls (which
+each commit their own implicit transaction). Duplicates are ignored, as
+with `add!`. For batching arbitrary operations, see [`transaction`](@ref).
+"""
+function add_bulk!(store::SQLiteStore, triples_iter)
+    stmt = _prepared(store, _SQL_INSERT_TRIPLE)
+    transaction(store) do
+        for t in triples_iter
+            s = _sql_encode_node(t.subject)
+            p = t.predicate.value
+            o_val, o_type, o_dt, o_lang = _sql_encode_object(t.object)
+            DBInterface.execute(stmt, (s, p, o_val, o_type, o_dt, o_lang))
+        end
+    end
     store._count = -1
     store
 end
@@ -151,7 +189,7 @@ function remove!(store::SQLiteStore, pattern::TriplePattern)
     if !isempty(conditions)
         sql *= " WHERE " * join(conditions, " AND ")
     end
-    DBInterface.execute(store.db, sql, params)
+    DBInterface.execute(_prepared(store, sql), params)
     store._count = -1
     store
 end
@@ -186,23 +224,24 @@ function triples(store::SQLiteStore, pattern::TriplePattern)
         sql *= " WHERE " * join(conditions, " AND ")
     end
 
-    # Collect results eagerly to avoid holding the cursor open
-    result = DBInterface.execute(store.db, sql, params)
-    rows = [(row.subject, row.predicate, row.object, row.object_type, row.datatype, row.language) for row in result]
-
-    Channel{Triple}() do ch
-        for (subj, pred, obj, obj_type, dt, lang) in rows
-            s_node = _sql_decode_node(subj)
-            p_node = URIRef(pred)
-            o_node = _sql_decode_object(obj, obj_type, dt, lang)
-            put!(ch, Triple(s_node, p_node, o_node))
-        end
+    # Materialize eagerly (avoids holding the cursor open) and return the
+    # vector directly — callers only iterate/collect, so the previous
+    # unbuffered Channel replay added a task round-trip per triple for
+    # nothing.
+    result = DBInterface.execute(_prepared(store, sql), params)
+    out = Triple[]
+    for row in result
+        s_node = _sql_decode_node(row.subject)
+        p_node = URIRef(row.predicate)
+        o_node = _sql_decode_object(row.object, row.object_type, row.datatype, row.language)
+        push!(out, Triple(s_node, p_node, o_node))
     end
+    out
 end
 
 function Base.length(store::SQLiteStore)
     if store._count < 0
-        result = DBInterface.execute(store.db, "SELECT COUNT(*) as cnt FROM triples")
+        result = DBInterface.execute(_prepared(store, "SELECT COUNT(*) as cnt FROM triples"))
         row = first(result)
         store._count = row.cnt
     end
@@ -214,14 +253,27 @@ Base.isempty(store::SQLiteStore) = length(store) == 0
 """
     close(store::SQLiteStore)
 
-Close the underlying database connection.
+Close cached prepared statements and the underlying database connection.
 """
-Base.close(store::SQLiteStore) = DBInterface.close!(store.db)
+function Base.close(store::SQLiteStore)
+    for stmt in values(store._stmts)
+        try
+            DBInterface.close!(stmt)
+        catch
+        end
+    end
+    empty!(store._stmts)
+    DBInterface.close!(store.db)
+end
 
 """
     transaction(f, store::SQLiteStore)
 
-Execute function `f` within a database transaction for bulk operations.
+Execute function `f` within a database transaction. Use this to batch many
+`add!`/`remove!` calls into one commit — without it every call commits its
+own implicit transaction, which is dramatically slower. For plain bulk
+insertion prefer [`add_bulk!`](@ref), which also reuses a single prepared
+statement.
 
 # Example
 ```julia

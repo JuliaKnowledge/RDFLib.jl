@@ -83,7 +83,8 @@ const _SPARQL_KEYWORDS = Set([
     "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP_CONCAT", "SAMPLE",
     "MEDIAN", "MODE", "SEPARATOR",
     "INSERT", "DELETE", "DATA", "CLEAR", "DROP", "LOAD", "INTO",
-    "COPY", "DEFAULT", "ALL", "NAMED", "UNDEF",
+    "COPY", "MOVE", "ADD", "CREATE", "TO", "WITH", "USING",
+    "DEFAULT", "ALL", "NAMED", "UNDEF",
     # Built-in functions (must be keywords so they aren't tokenized as PNAME)
     "STR", "LANG", "LANGMATCHES", "DATATYPE", "BOUND", "IRI", "URI",
     "BNODE", "RAND", "ABS", "CEIL", "FLOOR", "ROUND", "CONCAT",
@@ -126,19 +127,21 @@ function _sparql_tokenize_all(input::AbstractString)
                 pos += 2
                 continue
             end
-            # Check if this is an IRI (contains ://) or a less-than operator
+            # Disambiguate IRIREF vs less-than operator: treat <...> as an IRI
+            # only when the bracketed content is plausible IRI content — it must
+            # not start with ?/$ (variables), must contain no whitespace/control
+            # chars or chars excluded from IRIREF (<, ", {, }, |, ^, `, \), and
+            # must not contain the boolean operators &&/||.
             end_pos = findnext('>', input, pos + 1)
-            if !isnothing(end_pos) && !isnothing(findfirst("://", SubString(input, pos, end_pos)))
-                iri = input[pos+1:end_pos-1]
-                push!(tokens, _SparqlToken(TOK_IRI, iri, pos))
-                pos = end_pos + 1
-                continue
-            elseif !isnothing(end_pos) && !any(c -> c in (' ', '\n', '\t', '{', '}', '<'), SubString(input, pos+1, end_pos-1))
-                # Could still be an IRI without ://
-                iri = input[pos+1:end_pos-1]
-                push!(tokens, _SparqlToken(TOK_IRI, iri, pos))
-                pos = end_pos + 1
-                continue
+            if !isnothing(end_pos)
+                content = SubString(input, nextind(input, pos), prevind(input, end_pos))
+                if !startswith(content, '?') && !startswith(content, '$') &&
+                   !occursin("&&", content) && !occursin("||", content) &&
+                   all(ch -> ch > ' ' && !(ch in ('<', '"', '{', '}', '|', '^', '`', '\\')), content)
+                    push!(tokens, _SparqlToken(TOK_IRI, String(content), pos))
+                    pos = end_pos + 1
+                    continue
+                end
             end
             # Less-than operator
             if pos < len && input[pos+1] == '='
@@ -178,8 +181,8 @@ function _sparql_tokenize_all(input::AbstractString)
             continue
         end
 
-        # Variable: ?name or $name
-        if (c == '?' || c == '$') && pos < len && (isletter(input[pos+1]) || input[pos+1] == '_')
+        # Variable: ?name or $name (VARNAME may start with a digit, e.g. ?1)
+        if (c == '?' || c == '$') && pos < len && (isletter(input[pos+1]) || input[pos+1] == '_' || isdigit(input[pos+1]))
             start = pos
             pos = nextind(input, pos)
             while pos <= len && (isdigit(input[pos]) || isletter(input[pos]) || input[pos] == '_')
@@ -196,12 +199,17 @@ function _sparql_tokenize_all(input::AbstractString)
             continue
         end
 
-        # Blank node: _:label
+        # Blank node: _:label (label may contain internal dots, but a trailing
+        # dot is a statement terminator — back off)
         if c == '_' && pos < len && input[pos+1] == ':'
             start = pos
             pos += 2
+            label_start = pos
             while pos <= len && (isdigit(input[pos]) || isletter(input[pos]) || input[pos] in ('.', '-', '_'))
                 pos = nextind(input, pos)
+            end
+            while pos > label_start && input[prevind(input, pos)] == '.'
+                pos = prevind(input, pos)
             end
             push!(tokens, _SparqlToken(TOK_BNODE, input[start:pos-1], start))
             continue
@@ -350,14 +358,23 @@ function _sparql_tokenize_all(input::AbstractString)
             while pos <= len && (isletter(input[pos]) || isdigit(input[pos]) || input[pos] in ('_', '.', '-'))
                 pos = nextind(input, pos)
             end
+            # Names may contain internal dots but never end with one — a
+            # trailing dot is the statement terminator.
+            while pos > start && input[prevind(input, pos)] == '.'
+                pos = prevind(input, pos)
+            end
             word = input[start:pos-1]
 
             # Check for prefixed name (word followed by :)
             if pos <= len && input[pos] == ':'
                 pos = nextind(input, pos)
+                local_start = pos
                 # Read local part
                 while pos <= len && (isletter(input[pos]) || isdigit(input[pos]) || input[pos] in ('_', '.', '-'))
                     pos = nextind(input, pos)
+                end
+                while pos > local_start && input[prevind(input, pos)] == '.'
+                    pos = prevind(input, pos)
                 end
                 pname = input[start:pos-1]
                 push!(tokens, _SparqlToken(TOK_PNAME, pname, start))
@@ -385,8 +402,13 @@ function _sparql_tokenize_all(input::AbstractString)
         if c == ':'
             start = pos
             pos = nextind(input, pos)
+            local_start = pos
             while pos <= len && (isletter(input[pos]) || isdigit(input[pos]) || input[pos] in ('_', '.', '-'))
                 pos = nextind(input, pos)
+            end
+            # Trailing dot terminates the statement; back off
+            while pos > local_start && input[prevind(input, pos)] == '.'
+                pos = prevind(input, pos)
             end
             push!(tokens, _SparqlToken(TOK_PNAME, input[start:pos-1], start))
             continue
@@ -477,7 +499,7 @@ end
 
 # ─── Expression Parser (Pratt / TDOP) ─────────────────────────────
 # Correct operator precedence without left-recursion.
-# Precedence (low to high): || < && < NOT < comparisons < +- < */ < unary < primary
+# Precedence (low to high): || < && < comparisons < +- < */ < unary (!, +, -) < primary
 
 function _parse_expr(tz::_SparqlTokenizer, prefixes::Dict{String,String})::SparqlExpr
     _parse_or(tz, prefixes)
@@ -494,22 +516,13 @@ function _parse_or(tz::_SparqlTokenizer, prefixes)::SparqlExpr
 end
 
 function _parse_and(tz::_SparqlTokenizer, prefixes)::SparqlExpr
-    left = _parse_not(tz, prefixes)
+    left = _parse_comparison(tz, prefixes)
     while _check(tz, TOK_AND)
         _advance!(tz)
-        right = _parse_not(tz, prefixes)
+        right = _parse_comparison(tz, prefixes)
         left = ExprBinaryOp(:&&, left, right)
     end
     left
-end
-
-function _parse_not(tz::_SparqlTokenizer, prefixes)::SparqlExpr
-    if _check(tz, TOK_BANG)
-        _advance!(tz)
-        arg = _parse_not(tz, prefixes)
-        return ExprUnaryOp(:!, arg)
-    end
-    _parse_comparison(tz, prefixes)
 end
 
 function _parse_comparison(tz::_SparqlTokenizer, prefixes)::SparqlExpr
@@ -549,11 +562,38 @@ function _parse_additive(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         elseif _check(tz, TOK_MINUS)
             _advance!(tz)
             left = ExprBinaryOp(:-, left, _parse_multiplicative(tz, prefixes))
+        elseif (_check(tz, TOK_INTEGER) || _check(tz, TOK_DECIMAL) || _check(tz, TOK_DOUBLE)) &&
+               startswith(_peek(tz).value, '-')
+            # Grammar: AdditiveExpression may continue with a NumericLiteralNegative
+            # (`?x-1` lexes as VAR, INTEGER "-1"). Treat `-1` as `- 1`, allowing
+            # the */-continuation the grammar permits on the signed literal.
+            t = _advance!(tz)
+            rhs::SparqlExpr = _numeric_token_literal(t)
+            while true
+                if _check(tz, TOK_STAR)
+                    _advance!(tz)
+                    rhs = ExprBinaryOp(:*, rhs, _parse_unary(tz, prefixes))
+                elseif _check(tz, TOK_SLASH)
+                    _advance!(tz)
+                    rhs = ExprBinaryOp(:/, rhs, _parse_unary(tz, prefixes))
+                else
+                    break
+                end
+            end
+            left = ExprBinaryOp(:+, left, rhs)
         else
             break
         end
     end
     left
+end
+
+# Build an ExprLiteral from a numeric token, preserving the lexical form
+# and assigning the grammar-mandated datatype.
+function _numeric_token_literal(tok::_SparqlToken)::ExprLiteral
+    dt = tok.kind == TOK_INTEGER ? "integer" :
+         tok.kind == TOK_DECIMAL ? "decimal" : "double"
+    ExprLiteral(Literal(tok.value, datatype=URIRef("http://www.w3.org/2001/XMLSchema#" * dt)))
 end
 
 function _parse_multiplicative(tz::_SparqlTokenizer, prefixes)::SparqlExpr
@@ -573,6 +613,10 @@ function _parse_multiplicative(tz::_SparqlTokenizer, prefixes)::SparqlExpr
 end
 
 function _parse_unary(tz::_SparqlTokenizer, prefixes)::SparqlExpr
+    if _check(tz, TOK_BANG)
+        _advance!(tz)
+        return ExprUnaryOp(:!, _parse_unary(tz, prefixes))
+    end
     if _check(tz, TOK_PLUS)
         _advance!(tz)
         return ExprUnaryOp(:+, _parse_unary(tz, prefixes))
@@ -603,8 +647,12 @@ function _parse_primary_expr(tz::_SparqlTokenizer, prefixes)::SparqlExpr
 
     # IRI
     if tok.kind == TOK_IRI
+        # Could be an IRI-named function call, e.g. <http://ex.org/fn>(?x)
+        if _peek_is_funcall(tz)
+            return _parse_funcall_or_iri(tz, prefixes)
+        end
         _advance!(tz)
-        return ExprURI(URIRef(tok.value))
+        return ExprURI(_make_uri(tok.value, prefixes))
     end
 
     # BNode
@@ -617,14 +665,11 @@ function _parse_primary_expr(tz::_SparqlTokenizer, prefixes)::SparqlExpr
     if tok.kind == TOK_TRUE;  _advance!(tz); return ExprBool(true);  end
     if tok.kind == TOK_FALSE; _advance!(tz); return ExprBool(false); end
 
-    # Numeric literal
-    if tok.kind == TOK_INTEGER
+    # Numeric literal — keep the original lexical form; INTEGER → xsd:integer,
+    # DECIMAL → xsd:decimal, DOUBLE → xsd:double
+    if tok.kind == TOK_INTEGER || tok.kind == TOK_DECIMAL || tok.kind == TOK_DOUBLE
         _advance!(tz)
-        return ExprLiteral(Literal(parse(Int, tok.value)))
-    end
-    if tok.kind == TOK_DECIMAL || tok.kind == TOK_DOUBLE
-        _advance!(tz)
-        return ExprLiteral(Literal(parse(Float64, tok.value)))
+        return _numeric_token_literal(tok)
     end
 
     # String literal (possibly with ^^type or @lang)
@@ -676,16 +721,16 @@ end
 function _parse_funcall_or_iri(tz::_SparqlTokenizer, prefixes)::SparqlExpr
     tok = _advance!(tz)
     name = tok.value
+    is_iri_name = false
 
-    # Resolve prefixed name
-    if tok.kind == TOK_PNAME
+    if tok.kind == TOK_IRI
+        is_iri_name = true
+        name = _make_uri(name, prefixes).value
+    elseif tok.kind == TOK_PNAME
         colon_idx = findfirst(':', name)
         if !isnothing(colon_idx)
-            prefix = name[1:colon_idx-1]
-            local_part = name[colon_idx+1:end]
-            if haskey(prefixes, prefix)
-                name = prefixes[prefix] * local_part
-            end
+            is_iri_name = true
+            name = _resolve_pname(name, prefixes).value
         end
     end
 
@@ -701,10 +746,14 @@ function _parse_funcall_or_iri(tz::_SparqlTokenizer, prefixes)::SparqlExpr
             end
         end
         _expect!(tz, TOK_RPAREN)
-        return ExprFunctionCall(uppercase(name), args)
+        # Uppercase ONLY bare builtin names (keywords or bare words); IRIs and
+        # prefixed names (e.g. xsd:integer casts) must keep their exact form.
+        fname = is_iri_name ? name : uppercase(name)
+        return ExprFunctionCall(fname, args)
     end
 
     # Just an IRI
+    is_iri_name && return ExprURI(URIRef(name))
     ExprURI(_resolve_pname(name, prefixes))
 end
 
@@ -717,7 +766,7 @@ function _parse_literal_expr(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         _advance!(tz)
         dt_tok = _advance!(tz)
         dt_uri = if dt_tok.kind == TOK_IRI
-            URIRef(dt_tok.value)
+            _make_uri(dt_tok.value, prefixes)
         elseif dt_tok.kind == TOK_PNAME
             _resolve_pname(dt_tok.value, prefixes)
         else
@@ -782,16 +831,57 @@ end
 # ─── String/IRI helpers ───────────────────────────────────────────
 
 function _unescape_sparql_string(s::AbstractString)
-    # Strip quotes
-    if startswith(s, "\"\"\"") && endswith(s, "\"\"\"")
-        s = s[4:end-3]
+    # Strip quotes (long forms first)
+    if (startswith(s, "\"\"\"") && endswith(s, "\"\"\"") && lastindex(s) >= 6) ||
+       (startswith(s, "'''") && endswith(s, "'''") && lastindex(s) >= 6)
+        s = s[4:prevind(s, lastindex(s), 3)]
     elseif startswith(s, '"') && endswith(s, '"')
-        s = s[2:end-1]
+        s = s[2:prevind(s, lastindex(s))]
     elseif startswith(s, '\'') && endswith(s, '\'')
-        s = s[2:end-1]
+        s = s[2:prevind(s, lastindex(s))]
     end
-    replace(s, "\\\"" => "\"", "\\'" => "'", "\\\\" => "\\",
-            "\\n" => "\n", "\\t" => "\t", "\\r" => "\r")
+    occursin('\\', s) || return String(s)
+    io = IOBuffer(sizehint=ncodeunits(s))
+    i = firstindex(s)
+    last_i = lastindex(s)
+    while i <= last_i
+        c = s[i]
+        if c != '\\' || i == last_i
+            write(io, c)
+            i = nextind(s, i)
+            continue
+        end
+        i = nextind(s, i)
+        e = s[i]
+        i = nextind(s, i)
+        if e == 'n';      write(io, '\n')
+        elseif e == 't';  write(io, '\t')
+        elseif e == 'r';  write(io, '\r')
+        elseif e == 'b';  write(io, '\b')
+        elseif e == 'f';  write(io, '\f')
+        elseif e == '"';  write(io, '"')
+        elseif e == '\''; write(io, '\'')
+        elseif e == '\\'; write(io, '\\')
+        elseif e == 'u' || e == 'U'
+            n = e == 'u' ? 4 : 8
+            hex = ""
+            for _ in 1:n
+                i <= last_i || error("Truncated \\$e escape in SPARQL string literal")
+                hex *= s[i]
+                i = nextind(s, i)
+            end
+            cp = tryparse(UInt32, hex, base=16)
+            isnothing(cp) && error("Invalid \\$e escape '\\$e$hex' in SPARQL string literal")
+            (0xD800 <= cp <= 0xDFFF) && error("Surrogate code point U+$(string(cp, base=16, pad=4)) is not allowed in \\$e escape")
+            cp > 0x10FFFF && error("Code point out of range in \\$e escape: \\$e$hex")
+            write(io, Char(cp))
+        else
+            # Unknown escape — keep verbatim
+            write(io, '\\')
+            write(io, e)
+        end
+    end
+    String(take!(io))
 end
 
 function _resolve_pname(name::AbstractString, prefixes::Dict{String,String})::URIRef
@@ -807,6 +897,66 @@ function _resolve_pname(name::AbstractString, prefixes::Dict{String,String})::UR
     URIRef(name)
 end
 
+# ─── BASE resolution ──────────────────────────────────────────────
+# The prologue stores the BASE IRI under the reserved key "@base" in the
+# prefixes Dict ('@' can never appear in a PNAME prefix, so no collision).
+
+const _BASE_KEY = "@base"
+
+"""Build a URIRef from an IRIREF token value, resolving relative IRIs
+against the query's BASE (if declared)."""
+function _make_uri(value::AbstractString, prefixes::Dict{String,String})::URIRef
+    base = get(prefixes, _BASE_KEY, nothing)
+    if !isnothing(base) && isnothing(match(r"^[A-Za-z][A-Za-z0-9+.\-]*:", value))
+        return URIRef(_sparql_resolve_base(base, value))
+    end
+    URIRef(String(value))
+end
+
+# Minimal RFC 3986-style relative reference resolution.
+function _sparql_resolve_base(base::AbstractString, rel::AbstractString)::String
+    isempty(rel) && return String(base)
+    if startswith(rel, '#')
+        h = findfirst('#', base)
+        return string(isnothing(h) ? base : base[1:prevind(base, h)], rel)
+    end
+    if startswith(rel, "//")
+        m = match(r"^[A-Za-z][A-Za-z0-9+.\-]*:", base)
+        return isnothing(m) ? String(rel) : string(m.match, rel)
+    end
+    if startswith(rel, '/')
+        m = match(r"^([A-Za-z][A-Za-z0-9+.\-]*://[^/]*)", base)
+        return isnothing(m) ? String(rel) : string(m.captures[1], rel)
+    end
+    # Path-relative: drop base query/fragment, replace last path segment
+    b = first(split(first(split(base, '#')), '?'))
+    # Keep authority intact: find last '/' after scheme://authority
+    m = match(r"^[A-Za-z][A-Za-z0-9+.\-]*://[^/]*", b)
+    path_start = isnothing(m) ? firstindex(b) : nextind(b, lastindex(m.match))
+    slash = findlast('/', b)
+    prefix = if isnothing(slash) || (!isnothing(m) && slash < path_start)
+        b * "/"
+    else
+        b[1:slash]
+    end
+    r = String(rel)
+    while true
+        if startswith(r, "./")
+            r = r[3:end]
+        elseif startswith(r, "../")
+            r = r[4:end]
+            p = rstrip(prefix, '/')
+            j = findlast('/', p)
+            if !isnothing(j) && (isnothing(m) || j >= path_start)
+                prefix = p[1:j]
+            end
+        else
+            break
+        end
+    end
+    string(prefix, r)
+end
+
 # ─── Query-level parser ───────────────────────────────────────────
 
 """
@@ -818,7 +968,13 @@ Returns one of: `SparqlSelect`, `SparqlAsk`, `SparqlConstruct`, `SparqlDescribe`
 function sparql_parse(query::AbstractString)
     tz = _sparql_tokenize_all(strip(query))
     prefixes = _parse_prologue!(tz)
-    _parse_query_body(tz, prefixes)
+    q = _parse_query_body(tz, prefixes)
+    # Whole input must be consumed — trailing garbage is a parse error
+    if !_check(tz, TOK_EOF)
+        tok = _peek(tz)
+        error("Unexpected trailing input after query: $(tok.kind) '$(tok.value)' at position $(tok.pos)")
+    end
+    q
 end
 
 function _parse_prologue!(tz::_SparqlTokenizer)::Dict{String,String}
@@ -829,10 +985,13 @@ function _parse_prologue!(tz::_SparqlTokenizer)::Dict{String,String}
             pname_tok = _advance!(tz)  # prefix name with colon
             iri_tok = _expect!(tz, TOK_IRI)
             prefix = rstrip(pname_tok.value, ':')
-            prefixes[prefix] = iri_tok.value
+            # Prefix IRIs are themselves resolved against any earlier BASE
+            prefixes[prefix] = _make_uri(iri_tok.value, prefixes).value
         elseif _check_keyword(tz, "BASE")
             _advance!(tz)
-            _expect!(tz, TOK_IRI)  # consume base IRI (TODO: use for resolution)
+            base_tok = _expect!(tz, TOK_IRI)
+            # Successive BASE declarations resolve against the previous one
+            prefixes[_BASE_KEY] = _make_uri(base_tok.value, prefixes).value
         elseif _check_keyword(tz, "VERSION")
             _advance!(tz)
             # Skip version value
@@ -863,17 +1022,23 @@ function _parse_query_body(tz::_SparqlTokenizer, prefixes::Dict{String,String})
     end
 end
 
-# Skip FROM / FROM NAMED clauses (dataset declarations)
-function _skip_from_clauses!(tz::_SparqlTokenizer)
+# Parse FROM / FROM NAMED clauses (dataset declarations).
+# Returns `(from, from_named)` vectors of graph IRIs. Callers that don't
+# support dataset clauses simply discard the result (legacy behavior).
+function _skip_from_clauses!(tz::_SparqlTokenizer, prefixes=Dict{String,String}())
+    from = URIRef[]
+    from_named = URIRef[]
     while _check_keyword(tz, "FROM")
         _advance!(tz)
-        _match_keyword!(tz, "NAMED")
+        named = !isnothing(_match_keyword!(tz, "NAMED"))
+        target = named ? from_named : from
         if _check(tz, TOK_IRI)
-            _advance!(tz)
+            push!(target, _make_uri(_advance!(tz).value, prefixes))
         elseif _check(tz, TOK_PNAME)
-            _advance!(tz)
+            push!(target, _resolve_pname(_advance!(tz).value, prefixes))
         end
     end
+    (from, from_named)
 end
 
 # ─── SELECT ────────────────────────────────────────────────────────
@@ -912,27 +1077,36 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
         end
     end
 
-    _skip_from_clauses!(tz)
+    from, from_named = _skip_from_clauses!(tz, prefixes)
 
     # WHERE clause
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
 
     # Solution modifiers
-    group_by, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+    group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+    append!(patterns, group_binds)
+
+    # Trailing ValuesClause
+    if _check_keyword(tz, "VALUES")
+        push!(patterns, _parse_values(tz, prefixes))
+    end
 
     SparqlSelect(variables, patterns, prefixes, limit, offset,
                  order_by, distinct, reduced, aggregates,
-                 group_by, having, select_exprs)
+                 group_by, having, select_exprs, from, from_named)
 end
 
 # ─── ASK ───────────────────────────────────────────────────────────
 
 function _parse_ask(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "ASK")
-    _skip_from_clauses!(tz)
+    _skip_from_clauses!(tz, prefixes)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
+    if _check_keyword(tz, "VALUES")
+        push!(patterns, _parse_values(tz, prefixes))
+    end
     SparqlAsk(patterns, prefixes)
 end
 
@@ -942,19 +1116,25 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "CONSTRUCT")
     # CONSTRUCT WHERE { ... } shorthand — WHERE pattern is also the template
     if _check_keyword(tz, "WHERE") || _check_keyword(tz, "FROM")
-        _skip_from_clauses!(tz)
+        _skip_from_clauses!(tz, prefixes)
         _match_keyword!(tz, "WHERE")
         patterns = _parse_group_graph_pattern(tz, prefixes)
         # Extract PatTriple patterns as template
         template = PatTriple[p for p in patterns if p isa PatTriple]
-        group_by, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+        group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+        if _check_keyword(tz, "VALUES")
+            push!(patterns, _parse_values(tz, prefixes))
+        end
         return SparqlConstruct(template, patterns, prefixes, limit, offset, order_by)
     end
     template = _parse_construct_template(tz, prefixes)
-    _skip_from_clauses!(tz)
+    _skip_from_clauses!(tz, prefixes)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
-    group_by, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+    group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+    if _check_keyword(tz, "VALUES")
+        push!(patterns, _parse_values(tz, prefixes))
+    end
     SparqlConstruct(template, patterns, prefixes, limit, offset, order_by)
 end
 
@@ -962,10 +1142,14 @@ function _parse_construct_template(tz::_SparqlTokenizer, prefixes)
     _expect!(tz, TOK_LBRACE)
     triples = PatTriple[]
     while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF)
-        s = _parse_term(tz, prefixes)
-        p = _parse_verb(tz, prefixes)
-        o = _parse_term(tz, prefixes)
-        push!(triples, PatTriple(s, p, o))
+        n_before = length(triples)
+        s = _parse_term_or_node(tz, prefixes, triples; as_var=false)
+        # Standalone property list subject: `[ :p :o ] .`
+        if length(triples) > n_before && (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE))
+            _match!(tz, TOK_DOT)
+            continue
+        end
+        _parse_predicate_object_list!(tz, prefixes, s, triples; as_var=false)
         _match!(tz, TOK_DOT)
     end
     _expect!(tz, TOK_RBRACE)
@@ -984,7 +1168,7 @@ function _parse_describe(tz::_SparqlTokenizer, prefixes)
             if _check(tz, TOK_VAR)
                 push!(terms, ExprVar(_advance!(tz).value[2:end]))
             elseif _check(tz, TOK_IRI)
-                push!(terms, ExprURI(URIRef(_advance!(tz).value)))
+                push!(terms, ExprURI(_make_uri(_advance!(tz).value, prefixes)))
             elseif _check(tz, TOK_PNAME)
                 push!(terms, ExprURI(_resolve_pname(_advance!(tz).value, prefixes)))
             else
@@ -992,7 +1176,7 @@ function _parse_describe(tz::_SparqlTokenizer, prefixes)
             end
         end
     end
-    _skip_from_clauses!(tz)
+    _skip_from_clauses!(tz, prefixes)
     patterns = SparqlPattern[]
     if _check_keyword(tz, "WHERE") || _check(tz, TOK_LBRACE)
         _match_keyword!(tz, "WHERE")
@@ -1087,6 +1271,11 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             pats = _parse_group_graph_pattern(tz, prefixes)
             push!(patterns, PatService(ep, pats, silent))
 
+        elseif _check_keyword(tz, "SELECT")
+            # Direct subselect: WHERE { SELECT ... } (single braces)
+            subq = _parse_select(tz, prefixes)
+            push!(patterns, PatSubquery(subq))
+
         elseif _check(tz, TOK_LBRACE)
             # Subquery or nested group or UNION
             saved_idx = tz.idx
@@ -1152,17 +1341,71 @@ end
 
 # ─── Triple patterns ──────────────────────────────────────────────
 
-function _parse_triples_block(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern}
-    patterns = SparqlPattern[]
-    subj = _parse_term(tz, prefixes)
+const _SPARQL_RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+const _SPARQL_RDF_FIRST = URIRef(_SPARQL_RDF_NS * "first")
+const _SPARQL_RDF_REST = URIRef(_SPARQL_RDF_NS * "rest")
+const _SPARQL_RDF_NIL = URIRef(_SPARQL_RDF_NS * "nil")
 
-    # Parse predicate-object list with ; separator
+# Fresh anonymous-node counter for blank node property lists / collections.
+# In WHERE patterns these become variables (per SPARQL semantics blank nodes
+# in patterns behave as variables); the "_:" prefix cannot clash with a user
+# variable name and is filtered from SELECT * projections.
+const _ANON_NODE_COUNTER = Ref(0)
+_fresh_anon_var() = "_:anon$(_ANON_NODE_COUNTER[] += 1)"
+
+"""
+Parse a graph node: a plain term, a blank node property list
+`[ :p :o ; ... ]`, or a collection `( e1 e2 ... )`.
+
+Nested triples generated by property lists / collections are pushed onto
+`acc`. When `as_var` is true (WHERE patterns), allocated blank nodes are
+represented as fresh internal variables; when false (templates), as BNodes.
+"""
+function _parse_term_or_node(tz::_SparqlTokenizer, prefixes, acc::AbstractVector; as_var::Bool=true)
+    if _check(tz, TOK_LBRACKET)
+        _advance!(tz)
+        node = as_var ? _fresh_anon_var() : BNode()
+        if _check(tz, TOK_RBRACKET)
+            _advance!(tz)
+            return node
+        end
+        _parse_predicate_object_list!(tz, prefixes, node, acc; as_var=as_var)
+        _expect!(tz, TOK_RBRACKET)
+        return node
+    end
+    if _check(tz, TOK_LPAREN)
+        _advance!(tz)
+        items = Any[]
+        while !_check(tz, TOK_RPAREN) && !_check(tz, TOK_EOF)
+            push!(items, _parse_term_or_node(tz, prefixes, acc; as_var=as_var))
+        end
+        _expect!(tz, TOK_RPAREN)
+        isempty(items) && return _SPARQL_RDF_NIL
+        head = as_var ? _fresh_anon_var() : BNode()
+        cur = head
+        for (i, item) in enumerate(items)
+            push!(acc, PatTriple(cur, _SPARQL_RDF_FIRST, item))
+            if i < length(items)
+                nxt = as_var ? _fresh_anon_var() : BNode()
+                push!(acc, PatTriple(cur, _SPARQL_RDF_REST, nxt))
+                cur = nxt
+            else
+                push!(acc, PatTriple(cur, _SPARQL_RDF_REST, _SPARQL_RDF_NIL))
+            end
+        end
+        return head
+    end
+    _parse_term(tz, prefixes)
+end
+
+"""Parse `verb objectList ( ';' ( verb objectList )? )*` for subject `subj`,
+pushing PatTriples onto `acc`."""
+function _parse_predicate_object_list!(tz::_SparqlTokenizer, prefixes, subj, acc::AbstractVector; as_var::Bool=true)
     while true
         pred = _parse_verb(tz, prefixes)
-        # Parse object list with , separator
         while true
-            obj = _parse_term(tz, prefixes)
-            push!(patterns, PatTriple(subj, pred, obj))
+            obj = _parse_term_or_node(tz, prefixes, acc; as_var=as_var)
+            push!(acc, PatTriple(subj, pred, obj))
             if _check(tz, TOK_COMMA)
                 _advance!(tz)
             else
@@ -1171,14 +1414,28 @@ function _parse_triples_block(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPatt
         end
         if _check(tz, TOK_SEMICOLON)
             _advance!(tz)
-            # Check if semicolon is followed by another predicate or end
-            if _check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_EOF)
+            # Trailing ; before a terminator
+            if _check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_RBRACKET) || _check(tz, TOK_EOF)
                 break
             end
         else
             break
         end
     end
+end
+
+function _parse_triples_block(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern}
+    patterns = SparqlPattern[]
+    subj = _parse_term_or_node(tz, prefixes, patterns)
+
+    # A blank node property list / collection may stand alone as a subject
+    # with no following predicate-object list: `[ :p :o ] .`
+    if !isempty(patterns) && (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_EOF))
+        _match!(tz, TOK_DOT)
+        return patterns
+    end
+
+    _parse_predicate_object_list!(tz, prefixes, subj, patterns)
     _match!(tz, TOK_DOT)  # optional trailing dot
     patterns
 end
@@ -1274,18 +1531,32 @@ function _parse_path_primary(tz::_SparqlTokenizer, prefixes)
 end
 
 function _parse_path_negated(tz::_SparqlTokenizer, prefixes)
+    fwd = URIRef[]
+    inv = URIRef[]
+    # PathOneInPropertySet ::= iri | 'a' | '^' ( iri | 'a' )
+    # (_parse_iri accepts TOK_A and returns rdf:type)
+    parse_member! = function ()
+        if _check(tz, TOK_CARET)
+            _advance!(tz)
+            push!(inv, _parse_iri(tz, prefixes))
+        else
+            push!(fwd, _parse_iri(tz, prefixes))
+        end
+    end
     if _check(tz, TOK_LPAREN)
         _advance!(tz)
-        uris = URIRef[]
-        push!(uris, _parse_iri(tz, prefixes))
-        while _check(tz, TOK_PIPE)
-            _advance!(tz)
-            push!(uris, _parse_iri(tz, prefixes))
+        if !_check(tz, TOK_RPAREN)
+            parse_member!()
+            while _check(tz, TOK_PIPE)
+                _advance!(tz)
+                parse_member!()
+            end
         end
         _expect!(tz, TOK_RPAREN)
-        return PathNegatedSet(uris)
+        return PathNegatedSet(fwd, inv)
     end
-    PathNegatedSet(URIRef[_parse_iri(tz, prefixes)])
+    parse_member!()
+    PathNegatedSet(fwd, inv)
 end
 
 function _to_path_expr(x)::PathExpr
@@ -1305,7 +1576,7 @@ function _parse_term(tz::_SparqlTokenizer, prefixes)
 
     if tok.kind == TOK_IRI
         _advance!(tz)
-        return URIRef(tok.value)
+        return _make_uri(tok.value, prefixes)
     end
 
     if tok.kind == TOK_PNAME
@@ -1377,7 +1648,7 @@ end
 function _parse_iri(tz::_SparqlTokenizer, prefixes)::URIRef
     tok = _advance!(tz)
     if tok.kind == TOK_IRI
-        return URIRef(tok.value)
+        return _make_uri(tok.value, prefixes)
     elseif tok.kind == TOK_PNAME
         return _resolve_pname(tok.value, prefixes)
     elseif tok.kind == TOK_A
@@ -1438,29 +1709,47 @@ end
 
 function _parse_solution_modifiers(tz::_SparqlTokenizer, prefixes)
     group_by = SparqlExpr[]
+    group_binds = PatBind[]
     having = nothing
     order_by = Tuple{SparqlExpr, Symbol}[]
     limit = nothing
     offset = 0
 
-    # GROUP BY
+    # GROUP BY — GroupCondition ::= BuiltInCall | FunctionCall
+    #                             | '(' Expression ( 'AS' Var )? ')' | Var
     if _check_keyword(tz, "GROUP")
         _advance!(tz)
         _expect_keyword!(tz, "BY")
-        while _check(tz, TOK_VAR) || _check(tz, TOK_LPAREN)
+        while true
             if _check(tz, TOK_VAR)
                 push!(group_by, ExprVar(_advance!(tz).value[2:end]))
             elseif _check(tz, TOK_LPAREN)
                 _advance!(tz)
                 expr = _parse_expr(tz, prefixes)
+                alias = nothing
                 if _check_keyword(tz, "AS")
                     _advance!(tz)
-                    _expect!(tz, TOK_VAR)
+                    alias = _expect!(tz, TOK_VAR).value[2:end]
                 end
                 _expect!(tz, TOK_RPAREN)
-                push!(group_by, expr)
+                if isnothing(alias)
+                    push!(group_by, expr)
+                else
+                    # `GROUP BY (expr AS ?v)` binds ?v per solution before
+                    # grouping — emit a PatBind and group on the variable.
+                    push!(group_binds, PatBind(expr, alias))
+                    push!(group_by, ExprVar(alias))
+                end
+            elseif (_check(tz, TOK_KEYWORD) || _check(tz, TOK_PNAME) || _check(tz, TOK_IRI)) &&
+                   _peek_is_funcall(tz) &&
+                   !(_peek(tz).value in ("HAVING", "ORDER", "LIMIT", "OFFSET", "VALUES", "GROUP"))
+                # Bare builtin or function call: GROUP BY STRLEN(?x)
+                push!(group_by, _parse_funcall_or_iri(tz, prefixes))
+            else
+                break
             end
         end
+        isempty(group_by) && error("Expected group condition after GROUP BY at position $(_peek(tz).pos)")
     end
 
     # HAVING
@@ -1476,7 +1765,8 @@ function _parse_solution_modifiers(tz::_SparqlTokenizer, prefixes)
         _advance!(tz)
         _expect_keyword!(tz, "BY")
         while !_check(tz, TOK_EOF) && !_check_keyword(tz, "LIMIT") &&
-              !_check_keyword(tz, "OFFSET") && !_check(tz, TOK_RBRACE)
+              !_check_keyword(tz, "OFFSET") && !_check_keyword(tz, "VALUES") &&
+              !_check(tz, TOK_RBRACE)
             if _check_keyword(tz, "DESC")
                 _advance!(tz)
                 _expect!(tz, TOK_LPAREN)
@@ -1508,7 +1798,7 @@ function _parse_solution_modifiers(tz::_SparqlTokenizer, prefixes)
         end
     end
 
-    (group_by, having, order_by, limit, offset)
+    (group_by, group_binds, having, order_by, limit, offset)
 end
 
 # ─── SPARQL UPDATE Parser ─────────────────────────────────────────
@@ -1520,18 +1810,79 @@ using the recursive descent tokenizer/parser infrastructure.
 function sparql_parse_update(query::String)
     tz = _sparql_tokenize_all(strip(query))
     prefixes = _parse_prologue!(tz)
+    op = _parse_update_op(tz, prefixes)
+    _match!(tz, TOK_SEMICOLON)  # optional trailing ;
+    if !_check(tz, TOK_EOF)
+        tok = _peek(tz)
+        error("Unexpected trailing input after update: $(tok.kind) '$(tok.value)' at position $(tok.pos)" *
+              (tok.kind == TOK_KEYWORD ? " (multi-operation updates are not supported)" : ""))
+    end
+    op
+end
 
-    # CLEAR / DROP
-    if _check_keyword(tz, "CLEAR") || _check_keyword(tz, "DROP")
+# GraphRef / GraphRefAll: GRAPH <iri> | <iri> | DEFAULT | NAMED | ALL
+function _parse_graph_ref(tz::_SparqlTokenizer, prefixes; allow_named_all::Bool=true)
+    if !isnothing(_match_keyword!(tz, "DEFAULT"))
+        return :default
+    elseif allow_named_all && _check_keyword(tz, "NAMED")
         _advance!(tz)
-        tok = _advance!(tz)
-        target = tok.value  # "ALL", "DEFAULT", "NAMED"
-        return _SPARQLClear(target)
+        return :named
+    elseif allow_named_all && _check_keyword(tz, "ALL")
+        _advance!(tz)
+        return :all
+    end
+    _match_keyword!(tz, "GRAPH")  # GRAPH keyword is optional in COPY/MOVE/ADD
+    _parse_iri(tz, prefixes)
+end
+
+# USING <iri> / USING NAMED <iri> dataset clauses (parsed, currently unused)
+function _parse_using_clauses!(tz::_SparqlTokenizer, prefixes)
+    using_graphs = URIRef[]
+    using_named = URIRef[]
+    while _check_keyword(tz, "USING")
+        _advance!(tz)
+        if !isnothing(_match_keyword!(tz, "NAMED"))
+            push!(using_named, _parse_iri(tz, prefixes))
+        else
+            push!(using_graphs, _parse_iri(tz, prefixes))
+        end
+    end
+    (using_graphs, using_named)
+end
+
+function _parse_update_op(tz::_SparqlTokenizer, prefixes)
+    # CLEAR / DROP [SILENT] (GRAPH <iri> | DEFAULT | NAMED | ALL)
+    if _check_keyword(tz, "CLEAR") || _check_keyword(tz, "DROP")
+        op = _advance!(tz).value == "CLEAR" ? :clear : :drop
+        silent = !isnothing(_match_keyword!(tz, "SILENT"))
+        target = _parse_graph_ref(tz, prefixes)
+        return UpdateGraphOp(op, silent, nothing, target)
     end
 
-    # LOAD <uri> [INTO GRAPH <target>]
+    # CREATE [SILENT] GRAPH <iri>
+    if _check_keyword(tz, "CREATE")
+        _advance!(tz)
+        silent = !isnothing(_match_keyword!(tz, "SILENT"))
+        _match_keyword!(tz, "GRAPH")
+        target = _parse_iri(tz, prefixes)
+        return UpdateGraphOp(:create, silent, nothing, target)
+    end
+
+    # COPY / MOVE / ADD [SILENT] (GRAPH <iri> | DEFAULT) TO (GRAPH <iri> | DEFAULT)
+    if _check_keyword(tz, "COPY") || _check_keyword(tz, "MOVE") || _check_keyword(tz, "ADD")
+        kw = _advance!(tz).value
+        op = kw == "COPY" ? :copy : kw == "MOVE" ? :move : :add
+        silent = !isnothing(_match_keyword!(tz, "SILENT"))
+        source = _parse_graph_ref(tz, prefixes; allow_named_all=false)
+        _expect_keyword!(tz, "TO")
+        dest = _parse_graph_ref(tz, prefixes; allow_named_all=false)
+        return UpdateGraphOp(op, silent, source, dest)
+    end
+
+    # LOAD [SILENT] <uri> [INTO GRAPH <target>]
     if _check_keyword(tz, "LOAD")
         _advance!(tz)
+        _match_keyword!(tz, "SILENT")
         source = _expect!(tz, TOK_IRI).value
         target = nothing
         if _match_keyword!(tz, "INTO") !== nothing
@@ -1541,28 +1892,27 @@ function sparql_parse_update(query::String)
         return _SPARQLLoad(source, target)
     end
 
-    # COPY DEFAULT TO <graph>
-    if _check_keyword(tz, "COPY")
+    # WITH <iri> — names the graph that DELETE/INSERT ... WHERE operates on
+    with_graph = nothing
+    if _check_keyword(tz, "WITH")
         _advance!(tz)
-        _expect_keyword!(tz, "DEFAULT")
-        _expect_keyword!(tz, "TO")
-        _expect!(tz, TOK_IRI)
-        return _SPARQLClear("NOOP")
+        with_graph = _parse_iri(tz, prefixes)
     end
 
-    # INSERT DATA { triples }
+    # INSERT DATA { triples } / INSERT { template } WHERE { patterns }
     if _check_keyword(tz, "INSERT")
         _advance!(tz)
         if _check_keyword(tz, "DATA")
+            isnothing(with_graph) || error("WITH is not allowed with INSERT DATA")
             _advance!(tz)
             tpl = _parse_update_template(tz, prefixes)
             return _SPARQLInsertData(tpl, prefixes)
         end
-        # INSERT { template } WHERE { patterns }
         ins = _parse_update_template(tz, prefixes)
+        _parse_using_clauses!(tz, prefixes)
         _expect_keyword!(tz, "WHERE")
         pats = _parse_group_graph_pattern(tz, prefixes)
-        return _SPARQLModify(Tuple{Any,Any,Any}[], ins, SparqlPattern[pats...], prefixes)
+        return _SPARQLModify(Tuple{Any,Any,Any}[], ins, SparqlPattern[pats...], prefixes, with_graph)
     end
 
     # DELETE ...
@@ -1571,6 +1921,7 @@ function sparql_parse_update(query::String)
 
         # DELETE DATA { triples }
         if _check_keyword(tz, "DATA")
+            isnothing(with_graph) || error("WITH is not allowed with DELETE DATA")
             _advance!(tz)
             tpl = _parse_update_template(tz, prefixes)
             return _SPARQLDeleteData(tpl, prefixes)
@@ -1582,7 +1933,7 @@ function sparql_parse_update(query::String)
             pats = _parse_group_graph_pattern(tz, prefixes)
             # Extract triples from patterns as delete template
             del = _patterns_to_template(pats)
-            return _SPARQLModify(del, Tuple{Any,Any,Any}[], SparqlPattern[pats...], prefixes)
+            return _SPARQLModify(del, Tuple{Any,Any,Any}[], SparqlPattern[pats...], prefixes, with_graph)
         end
 
         # DELETE { template } [INSERT { template }] WHERE { patterns }
@@ -1592,9 +1943,10 @@ function sparql_parse_update(query::String)
             _advance!(tz)
             ins = _parse_update_template(tz, prefixes)
         end
+        _parse_using_clauses!(tz, prefixes)
         _expect_keyword!(tz, "WHERE")
         pats = _parse_group_graph_pattern(tz, prefixes)
-        return _SPARQLModify(del, ins, SparqlPattern[pats...], prefixes)
+        return _SPARQLModify(del, ins, SparqlPattern[pats...], prefixes, with_graph)
     end
 
     error("Unsupported SPARQL UPDATE operation")
@@ -1605,27 +1957,20 @@ Parse a braced template `{ s p o . ... }` into a Vector{Tuple{Any,Any,Any}}.
 """
 function _parse_update_template(tz::_SparqlTokenizer, prefixes)::Vector{Tuple{Any,Any,Any}}
     _expect!(tz, TOK_LBRACE)
-    result = Tuple{Any,Any,Any}[]
+    acc = PatTriple[]
     while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF)
-        subj = _parse_term(tz, prefixes)
-        while true
-            pred = _parse_verb(tz, prefixes)
-            while true
-                obj = _parse_term(tz, prefixes)
-                push!(result, (subj, pred, obj))
-                _check(tz, TOK_COMMA) ? _advance!(tz) : break
-            end
-            if _check(tz, TOK_SEMICOLON)
-                _advance!(tz)
-                (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_EOF)) && break
-            else
-                break
-            end
+        n_before = length(acc)
+        subj = _parse_term_or_node(tz, prefixes, acc; as_var=false)
+        # Standalone property list subject
+        if length(acc) > n_before && (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE))
+            _match!(tz, TOK_DOT)
+            continue
         end
+        _parse_predicate_object_list!(tz, prefixes, subj, acc; as_var=false)
         _match!(tz, TOK_DOT)
     end
     _expect!(tz, TOK_RBRACE)
-    result
+    Tuple{Any,Any,Any}[(t.subject, t.predicate, t.object) for t in acc]
 end
 
 """

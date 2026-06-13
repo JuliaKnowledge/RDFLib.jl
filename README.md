@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/JuliaKnowledge/RDFLib.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/JuliaKnowledge/RDFLib.jl/actions/workflows/CI.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An idiomatic Julia port of Python's [rdflib](https://rdflib.readthedocs.io/) package for working with RDF (Resource Description Framework) data. RDFLib.jl uses Julia's type system and multiple dispatch to provide a natural, high-performance API for creating, querying, and serializing RDF graphs.
+An idiomatic Julia port of Python's [rdflib](https://rdflib.readthedocs.io/) package for working with RDF (Resource Description Framework) data. RDFLib.jl uses Julia's type system and multiple dispatch to provide a natural API for creating, querying, and serializing RDF graphs, with indexed in-memory stores, a dictionary-encoded store for larger graphs, and persistent SQLite/DuckDB/LMDB backends.
 
 ## Installation
 
@@ -84,10 +84,10 @@ println(turtle_str)
 
 | Format | Serialize | Parse | Type |
 |--------|-----------|-------|------|
-| N-Triples | ✅ | ✅ | `NTriplesFormat()` |
-| Turtle | ✅ | ✅ | `TurtleFormat()` |
-| RDF/XML | ✅ | ✅ | `RDFXMLFormat()` |
-| JSON-LD | ✅ | ✅ | `JSONLDFormat()` |
+| N-Triples (incl. RDF-star triple terms, directional literals) | ✅ | ✅ | `NTriplesFormat()` |
+| Turtle (incl. quoted triples `<< >>`, annotations, directional literals) | ✅ | ✅ | `TurtleFormat()` |
+| RDF/XML (xml:base, xml:lang inheritance, parseType Literal/Resource/Collection, rdf:li, rdf:ID reification) | ✅ | ✅ | `RDFXMLFormat()` |
+| JSON-LD 1.1 (scoped contexts, container maps, `@list`/`@reverse`/`@nest`/`@direction`/`@json`, remote context loader hook) | ✅ | ✅ | `JSONLDFormat()` |
 | TriG | ✅ | ✅ | `TriGFormat()` |
 | N-Quads | ✅ | ✅ | `NQuadsFormat()` |
 | Notation3 (N3) | ✅ | ✅ | `N3Format()` |
@@ -105,39 +105,46 @@ println(turtle_str)
 | Store | Description |
 |-------|-------------|
 | `MemoryStore` | In-memory triple store with SPO/POS/OSP indices (default) |
-| `SQLiteStore` | Persistent storage using SQLite |
-| `DuckDBStore` | Analytical storage using DuckDB |
+| `EncodedStore` | Dictionary-encoded in-memory store (interned terms, faster joins on larger graphs) |
+| `SQLiteStore` | Persistent storage using SQLite (batched bulk loads, prepared statements) |
+| `DuckDBStore` | Analytical storage using DuckDB, with SQL pushdown for eligible queries |
+| `LMDBStore` | Persistent memory-mapped storage using LMDB (dictionary-encoded, sorted indices) |
 | `SPARQLStore` | Remote SPARQL endpoint as read-only store |
 | `AuditableStore` | Wrapper that journals all changes with undo support |
 | `ConcurrentStore` | Thread-safe wrapper for concurrent access |
 
 ### SPARQL Query Engine
 
-Full SPARQL 1.2 query engine supporting:
+SPARQL 1.1 query and update engine with SPARQL 1.2 features:
 
-- **SELECT** — variable bindings with DISTINCT, REDUCED, LIMIT, OFFSET, ORDER BY
+- **SELECT** — variable bindings with DISTINCT, REDUCED, LIMIT, OFFSET, ORDER BY (spec total ordering across term types)
 - **ASK** — boolean existence queries
-- **CONSTRUCT** — build new graphs from query patterns
+- **CONSTRUCT** — build new graphs from query patterns (ORDER BY/LIMIT honored)
 - **DESCRIBE** — concise bounded descriptions
-- **UPDATE** — INSERT DATA, DELETE DATA, INSERT/DELETE WHERE
-- Aggregates: COUNT, SUM, AVG, MIN, MAX, GROUP_CONCAT, SAMPLE
-- GROUP BY / HAVING
-- FILTER expressions with built-in functions
-- OPTIONAL, UNION, MINUS, BIND, VALUES
-- Property paths (`/`, `|`, `*`, `+`, `?`, `^`, `!`)
-- Subqueries and federated queries (SERVICE)
+- **UPDATE** — INSERT DATA, DELETE DATA, INSERT/DELETE WHERE, and graph management (CREATE, DROP, CLEAR, COPY, MOVE, ADD, WITH) over datasets
+- Aggregates: COUNT, SUM, AVG, MIN, MAX, GROUP_CONCAT, SAMPLE (plus MEDIAN/MODE extensions), with spec-conformant empty-group behavior
+- GROUP BY (including expression aliases) / HAVING
+- FILTER expressions with datatype-driven typed comparisons and three-valued error semantics; XSD constructor casts (`xsd:integer(?x)` etc.)
+- OPTIONAL, UNION, MINUS, BIND, VALUES, blank-node property lists, collections, BASE
+- Property paths (`/`, `|`, `*`, `+`, `?`, `^`, `!` including negated sets with inverse members), index-backed evaluation
+- GRAPH / FROM / FROM NAMED over `Dataset` and `ConjunctiveGraph` (on a plain `RDFGraph`, FROM falls back to the graph itself)
+- Subqueries and federated queries (SERVICE), with FILTER/BIND/OPTIONAL serialized to the remote endpoint
+- SPARQL 1.2: directional language-tagged literals (`"x"@en--ltr`), LANGDIR / hasLANG / hasLANGDIR / STRLANGDIR, triple terms with TRIPLE/SUBJECT/PREDICATE/OBJECT/isTRIPLE
+
+The same query answers are guaranteed across `MemoryStore`, `EncodedStore`, and `DuckDBStore` by a cross-evaluator consistency test suite.
 
 ### Reasoning & Inference
 
-- **RDFS/OWL inference** — forward-chaining RDFS and OWL entailment rules
-- **N3 reasoning** — forward and backward chaining with Notation3 rules, including built-in predicates for math, string, list, and crypto operations
-- **Datalog** — semi-naive bottom-up evaluation with stratified negation
+- **RDFS/OWL inference** — forward-chaining RDFS entailment (rdfs2, 3, 5, 6, 7, 9, 10, 11, 12, 13; axiomatic rdfs4a/4b/8 opt-in via `axiomatic=true`) and an OWL 2 RL-style rule subset (sameAs, property chains, hasValue, someValuesFrom/allValuesFrom, intersection/union/complement, hasKey, (inverse)functional properties)
+- **N3 reasoning** — forward and backward chaining with Notation3 rules (semi-naive delta evaluation, including rules with pure builtins), ~125 built-in predicates for math, string, list, and crypto operations, with proof traces
+- **Datalog** — semi-naive bottom-up evaluation with stratified negation (negation-as-failure with safety and stratifiability checks)
 - **ProbLog** — probabilistic logic programming with exact BDD-based inference
 - **InfixOWL** — DSL for building OWL ontologies
 
 ### Validation
 
-- **SHACL** — validate graphs against SHACL shapes, producing `ValidationReport` with `ValidationResult` entries
+- **SHACL** — validate graphs against SHACL shapes, producing `ValidationReport` with `ValidationResult` entries. Supports the core constraint components including logical constraints (`sh:not/and/or/xone`), shape-based constraints (`sh:node`, `sh:qualifiedValueShape` with disjointness), `sh:closed`/`sh:ignoredProperties`, full property paths (sequence, inverse, alternative, zero-or-more, one-or-more, zero-or-one), pair constraints (`sh:equals/disjoint/lessThan/lessThanOrEquals`), `sh:languageIn`/`sh:uniqueLang`, SPARQL-based constraints (`sh:sparql`), and all four target kinds plus implicit class targets. See the `validate` docstring for exact coverage.
+- **ShEx** — ShExC schema parsing and validation
 
 ### Graph Utilities
 
@@ -268,6 +275,17 @@ void_graph = generate_void(g, URIRef("http://example.org/dataset"))
 | 20 | [Bayesian Belief Networks](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/20-bayesian-belief-networks/bayesian-belief-networks.md) | BBN for species interaction networks |
 | 21 | [Epidemiology](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/21-epidemiology/epidemiology.md) | Infectious disease surveillance |
 | 22 | [Lassa Fever](https://github.com/JuliaKnowledge/RDFLib.jl/blob/main/vignettes/22-lassa-fever/lassa-fever.md) | Lassa fever surveillance in Nigeria |
+
+## Conformance notes & limitations
+
+The test suite (6,000+ assertions) includes spec-derived regression tests for RDF 1.1/SPARQL semantics and a cross-evaluator consistency suite that runs the same queries against `MemoryStore`, `EncodedStore`, and `DuckDBStore` and requires identical answers. Known limitations, documented in the relevant docstrings:
+
+- The official W3C test-suite manifests are not wired in; conformance tests are spec-modeled but locally authored.
+- JSON-LD: `@included`, `@import`, `@protected` enforcement, and framing beyond a basic subset are not implemented.
+- SHACL: `sh:ask` validators, custom SHACL-SPARQL constraint components, SPARQL-based targets, and `owl:imports` are not implemented.
+- SPARQL: `FROM`/`FROM NAMED` on a plain `RDFGraph` (no named graphs) falls back to querying the graph itself; use `Dataset`/`ConjunctiveGraph` for dataset semantics. `USING`/`USING NAMED` is parsed and validated but not applied to UPDATE WHERE evaluation. DuckDB SQL pushdown is limited to COUNT-family aggregate queries; everything else transparently falls back to the generic evaluator.
+- TriX and Hextuples are available via `serialize_trix`/`parse_trix` and `serialize_hextuples`/`parse_hextuples` rather than the generic `serialize`/`parse_rdf` API.
+- Timezone-less `xsd:dateTime` values are compared as UTC.
 
 ## Dependencies
 

@@ -226,6 +226,165 @@ end
     @test length(p_triples) == 1275
 end
 
+@testset "Stratified negation — basic NAF" begin
+    n3 = """
+    @prefix : <http://example.org/> .
+    @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+    :alice :type :Person .
+    :bob :type :Person .
+    :bob :status :banned .
+    { ?x :type :Person . ?s log:notIncludes { ?x :status :banned } }
+        => { ?x :status :welcome } .
+    """
+    g = parse_rdf(n3, N3Format())
+    result = datalog_reason(g)
+
+    status = URIRef("http://example.org/status")
+    welcome = URIRef("http://example.org/welcome")
+    alice = URIRef("http://example.org/alice")
+    bob = URIRef("http://example.org/bob")
+
+    @test Triple(alice, status, welcome) in result
+    @test !(Triple(bob, status, welcome) in result)
+end
+
+@testset "Stratified negation — negation over derived predicate" begin
+    # Stratum 1 derives :reach (2-hop reachability); stratum 2 negates it.
+    n3 = """
+    @prefix : <http://example.org/> .
+    @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+    :a :p :b .
+    :b :p :c .
+    :a :p :c .
+    { ?x :p ?y . ?y :p ?z } => { ?x :reach ?z } .
+    { ?x :p ?y . ?s log:notIncludes { ?x :reach ?y } } => { ?x :direct ?y } .
+    """
+    g = parse_rdf(n3, N3Format())
+    result = datalog_reason(g)
+
+    reach = URIRef("http://example.org/reach")
+    direct = URIRef("http://example.org/direct")
+    a = URIRef("http://example.org/a")
+    b = URIRef("http://example.org/b")
+    c = URIRef("http://example.org/c")
+
+    # Stratum 1: a reaches c (via b)
+    @test Triple(a, reach, c) in result
+    # Stratum 2: edges not shortcut by a 2-hop path are "direct".
+    # a->c is blocked because the DERIVED fact (a reach c) exists.
+    @test Triple(a, direct, b) in result
+    @test Triple(b, direct, c) in result
+    @test !(Triple(a, direct, c) in result)
+end
+
+@testset "Stratified negation — unstratifiable program errors" begin
+    # :q depends on its own negation — negation in a recursive cycle
+    n3 = """
+    @prefix : <http://example.org/> .
+    @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+    :a :type :Thing .
+    { ?x :type :Thing . ?s log:notIncludes { ?x :q ?x } } => { ?x :q ?x } .
+    """
+    g = parse_rdf(n3, N3Format())
+    @test_throws ArgumentError datalog_reason(g)
+end
+
+@testset "Stratified negation — unsafe negation errors" begin
+    # ?y appears only in the negated atom — not bound by any positive atom
+    n3 = """
+    @prefix : <http://example.org/> .
+    @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+    :a :type :Thing .
+    { ?x :type :Thing . ?s log:notIncludes { ?x :rel ?y } } => { ?x :lonely :yes } .
+    """
+    g = parse_rdf(n3, N3Format())
+    @test_throws ArgumentError datalog_reason(g)
+end
+
+@testset "Stratified negation — multi-triple notIncludes formula errors" begin
+    n3 = """
+    @prefix : <http://example.org/> .
+    @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+    :a :type :Thing .
+    { ?x :type :Thing . ?s log:notIncludes { ?x :q :u . ?x :r :v } }
+        => { ?x :ok :yes } .
+    """
+    g = parse_rdf(n3, N3Format())
+    @test_throws ArgumentError datalog_reason(g)
+end
+
+@testset "Stratified negation — direct API" begin
+    enc = RDFLib.TermEncoder()
+    prog = RDFLib.DatalogProgram()
+
+    a = RDFLib.encode_term!(enc, URIRef("http://example.org/a"))
+    b = RDFLib.encode_term!(enc, URIRef("http://example.org/b"))
+    person = RDFLib.encode_term!(enc, URIRef("http://example.org/Person"))
+    tp = RDFLib.encode_term!(enc, URIRef("http://example.org/type"))
+    banned = RDFLib.encode_term!(enc, URIRef("http://example.org/banned"))
+    status = RDFLib.encode_term!(enc, URIRef("http://example.org/status"))
+    welcome = RDFLib.encode_term!(enc, URIRef("http://example.org/welcome"))
+
+    RDFLib.relation_add!(prog.facts, RDFLib.IntTriple(a, tp, person))
+    RDFLib.relation_add!(prog.facts, RDFLib.IntTriple(b, tp, person))
+    RDFLib.relation_add!(prog.facts, RDFLib.IntTriple(b, status, banned))
+
+    v1 = RDFLib.VAR_FLAG | UInt32(1)
+    body = [RDFLib.IntPattern(v1, tp, person)]
+    neg  = [RDFLib.IntPattern(v1, status, banned)]
+    head = [RDFLib.IntPattern(v1, status, welcome)]
+    push!(prog.rules, RDFLib.DatalogRule(head, body, neg, 1))
+
+    n_derived = RDFLib.semi_naive!(prog)
+    @test n_derived == 1
+    @test RDFLib.IntTriple(a, status, welcome) in prog.facts.seen
+    @test !(RDFLib.IntTriple(b, status, welcome) in prog.facts.seen)
+end
+
+@testset "Stratification helpers" begin
+    # Negation-free programs form a single stratum
+    p = UInt32(1)
+    v1 = RDFLib.VAR_FLAG | UInt32(1)
+    v2 = RDFLib.VAR_FLAG | UInt32(2)
+    r1 = RDFLib.DatalogRule([RDFLib.IntPattern(v1, p, v2)],
+                            [RDFLib.IntPattern(v2, p, v1)], 2)
+    @test RDFLib.stratify_rules([r1]) == [[1]]
+
+    # Negation over an EDB predicate: single stratum, safe
+    q = UInt32(2)
+    r2 = RDFLib.DatalogRule([RDFLib.IntPattern(v1, q, v2)],
+                            [RDFLib.IntPattern(v1, p, v2)],
+                            [RDFLib.IntPattern(v2, p, v1)], 2)
+    strata = RDFLib.stratify_rules([r2])
+    @test strata == [[1]]
+    @test RDFLib.check_negation_safety([r2]) === nothing
+
+    # Two strata: r3 derives q, r4 negates q to derive r
+    rr = UInt32(3)
+    r3 = RDFLib.DatalogRule([RDFLib.IntPattern(v1, q, v2)],
+                            [RDFLib.IntPattern(v1, p, v2)], 2)
+    r4 = RDFLib.DatalogRule([RDFLib.IntPattern(v1, rr, v2)],
+                            [RDFLib.IntPattern(v1, p, v2)],
+                            [RDFLib.IntPattern(v1, q, v2)], 2)
+    strata2 = RDFLib.stratify_rules([r4, r3])
+    @test length(strata2) == 2
+    @test strata2[1] == [2]   # rule deriving q evaluated first
+    @test strata2[2] == [1]
+
+    # Unsafe: variable only in negated atom
+    v3 = RDFLib.VAR_FLAG | UInt32(3)
+    r5 = RDFLib.DatalogRule([RDFLib.IntPattern(v1, q, v2)],
+                            [RDFLib.IntPattern(v1, p, v2)],
+                            [RDFLib.IntPattern(v1, p, v3)], 3)
+    @test_throws ArgumentError RDFLib.check_negation_safety([r5])
+
+    # Unstratifiable: q negatively depends on itself
+    r6 = RDFLib.DatalogRule([RDFLib.IntPattern(v1, q, v2)],
+                            [RDFLib.IntPattern(v1, p, v2)],
+                            [RDFLib.IntPattern(v1, q, v2)], 2)
+    @test_throws ArgumentError RDFLib.stratify_rules([r6])
+end
+
 @testset "DatalogProgram direct API" begin
     # Test using the DatalogProgram API directly (without N3 parsing)
     enc = RDFLib.TermEncoder()

@@ -37,11 +37,12 @@ function serialize_hextuples(ds::Dataset)
     String(take!(buf))
 end
 
-function _write_hextuple_line(io::IO, t::Triple, graph_name::Union{URIRef, Nothing})
+function _write_hextuple_line(io::IO, t::Triple, graph_name::Union{URIRef, BNode, Nothing})
     subj_str = t.subject isa URIRef ? t.subject.value : ("_:" * t.subject.id)
     pred_str = t.predicate.value
     obj_val, dt, lang_tag = _hextuple_object(t.object)
-    graph_str = isnothing(graph_name) ? "" : graph_name.value
+    graph_str = graph_name isa URIRef ? graph_name.value :
+                graph_name isa BNode ? ("_:" * graph_name.id) : ""
     line = JSON.json([subj_str, pred_str, obj_val, dt, lang_tag, graph_str])
     write(io, line, "\n")
 end
@@ -81,7 +82,8 @@ function parse_hextuples(str::AbstractString)
         subj = _parse_ht_node(arr[1])
         pred = URIRef(arr[2])
         obj = _parse_ht_object(arr[3], arr[4], arr[5])
-        graph_name = isempty(arr[6]) ? nothing : URIRef(arr[6])
+        graph_name = isempty(arr[6]) ? nothing :
+                     startswith(arr[6], "_:") ? BNode(arr[6][3:end]) : URIRef(arr[6])
         add!(ds, Triple(subj, pred, obj), graph_name)
     end
     ds

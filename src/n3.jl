@@ -144,6 +144,12 @@ function _n3_try_qname!(ctx::_N3SerContext, u::URIRef)
     catch
     end
 end
+function _n3_try_qname!(ctx::_N3SerContext, term::TripleTerm)
+    _n3_try_qname!(ctx, term.subject)
+    _n3_try_qname!(ctx, term.predicate)
+    _n3_try_qname!(ctx, term.object)
+end
+
 _n3_try_qname!(::_N3SerContext, ::Identifier) = nothing
 
 function _n3_write_prefixes(io::IO, ctx::_N3SerContext)
@@ -159,11 +165,12 @@ end
 function _n3_write_triples(io::IO, ctx::_N3SerContext)
     subjects = collect(keys(ctx.subject_props))
 
-    # Separate formulas, URIRefs, BNodes
+    # Separate formulas, URIRefs, BNodes, and other terms (e.g. TripleTerm)
     formulas = filter(s -> s isa Formula, subjects)
     urirefs = sort(filter(s -> s isa URIRef, subjects), by=s -> s.value)
     bnodes = filter(s -> s isa BNode, subjects)
-    ordered = vcat(urirefs, bnodes, formulas)
+    others = filter(s -> !(s isa URIRef || s isa BNode || s isa Formula), subjects)
+    ordered = vcat(urirefs, bnodes, others, formulas)
 
     first_subject = true
     for subject in ordered
@@ -286,7 +293,9 @@ end
 function _n3_format_node(ctx::_N3SerContext, u::URIRef)
     try
         prefix, _, localname = compute_qname(ctx.graph.namespace_manager, u)
-        return string(prefix, ":", localname)
+        escaped = _escape_pn_local(localname)
+        escaped === nothing && return n3(u)
+        return string(prefix, ":", escaped)
     catch
         return n3(u)
     end
@@ -294,6 +303,12 @@ end
 
 _n3_format_node(ctx::_N3SerContext, b::BNode) = n3(b)
 _n3_format_node(ctx::_N3SerContext, v::Variable) = n3(v)
+
+function _n3_format_node(ctx::_N3SerContext, tt::TripleTerm)
+    string("<< ", _n3_format_node(ctx, tt.subject), " ",
+           _n3_format_node(ctx, tt.predicate), " ",
+           _n3_format_node(ctx, tt.object), " >>")
+end
 
 function _n3_format_node(ctx::_N3SerContext, lit::Literal)
     if !isnothing(lit.datatype) && isnothing(lit.language)
@@ -371,11 +386,13 @@ mutable struct _N3Parser
     formula_scope::Int  # incremented when entering a formula to scope _:label BNodes
     forsome_uris::Set{String}   # URIs declared with @forSome
     forall_uris::Set{String}    # URIs declared with @forAll
+    doc_bnode_labels::Set{String}  # labels appearing as _:label in the document
 end
 
 function _N3Parser(g::RDFGraph, input::String)
     _N3Parser(g, input, 1, Dict{String,String}(), nothing, 0, 0,
-              Set{String}(), Set{String}())
+              Set{String}(), Set{String}(),
+              _scan_doc_bnode_labels(input))
 end
 
 # ─── Shared parser utilities ────────────────────────────────────────
@@ -589,7 +606,7 @@ function _n3_parse_iriref!(p::_N3Parser)
             return uri
         elseif c == '\\'
             p.pos = nextind(p.input, p.pos)
-            write(buf, _n3_parse_escape_char!(p))
+            write(buf, _n3_parse_iri_escape!(p))
         else
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
@@ -751,10 +768,11 @@ function _n3_parse_verb!(p::_N3Parser, target::RDFGraph)
         end
     end
 
-    # Check for 'a' keyword
+    # Check for 'a' keyword — any non-name character is a boundary
     if c == 'a'
         next_pos = nextind(p.input, p.pos)
-        if next_pos > lastindex(p.input) || p.input[next_pos] in (' ', '\t', '\n', '\r')
+        if next_pos > lastindex(p.input) ||
+           !(_is_pn_chars(p.input[next_pos]) || p.input[next_pos] in (':', '.'))
             p.pos = next_pos
             return (URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), false)
         end
@@ -907,32 +925,31 @@ function _n3_parse_base_node!(p::_N3Parser, target::RDFGraph=p.graph)::Identifie
         return _n3_parse_variable!(p)
     elseif c == '"' || c == '\''
         return _n3_parse_literal!(p)
-    elseif c == '+' || c == '-' || isdigit(c)
+    elseif c == '+' || c == '-' || isdigit(c) ||
+           (c == '.' && _next_char_is_digit(p.input, p.pos))
         return _n3_parse_numeric_literal!(p)
-    elseif _n3_at_string(p, "true")
-        next_pos = p.pos
-        for _ in 1:4
-            next_pos = nextind(p.input, next_pos)
-        end
-        # Make sure 'true' isn't a prefix of a longer word
-        if next_pos > lastindex(p.input) || p.input[next_pos] in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}')
-            _n3_consume_str!(p, "true")
-            return Literal(true)
-        end
-        return _n3_parse_prefixed_name!(p)
-    elseif _n3_at_string(p, "false")
-        next_pos = p.pos
-        for _ in 1:5
-            next_pos = nextind(p.input, next_pos)
-        end
-        if next_pos > lastindex(p.input) || p.input[next_pos] in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}')
-            _n3_consume_str!(p, "false")
-            return Literal(false)
-        end
-        return _n3_parse_prefixed_name!(p)
+    elseif _n3_at_keyword(p, "true")
+        _n3_consume_str!(p, "true")
+        return Literal(true)
+    elseif _n3_at_keyword(p, "false")
+        _n3_consume_str!(p, "false")
+        return Literal(false)
     else
         return _n3_parse_prefixed_name!(p)
     end
+end
+
+# Match a keyword (`true`/`false`) only at a token boundary, so that e.g.
+# `trueblue:x` or `true:x` parse as prefixed names.
+function _n3_at_keyword(p::_N3Parser, word::AbstractString)
+    _n3_at_string(p, word) || return false
+    endpos = p.pos
+    for _ in 1:length(word)
+        endpos = nextind(p.input, endpos)
+    end
+    endpos > lastindex(p.input) && return true
+    c = p.input[endpos]
+    !(_is_pn_chars(c) || c == ':')
 end
 
 # ─── Variable parsing ──────────────────────────────────────────────
@@ -989,18 +1006,33 @@ end
 function _n3_parse_blank_node_label!(p::_N3Parser)
     _n3_consume!(p, '_')
     _n3_consume!(p, ':')
+    c = _n3_peek(p)
+    (c === nothing || !(_is_pn_chars_u(c) || isdigit(c))) &&
+        throw(ArgumentError("Invalid blank node label at position $(p.pos)"))
     buf = IOBuffer()
+    write(buf, c)
+    p.pos = nextind(p.input, p.pos)
+    # Dots are only allowed mid-label: buffer them and flush when another
+    # label character follows; trailing dots are left unconsumed.
+    pending_dots = 0
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
-        if isletter(c) || isdigit(c) || c in ('_', '-', '.', '·')
+        if c == '.'
+            pending_dots += 1
+            p.pos = nextind(p.input, p.pos)
+        elseif _is_pn_chars(c)
+            while pending_dots > 0
+                write(buf, '.')
+                pending_dots -= 1
+            end
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
         else
             break
         end
     end
+    p.pos -= pending_dots  # '.' is a single byte; rewind unconsumed dots
     label = String(take!(buf))
-    label = rstrip(label, '.')
     # Scope named BNodes per formula to avoid collisions across { } blocks
     if p.formula_scope > 0
         BNode("$(label)_scope$(p.formula_scope)")
@@ -1026,6 +1058,10 @@ end
 
 function _n3_new_bnode!(p::_N3Parser)
     p.bnodecounter += 1
+    # Never collide with a blank node label used explicitly in the document
+    while "b$(p.bnodecounter)" in p.doc_bnode_labels
+        p.bnodecounter += 1
+    end
     BNode("b$(p.bnodecounter)")
 end
 
@@ -1117,20 +1153,9 @@ function _n3_parse_prefixed_name!(p::_N3Parser)
     end
     prefix = String(take!(buf))
 
-    local_buf = IOBuffer()
-    while p.pos <= lastindex(p.input)
-        c = p.input[p.pos]
-        if c in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}', '#', '!', '^')
-            break
-        elseif c == '\\'
-            p.pos = nextind(p.input, p.pos)
-            write(local_buf, _n3_parse_pname_escape!(p))
-        else
-            write(local_buf, c)
-            p.pos = nextind(p.input, p.pos)
-        end
-    end
-    localname = String(take!(local_buf))
+    # PN_LOCAL grammar (shared with the Turtle parser). N3 path operators
+    # '!' and '^' are not PN_CHARS, so they naturally terminate the name.
+    localname = _parse_pn_local!(p)
 
     ns_uri = get(p.prefixes, prefix, nothing)
     if isnothing(ns_uri)
@@ -1148,12 +1173,6 @@ function _n3_parse_prefixed_name!(p::_N3Parser)
     URIRef(ns_uri * localname)
 end
 
-function _n3_parse_pname_escape!(p::_N3Parser)
-    c = p.input[p.pos]
-    p.pos = nextind(p.input, p.pos)
-    c
-end
-
 # ─── Literal parsing ───────────────────────────────────────────────
 
 function _n3_parse_literal!(p::_N3Parser)
@@ -1168,6 +1187,19 @@ function _n3_parse_literal!(p::_N3Parser)
     if c == '@'
         p.pos = nextind(p.input, p.pos)
         lang_tag = _n3_parse_lang_tag!(p)
+        # Optional base direction (RDF 1.2): "x"@en--ltr / "x"@ar--rtl
+        if _n3_at_string(p, "--")
+            p.pos = nextind(p.input, nextind(p.input, p.pos))
+            dir_buf = IOBuffer()
+            while p.pos <= lastindex(p.input) && isletter(p.input[p.pos])
+                write(dir_buf, p.input[p.pos])
+                p.pos = nextind(p.input, p.pos)
+            end
+            dir = String(take!(dir_buf))
+            dir in ("ltr", "rtl") ||
+                throw(ArgumentError("Invalid base direction '$dir'; expected 'ltr' or 'rtl'"))
+            return Literal(lexical, lang=lang_tag, direction=dir)
+        end
         return Literal(lexical, lang=lang_tag)
     elseif c == '^'
         _n3_consume_str!(p, "^^")
@@ -1204,14 +1236,26 @@ function _n3_parse_long_string!(p::_N3Parser)
     quote_char = p.input[p.pos]
     _n3_consume_str!(p, string(quote_char, quote_char, quote_char))
     buf = IOBuffer()
-    end_pattern = string(quote_char, quote_char, quote_char)
     while p.pos <= lastindex(p.input)
-        if _n3_at_string(p, end_pattern)
-            _n3_consume_str!(p, end_pattern)
-            return String(take!(buf))
-        end
         c = p.input[p.pos]
-        if c == '\\'
+        if c == quote_char
+            # Longest match: in a run of n >= 3 quotes, the final three close
+            # the string and any preceding quotes belong to the content.
+            run = 0
+            while p.pos <= lastindex(p.input) && p.input[p.pos] == quote_char
+                run += 1
+                p.pos = nextind(p.input, p.pos)
+            end
+            if run >= 3
+                for _ in 1:(run - 3)
+                    write(buf, quote_char)
+                end
+                return String(take!(buf))
+            end
+            for _ in 1:run
+                write(buf, quote_char)
+            end
+        elseif c == '\\'
             p.pos = nextind(p.input, p.pos)
             write(buf, _n3_parse_escape_char!(p))
         else
@@ -1223,34 +1267,75 @@ function _n3_parse_long_string!(p::_N3Parser)
 end
 
 function _n3_parse_escape_char!(p::_N3Parser)
+    p.pos > lastindex(p.input) &&
+        throw(ArgumentError("Truncated escape sequence at end of input"))
     c = p.input[p.pos]
     p.pos = nextind(p.input, p.pos)
     if c == 'n'; return '\n'
     elseif c == 'r'; return '\r'
     elseif c == 't'; return '\t'
+    elseif c == 'b'; return '\b'
+    elseif c == 'f'; return '\f'
     elseif c == '\\'; return '\\'
     elseif c == '"'; return '"'
     elseif c == '\''; return '\''
     elseif c == 'u'
-        hex = p.input[p.pos:nextind(p.input, p.pos, 3)]
-        p.pos = nextind(p.input, p.pos, 4)
-        return Char(parse(UInt32, hex, base=16))
+        return _n3_parse_hex_escape!(p, 4)
     elseif c == 'U'
-        hex = p.input[p.pos:nextind(p.input, p.pos, 7)]
-        p.pos = nextind(p.input, p.pos, 8)
-        return Char(parse(UInt32, hex, base=16))
+        return _n3_parse_hex_escape!(p, 8)
     else
         return c
     end
+end
+
+# Parse exactly `n` hex digits of a \\u/\\U escape with clean errors.
+function _n3_parse_hex_escape!(p::_N3Parser, n::Int)
+    cp = UInt32(0)
+    for _ in 1:n
+        p.pos > lastindex(p.input) &&
+            throw(ArgumentError("Truncated \\u escape at end of input"))
+        c = p.input[p.pos]
+        _is_hex_digit(c) ||
+            throw(ArgumentError("Invalid hex digit '$c' in \\u escape at position $(p.pos)"))
+        cp = cp * 0x10 + UInt32(parse(UInt8, string(c), base=16))
+        p.pos = nextind(p.input, p.pos)
+    end
+    (0xD800 <= cp <= 0xDFFF) &&
+        throw(ArgumentError("Surrogate code point U+$(string(cp, base=16, pad=4)) in \\u escape"))
+    cp > 0x10FFFF &&
+        throw(ArgumentError("Code point out of range in \\U escape"))
+    Char(cp)
+end
+
+# Inside an IRIREF (<...>) only \\u and \\U escapes are legal.
+function _n3_parse_iri_escape!(p::_N3Parser)
+    p.pos > lastindex(p.input) &&
+        throw(ArgumentError("Truncated escape sequence in IRI reference"))
+    c = p.input[p.pos]
+    p.pos = nextind(p.input, p.pos)
+    c == 'u' && return _n3_parse_hex_escape!(p, 4)
+    c == 'U' && return _n3_parse_hex_escape!(p, 8)
+    throw(ArgumentError("Invalid escape '\\$c' in IRI reference; only \\u and \\U are allowed"))
 end
 
 function _n3_parse_lang_tag!(p::_N3Parser)
     buf = IOBuffer()
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
-        if isletter(c) || c == '-' || isdigit(c)
+        if isletter(c) || isdigit(c)
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
+        elseif c == '-'
+            # A '-' only continues the tag when followed by an alphanumeric
+            # subtag; "--" introduces a base direction (handled by the caller).
+            next_pos = nextind(p.input, p.pos)
+            if next_pos <= lastindex(p.input) &&
+               (isletter(p.input[next_pos]) || isdigit(p.input[next_pos]))
+                write(buf, c)
+                p.pos = nextind(p.input, p.pos)
+            else
+                break
+            end
         else
             break
         end

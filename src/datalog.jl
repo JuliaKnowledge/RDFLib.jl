@@ -8,7 +8,9 @@
 # - Set-at-a-time evaluation: processes entire relations per iteration
 # - Hash joins on shared variables between body patterns
 # - Semi-naive: only delta (newly derived) tuples drive each iteration
-# - No builtins, no backward chaining, no formulas — pure Datalog
+# - Stratified negation: negated body atoms with negation-as-failure,
+#   evaluated stratum-by-stratum (lower strata are completed first)
+# - No builtins, no backward chaining, no nested formulas otherwise
 
 # ─── Types ────────────────────────────────────────────────────────────────
 
@@ -20,14 +22,27 @@ Reuses IntPattern from n3_unifier.jl.
 const DatalogAtom = IntPattern
 
 """
-A Datalog rule: head atom(s) derived from conjunction of body atoms.
-`var_count` is the number of distinct variables across head+body.
+A Datalog rule: head atom(s) derived from a conjunction of body atoms.
+
+- `body` holds the positive body atoms.
+- `neg_body` holds negated body atoms (negation-as-failure). A negated atom
+  succeeds when the (fully bound) triple is absent from the database. Negated
+  atoms must be *safe*: every variable in a negated atom must also occur in a
+  positive body atom. Programs with negation must be *stratifiable* (no
+  recursion through negation); `semi_naive!` checks both and throws an
+  `ArgumentError` otherwise.
+- `var_count` is the number of distinct variables across head+body+neg_body.
 """
 struct DatalogRule
     head::Vector{DatalogAtom}
     body::Vector{DatalogAtom}
+    neg_body::Vector{DatalogAtom}
     var_count::Int
 end
+
+# Backward-compatible constructor for negation-free rules
+DatalogRule(head::Vector{DatalogAtom}, body::Vector{DatalogAtom}, var_count::Int) =
+    DatalogRule(head, body, DatalogAtom[], var_count)
 
 """Compiled single-body rule for direct substitution (no unification needed)."""
 struct DLCompiledRule
@@ -341,26 +356,211 @@ function _atom_score(atom::DatalogAtom, bound_vars::Set{UInt32})::Int
     return score
 end
 
+# ─── Stratified Negation ──────────────────────────────────────────────────
+
+# Sentinel "predicate" for atoms with a variable in predicate position.
+# Such atoms can match (or derive) any predicate, so they are treated
+# conservatively in the dependency analysis.
+const _DL_ANY_PRED = UNBOUND
+
+@inline _dl_atom_pred(a::DatalogAtom)::UInt32 = is_var(a.p) ? _DL_ANY_PRED : a.p
+
+_dl_pred_name(enc::Union{TermEncoder,Nothing}, p::UInt32) =
+    p == _DL_ANY_PRED ? "<any (variable predicate)>" :
+    (enc !== nothing && p <= length(enc.from_id)) ? string(decode_term(enc, p)) : "predicate #$p"
+
+"""
+    check_negation_safety(rules; encoder=nothing)
+
+Throw an `ArgumentError` if any rule has a negated body atom containing a
+variable that does not occur in a positive body atom of the same rule
+(unsafe negation — the negated atom could not be fully bound when checked).
+"""
+function check_negation_safety(rules::Vector{DatalogRule};
+                               encoder::Union{TermEncoder,Nothing}=nothing)
+    for (i, r) in enumerate(rules)
+        isempty(r.neg_body) && continue
+        pos_vars = Set{UInt32}()
+        for a in r.body
+            is_var(a.s) && push!(pos_vars, a.s)
+            is_var(a.p) && push!(pos_vars, a.p)
+            is_var(a.o) && push!(pos_vars, a.o)
+        end
+        for a in r.neg_body
+            for v in (a.s, a.p, a.o)
+                if is_var(v) && !(v in pos_vars)
+                    throw(ArgumentError(
+                        "Unsafe negation in Datalog rule $i: variable slot " *
+                        "$(var_slot(v)) occurs in a negated atom but in no " *
+                        "positive body atom of the same rule"))
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+# Can facts produced by head atom `h` match body atom `b`?
+# Position-wise: a variable on either side is compatible with anything;
+# two constants must be equal.
+@inline function _dl_atoms_compatible(h::DatalogAtom, b::DatalogAtom)::Bool
+    (is_var(h.s) || is_var(b.s) || h.s == b.s) &&
+    (is_var(h.p) || is_var(b.p) || h.p == b.p) &&
+    (is_var(h.o) || is_var(b.o) || h.o == b.o)
+end
+
+"""
+    stratify_rules(rules; encoder=nothing) → Vector{Vector{Int}}
+
+Partition rule indices into strata for stratified-negation evaluation.
+
+Builds a rule-level dependency graph: rule `r` depends on rule `r'` when some
+head atom of `r'` can produce facts matching a body atom of `r` (positive
+edge) or a negated atom of `r` (negative edge). A rule's stratum must be ≥
+the strata of its positive dependencies and strictly greater than the strata
+of its negative dependencies. Throws an `ArgumentError` if the program is not
+stratifiable (a negative edge participates in a dependency cycle).
+
+Negation-free programs always form a single stratum.
+"""
+function stratify_rules(rules::Vector{DatalogRule};
+                        encoder::Union{TermEncoder,Nothing}=nothing)::Vector{Vector{Int}}
+    any(r -> !isempty(r.neg_body), rules) || return [collect(1:length(rules))]
+
+    n = length(rules)
+    # pos_deps[i] / neg_deps[i]: rules whose heads can feed rule i's
+    # positive / negated body atoms
+    pos_deps = [Int[] for _ in 1:n]
+    neg_deps = [Int[] for _ in 1:n]
+    for (i, r) in enumerate(rules)
+        for (j, rj) in enumerate(rules)
+            for h in rj.head
+                if any(b -> _dl_atoms_compatible(h, b), r.body)
+                    push!(pos_deps[i], j)
+                    break
+                end
+            end
+            for h in rj.head
+                if any(b -> _dl_atoms_compatible(h, b), r.neg_body)
+                    push!(neg_deps[i], j)
+                    break
+                end
+            end
+        end
+    end
+
+    stratum = fill(1, n)
+    limit = n + 1
+    changed = true
+    while changed
+        changed = false
+        for i in 1:n
+            req = 1
+            for j in pos_deps[i]
+                req = max(req, stratum[j])
+            end
+            for j in neg_deps[i]
+                req = max(req, stratum[j] + 1)
+            end
+            if req > stratum[i]
+                if req > limit
+                    culprits = [_dl_pred_name(encoder, _dl_atom_pred(a))
+                                for a in rules[i].neg_body]
+                    throw(ArgumentError(
+                        "Datalog program is not stratifiable: negation occurs " *
+                        "inside a recursive cycle (rule $i, negated atom(s) on " *
+                        "$(join(unique(culprits), ", "))). Stratified negation " *
+                        "requires that no predicate depends on itself through " *
+                        "a negated atom."))
+                end
+                stratum[i] = req
+                changed = true
+            end
+        end
+    end
+
+    max_stratum = maximum(stratum)
+    strata = [Int[] for _ in 1:max_stratum]
+    for i in 1:n
+        push!(strata[stratum[i]], i)
+    end
+    filter!(!isempty, strata)
+    return strata
+end
+
+# Check whether any negated atom is satisfied (present) — if so, the rule
+# firing is blocked. Safety guarantees all positions resolve to constants.
+@inline function _neg_blocked(neg_body::Vector{DatalogAtom}, bindings::DLBindings,
+                              istore::IntStore)::Bool
+    for a in neg_body
+        s = is_var(a.s) ? bindings[var_slot(a.s)] : a.s
+        p = is_var(a.p) ? bindings[var_slot(a.p)] : a.p
+        o = is_var(a.o) ? bindings[var_slot(a.o)] : a.o
+        # Unbound positions should be impossible (safety check), but be
+        # conservative: an unverifiable negation blocks the derivation.
+        (s == UNBOUND || p == UNBOUND || o == UNBOUND) && return true
+        int_contains(istore, s, p, o) && return true
+    end
+    return false
+end
+
 # ─── Semi-Naive Evaluation ────────────────────────────────────────────────
 
 """
     semi_naive!(program; max_iterations=1000, init_istore=nothing) → Int
 
-Run semi-naive bottom-up evaluation with optimized join execution.
+Run stratified semi-naive bottom-up evaluation with optimized join execution.
+Rules are partitioned into strata (see [`stratify_rules`](@ref)); each stratum
+is evaluated to fixpoint with semi-naive iteration before the next stratum
+starts, so negated atoms only ever consult fully-computed lower strata.
 Returns the number of new facts derived.
+
+Throws an `ArgumentError` for unstratifiable programs or unsafe negation.
 """
 function semi_naive!(prog::DatalogProgram; max_iterations::Int=1000,
                       init_istore::Union{IntStore,Nothing}=nothing)::Int
     rules = prog.rules
     isempty(rules) && return 0
 
-    # Separate single-body and multi-body rules
+    check_negation_safety(rules; encoder=prog.encoder)
+    strata = stratify_rules(rules; encoder=prog.encoder)
+
+    # Use IntStore for indexed storage (reuse if provided)
+    istore = if init_istore !== nothing
+        init_istore
+    else
+        s = IntStore()
+        for t in prog.facts.tuples
+            int_add!(s, t)
+        end
+        s
+    end
+
+    total_derived = 0
+    for stratum_rules in strata
+        total_derived += _semi_naive_stratum!(prog, stratum_rules, istore;
+                                              max_iterations=max_iterations)
+    end
+    return total_derived
+end
+
+# Evaluate one stratum (a subset of prog.rules) to fixpoint with
+# semi-naive iteration. Facts from lower strata are already in `istore`.
+function _semi_naive_stratum!(prog::DatalogProgram, rule_indices::Vector{Int},
+                              istore::IntStore; max_iterations::Int=1000)::Int
+    rules = prog.rules
+    isempty(rule_indices) && return 0
+
+    # Separate single-body rules (no negation) from general rules.
+    # Rules with negated atoms always take the general path so the
+    # negation check runs before firing.
     single_rules = Int[]
     multi_rules = Int[]
-    for (i, r) in enumerate(rules)
-        if length(r.body) == 1
+    for i in rule_indices
+        r = rules[i]
+        if length(r.body) == 1 && isempty(r.neg_body)
             push!(single_rules, i)
-        elseif length(r.body) > 1
+        elseif length(r.body) >= 1
             push!(multi_rules, i)
         end
     end
@@ -404,18 +604,7 @@ function semi_naive!(prog::DatalogProgram; max_iterations::Int=1000,
         ordered_bodies[ri] = reorder_body(rules[ri].body)
     end
 
-    # Use IntStore for indexed storage (reuse if provided)
-    istore = if init_istore !== nothing
-        init_istore
-    else
-        s = IntStore()
-        for t in prog.facts.tuples
-            int_add!(s, t)
-        end
-        s
-    end
-
-    # Delta: start with all facts as "new"
+    # Delta: start with all facts as "new" (relative to this stratum)
     delta = copy(istore.triples)
 
     total_derived = 0
@@ -510,6 +699,12 @@ function semi_naive!(prog::DatalogProgram; max_iterations::Int=1000,
                     end
 
                     for b in result_bindings
+                        # Negation-as-failure: negated atoms consult only
+                        # completed lower strata (stratification guarantees
+                        # this stratum never derives a negated predicate).
+                        if !isempty(rule.neg_body) && _neg_blocked(rule.neg_body, b, istore)
+                            continue
+                        end
                         _fire_head!(rule.head, b, istore, new_delta, prog.facts)
                     end
 
@@ -693,8 +888,23 @@ This is the Datalog equivalent of `reason(g)`. It:
 1. Extracts N3 rules from the graph
 2. Encodes all data triples to integers
 3. Converts rules to Datalog format
-4. Runs semi-naive evaluation
+4. Runs stratified semi-naive evaluation
 5. Decodes results back to RDF terms
+
+# Negation
+
+Antecedent statements of the form `?SCOPE log:notIncludes { pattern }` are
+treated as negated body atoms (negation-as-failure): the rule fires only when
+no triple matching `pattern` is present. The subject of `log:notIncludes` is
+ignored. The formula must contain exactly one triple pattern; every variable
+in it must also occur in a positive body atom (safety), and the program must
+be stratifiable (no recursion through negation) — otherwise an
+`ArgumentError` is thrown.
+
+```
+{ ?x :type :Person . ?s log:notIncludes { ?x :status :banned } }
+    => { ?x :status :welcome } .
+```
 """
 function datalog_reason(g::RDFGraph; max_iterations::Int=1000)::RDFGraph
     # Use the same rule extraction as the N3 reasoner
@@ -704,16 +914,16 @@ function datalog_reason(g::RDFGraph; max_iterations::Int=1000)::RDFGraph
     log_implies_id = encode_term!(enc, URIRef("http://www.w3.org/2000/10/swap/log#implies"))
 
     istore = IntStore()
-    int_rules = IntRule[]
+    dl_rules = DatalogRule[]
 
-    # Encode graph: rules go to int_rules, data to istore
+    # Encode graph: rules go to dl_rules, data to istore
     _ensure_indexed!(g.store)
     for triple in g.store.insertion_order
         s, p, o = triple.subject, triple.predicate, triple.object
         p_id = encode_term!(enc, p)
         if p_id == log_implies_id && s isa Formula && o isa Formula
             # This is a rule: extract antecedent/consequent
-            _encode_n3_rule!(enc, s, o, int_rules)
+            _encode_n3_rule!(enc, s, o, dl_rules)
         else
             s_id = encode_term!(enc, s)
             o_id = encode_term!(enc, o)
@@ -721,8 +931,6 @@ function datalog_reason(g::RDFGraph; max_iterations::Int=1000)::RDFGraph
         end
     end
 
-    # Convert to Datalog rules
-    dl_rules = n3_rules_to_datalog(int_rules)
     isempty(dl_rules) && return _decode_graph(enc, istore)
 
     # Build program from encoded data (uses IntStore directly)
@@ -738,11 +946,14 @@ function datalog_reason(g::RDFGraph; max_iterations::Int=1000)::RDFGraph
     return _decode_istore(enc, prog)
 end
 
+const _DL_LOG_NOT_INCLUDES = URIRef("http://www.w3.org/2000/10/swap/log#notIncludes")
+
 """
-Encode an N3 rule (Formula => Formula) into an IntRule with variable slots.
+Encode an N3 rule (Formula => Formula) into a DatalogRule with variable slots.
+Antecedent statements `?SCOPE log:notIncludes { pattern }` become negated atoms.
 """
 function _encode_n3_rule!(enc::TermEncoder, antecedent::Formula, consequent::Formula,
-                           int_rules::Vector{IntRule})
+                           dl_rules::Vector{DatalogRule})
     # Collect all blank nodes in the rule and treat them as variables
     bnodes = Dict{BNode, UInt32}()
     var_slot_counter = Ref(UInt32(0))
@@ -765,28 +976,41 @@ function _encode_n3_rule!(enc::TermEncoder, antecedent::Formula, consequent::For
         end
     end
 
-    # Encode antecedent patterns
-    ant_patterns = IntPattern[]
+    # Encode antecedent patterns (positive and negated)
+    ant_patterns = DatalogAtom[]
+    neg_patterns = DatalogAtom[]
     _ensure_indexed!(antecedent.graph.store)
     for t in antecedent.graph.store.insertion_order
+        if t.predicate == _DL_LOG_NOT_INCLUDES && t.object isa Formula
+            # Negated pattern: subject (scope) is ignored
+            inner = collect(t.object.graph)
+            length(inner) == 1 || throw(ArgumentError(
+                "datalog_reason: log:notIncludes formula must contain exactly " *
+                "one triple pattern (got $(length(inner)))"))
+            it = inner[1]
+            push!(neg_patterns, DatalogAtom(encode_term_or_var(it.subject),
+                                            encode_term_or_var(it.predicate),
+                                            encode_term_or_var(it.object)))
+            continue
+        end
         s_id = encode_term_or_var(t.subject)
         p_id = encode_term_or_var(t.predicate)
         o_id = encode_term_or_var(t.object)
-        push!(ant_patterns, IntPattern(s_id, p_id, o_id))
+        push!(ant_patterns, DatalogAtom(s_id, p_id, o_id))
     end
 
     # Encode consequent patterns
-    con_patterns = IntPattern[]
+    con_patterns = DatalogAtom[]
     _ensure_indexed!(consequent.graph.store)
     for t in consequent.graph.store.insertion_order
         s_id = encode_term_or_var(t.subject)
         p_id = encode_term_or_var(t.predicate)
         o_id = encode_term_or_var(t.object)
-        push!(con_patterns, IntPattern(s_id, p_id, o_id))
+        push!(con_patterns, DatalogAtom(s_id, p_id, o_id))
     end
 
     n_vars = Int(var_slot_counter[])
-    push!(int_rules, IntRule(ant_patterns, con_patterns, n_vars))
+    push!(dl_rules, DatalogRule(con_patterns, ant_patterns, neg_patterns, n_vars))
 end
 
 function _decode_facts(enc::TermEncoder, facts::DatalogRelation)::RDFGraph

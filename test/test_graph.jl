@@ -92,6 +92,72 @@ using RDFLib
         @test expand_curie(g.namespace_manager, "ex:Person") == EX("Person")
     end
 
+    @testset "triples keyword API (README)" begin
+        g = RDFGraph()
+        add!(g, EX("a"), RDF.type, EX("Person"))
+        add!(g, EX("b"), RDF.type, EX("Animal"))
+        add!(g, EX("a"), RDFS.label, Literal("Alice"))
+
+        # All triples (no keywords)
+        @test length(collect(triples(g))) == 3
+
+        # Single keyword filters
+        @test length(collect(triples(g; subject=EX("a")))) == 2
+        @test length(collect(triples(g; predicate=RDF.type))) == 2
+        @test length(collect(triples(g; object=EX("Person")))) == 1
+
+        # Combined keywords
+        r = collect(triples(g; subject=EX("a"), predicate=RDFS.label))
+        @test length(r) == 1
+        @test r[1].object == Literal("Alice")
+
+        # Keyword form agrees with tuple form
+        @test Set(collect(triples(g; predicate=RDF.type))) ==
+              Set(collect(triples(g, (nothing, RDF.type, nothing))))
+    end
+
+    @testset "mutation during iteration throws" begin
+        g = RDFGraph()
+        for i in 1:5
+            add!(g, EX("s$i"), RDF.type, EX("Thing"))
+        end
+
+        # add! during iteration
+        @test_throws ErrorException begin
+            for t in g
+                add!(g, EX("new"), RDF.type, EX("Thing"))
+            end
+        end
+
+        # remove! during iteration
+        g2 = RDFGraph()
+        for i in 1:5
+            add!(g2, EX("s$i"), RDF.type, EX("Thing"))
+        end
+        @test_throws ErrorException begin
+            for t in g2
+                remove!(g2, (t.subject, nothing, nothing))
+            end
+        end
+
+        # Plain iteration and read-only pattern queries do not throw
+        g3 = RDFGraph()
+        add!(g3, EX("a"), RDF.type, EX("Thing"))
+        add!(g3, EX("b"), RDF.type, EX("Thing"))
+        n = 0
+        for t in g3
+            # Pattern query triggers (secondary) index builds — must NOT
+            # count as a modification
+            @test length(collect(triples(g3, (t.subject, nothing, nothing)))) == 1
+            n += 1
+        end
+        @test n == 2
+
+        # Iteration after mutation works again
+        add!(g3, EX("c"), RDF.type, EX("Thing"))
+        @test length(collect(g3)) == 3
+    end
+
     @testset "serialization rejects invalid stored RDF triples" begin
         g = RDFGraph()
         add!(g.store, Triple(EX("s"), Literal("bad"), Literal("ok")))

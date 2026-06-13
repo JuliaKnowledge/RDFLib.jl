@@ -75,8 +75,85 @@ results = sparql_query(g, \"\"\"
 ```
 """
 function sparql_query(g::RDFGraph, query::AbstractString)
+    # Note: on a plain RDFGraph there are no named graphs — FROM / FROM NAMED
+    # clauses fall back to querying the graph itself, and GRAPH patterns
+    # yield zero solutions (spec semantics for an empty set of named graphs).
     ast = sparql_parse(String(query))
     _ast_evaluate(g, ast)
+end
+
+"""
+    sparql_query(ds::Dataset, query::AbstractString)
+
+Execute a SPARQL query against a dataset. The default graph is queried
+directly; `GRAPH <iri> { ... }` patterns evaluate against the dataset's
+named graphs and `GRAPH ?g` iterates them. FROM / FROM NAMED clauses are
+honored: FROM graphs are merged into the queried default graph, FROM NAMED
+restricts the named graphs visible to GRAPH.
+"""
+function sparql_query(ds::Dataset, query::AbstractString)
+    ast = sparql_parse(String(query))
+    _sparql_eval_on_dataset(ds, ast)
+end
+
+"""
+    sparql_query(cg, query::AbstractString)
+
+Query a ConjunctiveGraph (or any wrapper exposing a `dataset::Dataset`
+field): the default graph for matching is the union of all graphs
+(rdflib-compatible semantics); GRAPH patterns address the named graphs.
+"""
+function sparql_query(x, query::AbstractString)
+    if hasfield(typeof(x), :dataset) && getfield(x, :dataset) isa Dataset
+        ds = getfield(x, :dataset)::Dataset
+        ast = sparql_parse(String(query))
+        return _sparql_eval_on_dataset(ds, ast; union_default=true)
+    end
+    throw(MethodError(sparql_query, (x, query)))
+end
+
+function _sparql_eval_on_dataset(ds::Dataset, ast; union_default::Bool=false)
+    from = ast isa SparqlSelect ? ast.from : URIRef[]
+    from_named = ast isa SparqlSelect ? ast.from_named : URIRef[]
+
+    default_g, named_filter = if isempty(from) && isempty(from_named)
+        if union_default
+            merged = RDFGraph()
+            for t in triples(ds.default_graph)
+                add!(merged, t)
+            end
+            for (_, ng) in ds.named_graphs, t in triples(ng)
+                add!(merged, t)
+            end
+            (merged, nothing)
+        else
+            (ds.default_graph, nothing)
+        end
+    else
+        # Explicit dataset description: FROM graphs (merged) become the
+        # default graph (empty if only FROM NAMED given); FROM NAMED lists
+        # the named graphs visible to GRAPH.
+        merged = RDFGraph()
+        for iri in from
+            src = get(ds.named_graphs, iri, nothing)
+            src === nothing && continue
+            for t in triples(src)
+                add!(merged, t)
+            end
+        end
+        (merged, Set{GraphName}(from_named))
+    end
+
+    old_ds = _ACTIVE_DATASET[]
+    old_filter = _ACTIVE_NAMED_FILTER[]
+    _ACTIVE_DATASET[] = ds
+    _ACTIVE_NAMED_FILTER[] = named_filter
+    try
+        return _ast_evaluate(default_g, ast)
+    finally
+        _ACTIVE_DATASET[] = old_ds
+        _ACTIVE_NAMED_FILTER[] = old_filter
+    end
 end
 
 # ─── UPDATE types ──────────────────────────────────────────────────
@@ -96,7 +173,10 @@ struct _SPARQLModify
     insert_template::Vector{Tuple{Any,Any,Any}}
     patterns::Vector{Any}
     prefixes::Dict{String,String}
+    with_graph::Union{URIRef,Nothing}   # WITH <iri> target graph (nothing = default)
 end
+
+_SPARQLModify(del, ins, pats, prefixes) = _SPARQLModify(del, ins, pats, prefixes, nothing)
 
 struct _SPARQLClear
     target::String  # "ALL", "DEFAULT", "NAMED"
@@ -136,6 +216,129 @@ function _sparql_exec_update(g::RDFGraph, op::_SPARQLClear)
             remove!(g, t)
         end
     end
+end
+
+_sparql_clear_graph!(g::RDFGraph) = (for t in collect(triples(g)); remove!(g, t); end; g)
+
+# ─── Graph management (COPY/MOVE/ADD/CREATE/DROP/CLEAR) ───────────
+#
+# A plain RDFGraph has no named graphs: only the DEFAULT/ALL targets are
+# meaningful; named-graph operations error unless SILENT.
+
+function _sparql_exec_update(g::RDFGraph, op::UpdateGraphOp)
+    if op.op == :clear || op.op == :drop
+        t = op.target
+        if t === :default || t === :all
+            _sparql_clear_graph!(g)
+        elseif t === :named
+            # No named graphs in a plain graph — nothing to do
+        else  # specific graph IRI
+            op.silent || error("$(uppercase(string(op.op))) GRAPH <$(t.value)> is not supported on a plain RDFGraph; use a Dataset or ConjunctiveGraph")
+        end
+    elseif op.op == :create
+        op.silent || error("CREATE GRAPH is not supported on a plain RDFGraph; use a Dataset or ConjunctiveGraph")
+    else  # :copy / :move / :add
+        if op.source === :default && op.target === :default
+            # source == destination → no-op per SPARQL 1.1 Update
+            return
+        end
+        op.silent || error("$(uppercase(string(op.op))) involving named graphs is not supported on a plain RDFGraph; use a Dataset or ConjunctiveGraph")
+    end
+    nothing
+end
+
+# ─── UPDATE on Dataset / ConjunctiveGraph (named graph support) ────
+
+"""
+    sparql_update(ds::Dataset, query::AbstractString)
+
+Execute a SPARQL UPDATE against a dataset. Graph-management operations
+(COPY/MOVE/ADD/CREATE/DROP/CLEAR) operate on the dataset's named graphs;
+other operations apply to the default graph (or the WITH graph for
+DELETE/INSERT ... WHERE).
+"""
+function sparql_update(ds::Dataset, query::AbstractString)
+    parsed = sparql_parse_update(String(query))
+    if parsed isa UpdateGraphOp
+        _sparql_exec_update(ds, parsed)
+    else
+        target_g = ds.default_graph
+        if parsed isa _SPARQLModify && !isnothing(parsed.with_graph)
+            target_g = _get_or_create_graph!(ds, parsed.with_graph)
+        end
+        if parsed isa _SPARQLModify && !isempty(parsed.patterns) && all(p -> p isa SparqlPattern, parsed.patterns)
+            _sparql_exec_update(target_g, parsed, Val(:ast))
+        else
+            _sparql_exec_update(target_g, parsed)
+        end
+    end
+    nothing
+end
+
+# ConjunctiveGraph is defined after this file is included, so delegate via a
+# duck-typed fallback: any wrapper exposing a `dataset::Dataset` field
+# (e.g. ConjunctiveGraph) updates through its dataset.
+function sparql_update(x, query::AbstractString)
+    if hasfield(typeof(x), :dataset) && getfield(x, :dataset) isa Dataset
+        return sparql_update(getfield(x, :dataset)::Dataset, query)
+    end
+    throw(MethodError(sparql_update, (x, query)))
+end
+
+function _sparql_exec_update(ds::Dataset, op::UpdateGraphOp)
+    if op.op == :create
+        if haskey(ds.named_graphs, op.target) && !op.silent
+            error("CREATE GRAPH: graph <$(op.target.value)> already exists")
+        end
+        add_graph(ds, op.target::URIRef)
+    elseif op.op == :clear || op.op == :drop
+        t = op.target
+        if t === :default
+            _sparql_clear_graph!(ds.default_graph)
+        elseif t === :named
+            if op.op == :drop
+                empty!(ds.named_graphs)
+            else
+                foreach(_sparql_clear_graph!, values(ds.named_graphs))
+            end
+        elseif t === :all
+            _sparql_clear_graph!(ds.default_graph)
+            if op.op == :drop
+                empty!(ds.named_graphs)
+            else
+                foreach(_sparql_clear_graph!, values(ds.named_graphs))
+            end
+        else  # specific graph IRI
+            g = get(ds.named_graphs, t, nothing)
+            if isnothing(g)
+                op.silent || error("$(uppercase(string(op.op))) GRAPH: no such graph <$(t.value)>")
+            elseif op.op == :drop
+                remove_graph(ds, t::URIRef)
+            else
+                _sparql_clear_graph!(g)
+            end
+        end
+    else  # :copy / :move / :add
+        op.source == op.target && return nothing  # same graph → no-op
+        src = op.source === :default ? ds.default_graph : get(ds.named_graphs, op.source, nothing)
+        if isnothing(src)
+            op.silent && return nothing
+            error("$(uppercase(string(op.op))): source graph <$(op.source.value)> does not exist")
+        end
+        dst = op.target === :default ? ds.default_graph : _get_or_create_graph!(ds, op.target::URIRef)
+        op.op == :copy && _sparql_clear_graph!(dst)
+        for t in collect(triples(src))
+            add!(dst, t)
+        end
+        if op.op == :move
+            if op.source === :default
+                _sparql_clear_graph!(ds.default_graph)
+            else
+                remove_graph(ds, op.source::URIRef)
+            end
+        end
+    end
+    nothing
 end
 
 function _sparql_exec_update(g::RDFGraph, op::_SPARQLInsertData)

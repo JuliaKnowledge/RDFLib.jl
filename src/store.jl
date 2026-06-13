@@ -31,6 +31,10 @@ mutable struct MemoryStore <: AbstractStore
     insertion_order::Vector{Triple}  # Preserve insertion order for deterministic iteration
     indexed::Bool  # Whether SPO index is built
     secondary_indexed::Bool  # Whether POS/OSP indices are built
+    # Bumped on every logical content change (add/remove). Used by iteration
+    # to detect mutation-during-iteration (like Julia's Dict). Index
+    # (re)builds do NOT bump this counter since they don't change content.
+    _mod_count::Int
 end
 
 MemoryStore() = MemoryStore(
@@ -42,7 +46,8 @@ MemoryStore() = MemoryStore(
     0,
     Triple[],
     true,
-    false  # secondary indices built lazily on first pattern query
+    false,  # secondary indices built lazily on first pattern query
+    0
 )
 
 # Build SPO index from insertion_order (lazy build after bulk insert)
@@ -123,6 +128,7 @@ function _add_unchecked!(store::MemoryStore, t::Triple)
 
     push!(store.insertion_order, t)
     store.count += 1
+    store._mod_count += 1
     nothing
 end
 
@@ -130,6 +136,7 @@ end
 function _add_deferred!(store::MemoryStore, t::Triple)
     push!(store.insertion_order, t)
     store.count += 1
+    store._mod_count += 1
     nothing
 end
 
@@ -159,6 +166,9 @@ function _rebuild_indices!(store::MemoryStore; skip_dedup::Bool=false)
             push!(seen, t)
             push!(deduped, t)
         end
+        if length(deduped) != length(store.insertion_order)
+            store._mod_count += 1
+        end
         store.insertion_order = deduped
         store.count = length(deduped)
     end
@@ -181,6 +191,7 @@ function remove!(store::MemoryStore, pattern::TriplePattern)
     end
     remove_set = Set{Triple}(to_remove)
     filter!(t -> !(t in remove_set), store.insertion_order)
+    store._mod_count += 1
     store
 end
 
@@ -189,6 +200,7 @@ function _remove_exact!(store::MemoryStore, t::Triple)
     _ensure_indexed!(store)
     _remove_from_indices!(store, t)
     filter!(x -> x != t, store.insertion_order)
+    store._mod_count += 1
     store
 end
 
@@ -298,34 +310,41 @@ end
 Base.length(store::MemoryStore) = store.count
 Base.isempty(store::MemoryStore) = store.count == 0
 
+"""
+    add_bulk!(store::MemoryStore, triples_vec::Vector{Triple}) -> store
+
+Add many triples at once. Semantics are identical to repeated `add!`:
+triples already present in the store (or duplicated within `triples_vec`)
+are skipped, the existing contents of the store are preserved, and the
+invariant `count == length(insertion_order) == |SPO index|` is maintained.
+"""
 function add_bulk!(store::MemoryStore, triples_vec::Vector{Triple})
+    isempty(triples_vec) && return store
+    _ensure_indexed!(store)
     n = length(triples_vec)
-    sizehint!(store.spo, n ÷ 4)
-    sizehint!(store.pos, 16)
-    sizehint!(store.osp, n ÷ 2)
-    empty!(store.pred_flat)
-    empty!(store.subj_flat)
+    sizehint!(store.spo, length(store.spo) + n ÷ 4)
+    sizehint!(store.insertion_order, length(store.insertion_order) + n)
     for t in triples_vec
         s, p, o = t.subject, t.predicate, t.object
-        # SPO index
+        # SPO index doubles as the dedup check (against both existing
+        # store content and duplicates within the input).
         sp = get!(Dict{Identifier, Set{Identifier}}, store.spo, s)
         objs = get!(Set{Identifier}, sp, p)
+        o in objs && continue
         push!(objs, o)
-        # POS index
-        po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
-        subjs = get!(Set{Identifier}, po, o)
-        push!(subjs, s)
-        # OSP index
-        os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
-        preds = get!(Set{Identifier}, os, s)
-        push!(preds, p)
-        # Flat indices
-        push!(get!(Vector{Triple}, store.pred_flat, p), t)
-        push!(get!(Vector{Triple}, store.subj_flat, s), t)
+        # Secondary indices are only maintained if already built
+        # (otherwise they are rebuilt lazily on the next pattern query).
+        if store.secondary_indexed
+            po = get!(Dict{Identifier, Set{Identifier}}, store.pos, p)
+            push!(get!(Set{Identifier}, po, o), s)
+            os = get!(Dict{Identifier, Set{Identifier}}, store.osp, o)
+            push!(get!(Set{Identifier}, os, s), p)
+            push!(get!(Vector{Triple}, store.pred_flat, p), t)
+            push!(get!(Vector{Triple}, store.subj_flat, s), t)
+        end
+        push!(store.insertion_order, t)
+        store.count += 1
     end
-    store.insertion_order = copy(triples_vec)
-    store.count = n
-    store.indexed = true
-    store.secondary_indexed = true
+    store._mod_count += 1
     store
 end

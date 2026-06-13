@@ -37,10 +37,12 @@ function serialize_trix(g::RDFGraph)
     serialize_trix(ds)
 end
 
-function _write_trix_graph(io::IO, g::RDFGraph, name::Union{URIRef, Nothing})
+function _write_trix_graph(io::IO, g::RDFGraph, name::Union{URIRef, BNode, Nothing})
     write(io, "  <graph>\n")
-    if !isnothing(name)
+    if name isa URIRef
         write(io, "    <uri>", _xml_escape(name.value), "</uri>\n")
+    elseif name isa BNode
+        write(io, "    <id>", _xml_escape(name.id), "</id>\n")
     end
     for t in g
         write(io, "    <triple>\n")
@@ -101,6 +103,9 @@ function parse_trix(str::AbstractString)
             tag = XML.tag(child)
             if tag == "uri" && first_uri_is_name
                 graph_name = URIRef(_element_text(child))
+                first_uri_is_name = false
+            elseif tag == "id" && first_uri_is_name
+                graph_name = BNode(_element_text(child))
                 first_uri_is_name = false
             elseif tag == "triple"
                 first_uri_is_name = false

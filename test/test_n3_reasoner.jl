@@ -353,4 +353,78 @@
         @test !(Triple(ex("item2"), RDF_TYPE, ex("HighValue")) in reasoner.facts)
     end
 
+    # ── 14. Semi-naive evaluation of builtin rules across iterations ──
+    @testset "Recursive rule with pure builtin (semi-naive delta path)" begin
+        # Transitive closure guarded by log:notEqualTo: derived triples must
+        # keep re-triggering the builtin rule across iterations.
+        n3 = """
+        @prefix : <http://example.org/> .
+        @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+        :a :p :b .
+        :b :p :c .
+        :c :p :d .
+        :d :p :e .
+        { ?x :p ?y . ?y :p ?z . ?x log:notEqualTo ?z } => { ?x :p ?z } .
+        """
+        g = parse_rdf(n3, RDFLib.N3Format())
+        result = reason(g)
+
+        p = URIRef("http://example.org/p")
+        nodes = [URIRef("http://example.org/$n") for n in ("a", "b", "c", "d", "e")]
+        # Full closure of the 5-node chain, minus reflexive pairs
+        for i in 1:5, j in (i+1):5
+            @test Triple(nodes[i], p, nodes[j]) in result
+        end
+        for n in nodes
+            @test !(Triple(n, p, n) in result)
+        end
+        p_count = count(t -> t.predicate == p, collect(triples(result)))
+        @test p_count == 10
+    end
+
+    @testset "Recursive rule with pure builtin — cyclic graph" begin
+        # Cycle a→b→c→a: closure derives all ordered pairs except self-loops
+        n3 = """
+        @prefix : <http://example.org/> .
+        @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+        :a :p :b .
+        :b :p :c .
+        :c :p :a .
+        { ?x :p ?y . ?y :p ?z . ?x log:notEqualTo ?z } => { ?x :p ?z } .
+        """
+        g = parse_rdf(n3, RDFLib.N3Format())
+        result = reason(g)
+
+        p = URIRef("http://example.org/p")
+        a = URIRef("http://example.org/a")
+        b = URIRef("http://example.org/b")
+        c = URIRef("http://example.org/c")
+        for (x, y) in ((a,b),(b,c),(c,a),(a,c),(b,a),(c,b))
+            @test Triple(x, p, y) in result
+        end
+        for n in (a, b, c)
+            @test !(Triple(n, p, n) in result)
+        end
+    end
+
+    @testset "Graph-dependent builtin still fully re-matched (log:notIncludes)" begin
+        # log:notIncludes is graph/formula-dependent and excluded from the
+        # semi-naive whitelist — rules using it keep full re-matching.
+        n3 = """
+        @prefix : <http://example.org/> .
+        @prefix log: <http://www.w3.org/2000/10/swap/log#> .
+        :a :type :Person .
+        :b :type :Person .
+        { ?x :type :Person . { :b :status :banned } log:notIncludes { ?x :status :banned } }
+            => { ?x :status :welcome } .
+        """
+        g = parse_rdf(n3, RDFLib.N3Format())
+        result = reason(g)
+
+        status = URIRef("http://example.org/status")
+        welcome = URIRef("http://example.org/welcome")
+        @test Triple(URIRef("http://example.org/a"), status, welcome) in result
+        @test !(Triple(URIRef("http://example.org/b"), status, welcome) in result)
+    end
+
 end

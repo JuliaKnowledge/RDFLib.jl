@@ -261,6 +261,38 @@ using RDFLib
         @test length(rows) == 2
     end
 
+    @testset "add_bulk! — batch intern + append" begin
+        # Bulk into a fresh store (SPO index only)
+        s = EncodedStore()
+        ts = Triple[]
+        for i in 1:100
+            push!(ts, Triple(EX("bs$(i % 10)"), EX("bp$(i % 3)"), EX("bo$i")))
+        end
+        push!(ts, ts[1])  # duplicate inside the batch
+        add_bulk!(s, ts)
+        @test length(s) == 100
+        # Re-adding the same batch is a no-op
+        add_bulk!(s, ts)
+        @test length(s) == 100
+        g = RDFGraph(store=s)
+        @test length(triples(g, (EX("bs1"), nothing, nothing))) == 10
+        @test Triple(EX("bs1"), EX("bp1"), EX("bo1")) in g
+
+        # Bulk into a store with secondary indices already built
+        s2 = EncodedStore()
+        g2 = RDFGraph(store=s2)
+        add!(g2, Triple(EX("seed"), EX("p"), EX("o")))
+        @test length(triples(g2, (nothing, EX("p"), nothing))) == 1  # builds POS/OSP
+        add_bulk!(s2, ts)
+        @test length(s2) == 101
+        @test length(triples(g2, (nothing, nothing, EX("bo7")))) == 1
+        rs = sparql_query(g2, """
+            PREFIX ex: <http://example.org/>
+            SELECT (COUNT(*) AS ?n) WHERE { ?s ex:bp1 ?o }
+        """)
+        @test parse(Int, string(first(rs)["n"])) == length(triples(g2, (nothing, EX("bp1"), nothing)))
+    end
+
     @testset "MemoryStore vs EncodedStore — semantic parity" begin
         ts = [
             Triple(EX("a"), EX("p"), EX("b")),

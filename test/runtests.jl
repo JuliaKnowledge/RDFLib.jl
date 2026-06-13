@@ -99,4 +99,5 @@ using RDFLib
     include("test_problog.jl")
     include("test_tabular.jl")
     include("test_encoded_store.jl")
+    include("test_evaluator_consistency.jl")
 end

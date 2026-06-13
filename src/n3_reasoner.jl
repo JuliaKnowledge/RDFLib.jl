@@ -98,6 +98,103 @@ function _match_with_builtins(patterns::Vector{Triple}, graph::RDFGraph, binding
     return results
 end
 
+# ─── Semi-naive support for builtin rules ──────────────────────────
+# A builtin is "semi-naive safe" when its result depends only on its
+# (bound) arguments — never on the fact graph. For such builtins a rule
+# can be evaluated semi-naively: once a binding tuple has been considered,
+# re-evaluating the builtin later can never produce a different outcome.
+# Graph-dependent builtins (log:includes, log:collectAllIn, e:findall, …)
+# and non-deterministic ones (log:uuid, time:localTime, …) are excluded.
+
+const _SWAP_MATH_NS   = "http://www.w3.org/2000/10/swap/math#"
+const _SWAP_STRING_NS = "http://www.w3.org/2000/10/swap/string#"
+const _SWAP_CRYPTO_NS = "http://www.w3.org/2000/10/swap/crypto#"
+const _SWAP_LOG_NS    = "http://www.w3.org/2000/10/swap/log#"
+
+const _SAFE_LOG_BUILTINS = Set{String}([
+    _SWAP_LOG_NS * "equalTo",
+    _SWAP_LOG_NS * "notEqualTo",
+    _SWAP_LOG_NS * "rawType",
+    _SWAP_LOG_NS * "uri",
+    _SWAP_LOG_NS * "langlit",
+    _SWAP_LOG_NS * "dtlit",
+    _SWAP_LOG_NS * "localName",
+    _SWAP_LOG_NS * "namespace",
+    _SWAP_LOG_NS * "racine",
+    _SWAP_LOG_NS * "bound",
+])
+
+function _seminaive_safe_builtin(pred::URIRef)::Bool
+    v = pred.value
+    startswith(v, _SWAP_MATH_NS) && return true
+    startswith(v, _SWAP_STRING_NS) && return true
+    startswith(v, _SWAP_CRYPTO_NS) && return true
+    return v in _SAFE_LOG_BUILTINS
+end
+
+# A rule with builtins may be matched semi-naively when every builtin in its
+# antecedent is semi-naive safe and the antecedent has no BNode list
+# structure (whose resolution consults the graph).
+function _rule_builtin_seminaive_safe(rule::N3Rule)::Bool
+    for pat in rule.antecedent
+        if pat.predicate isa URIRef && is_builtin(pat.predicate)
+            _seminaive_safe_builtin(pat.predicate) || return false
+        elseif (pat.predicate == _RDF_FIRST || pat.predicate == _RDF_REST) &&
+               pat.subject isa BNode
+            return false
+        end
+    end
+    return true
+end
+
+# Math/string builtins can resolve RDF lists from the fact graph when an
+# argument is bound to a list head. Graph lists are immutable unless some
+# rule derives rdf:first/rdf:rest triples (or has a variable predicate in
+# its consequent) — in that case disable builtin semi-naive entirely.
+function _ruleset_lists_stable(rules::Vector{N3Rule})::Bool
+    for rule in rules
+        for con in rule.consequent
+            con.predicate isa Variable && return false
+            (con.predicate == _RDF_FIRST || con.predicate == _RDF_REST) && return false
+        end
+    end
+    return true
+end
+
+"""
+Semi-naive variant of `_match_with_builtins` for rules whose builtins are all
+semi-naive safe (graph-independent): regular patterns are joined so that at
+least one of them matches a delta triple, then builtins are applied to the
+resulting bindings. Identical semantics to a full re-match restricted to
+binding tuples that involve at least one new triple.
+"""
+function _match_with_builtins_delta(patterns::Vector{Triple}, graph::RDFGraph,
+                                    delta_index::DeltaPredIndex, bindings::Binding)
+    regular = Triple[]
+    builtin = Triple[]
+    for p in patterns
+        if p.predicate isa URIRef && is_builtin(p.predicate)
+            push!(builtin, p)
+        else
+            push!(regular, p)
+        end
+    end
+
+    # Builtin-only rules: pure builtins cannot yield new bindings after the
+    # first (full) iteration, so there is nothing to do on delta iterations.
+    isempty(regular) && return Binding[]
+
+    base_bindings = match_conjunction_delta(regular, graph, delta_index, bindings)
+    isempty(builtin) && return base_bindings
+
+    sorted = _sort_builtins(builtin, isempty(base_bindings) ? bindings : base_bindings[1])
+    results = Binding[]
+    for b in base_bindings
+        _apply_builtins!(results, sorted, 1, b, graph)
+    end
+    return results
+end
+
 """
 Sort builtins topologically: builtins that produce variables should come before
 builtins that consume those variables.  Uses Kahn's algorithm on a dependency
@@ -987,11 +1084,22 @@ function _eam_loop_delta!(reasoner::N3Reasoner)
         end
     end
 
+    # Builtin rules that can be matched semi-naively (all builtins pure,
+    # no list structure, and no rule can mutate graph lists).
+    lists_stable = _ruleset_lists_stable(reasoner.ruleset.forward_rules)
+    safe_builtin_rules = Set{Int}()
+    if lists_stable
+        for i in has_builtins
+            _rule_builtin_seminaive_safe(reasoner.ruleset.forward_rules[i]) &&
+                push!(safe_builtin_rules, i)
+        end
+    end
+
     all_rules_set = Set{Int}(1:length(reasoner.ruleset.forward_rules))
     delta_triples = Triple[]
     new_preds = Set{URIRef}()
     changed = _eam_step_delta!(reasoner, all_rules_set, has_builtins,
-                                nothing, new_preds, delta_triples)
+                                safe_builtin_rules, nothing, new_preds, delta_triples)
     (!changed || reasoner.inference_count >= reasoner.max_inferences) && return
 
     for _ in 2:reasoner.max_iterations
@@ -1019,13 +1127,22 @@ function _eam_loop_delta!(reasoner::N3Reasoner)
                         break
                     end
                 end
+                # New (derived) rule may invalidate list stability
+                if lists_stable && !_ruleset_lists_stable([rule])
+                    lists_stable = false
+                    empty!(safe_builtin_rules)
+                end
+                if lists_stable && i in has_builtins &&
+                   _rule_builtin_seminaive_safe(rule)
+                    push!(safe_builtin_rules, i)
+                end
             end
         end
 
         empty!(new_preds)
         empty!(delta_triples)
         changed = _eam_step_delta!(reasoner, active_rules, has_builtins,
-                                    delta_index, new_preds, delta_triples)
+                                    safe_builtin_rules, delta_index, new_preds, delta_triples)
         !changed && break
         reasoner.inference_count >= reasoner.max_inferences && break
     end
@@ -1033,9 +1150,11 @@ end
 
 # EAM step with semi-naive delta matching.
 # When delta_index is nothing, does full matching (first iteration).
-# When delta_index is provided, uses delta matching for rules without builtins.
+# When delta_index is provided, uses delta matching for rules without
+# builtins and for rules whose builtins are all semi-naive safe.
 function _eam_step_delta!(reasoner::N3Reasoner, active_rules::Set{Int},
                            has_builtins::Set{Int},
+                           safe_builtin_rules::Set{Int},
                            delta_index::Union{DeltaPredIndex, Nothing},
                            new_preds::Set{URIRef},
                            new_delta::Vector{Triple})
@@ -1046,14 +1165,19 @@ function _eam_step_delta!(reasoner::N3Reasoner, active_rules::Set{Int},
         rule = reasoner.ruleset.forward_rules[ri]
 
         # Choose matching strategy
-        bindings_list = if delta_index !== nothing && !(ri in has_builtins) &&
-                          !isempty(rule.antecedent) &&
-                          isempty(reasoner.ruleset.backward_rules)
+        use_delta = delta_index !== nothing && !isempty(rule.antecedent) &&
+                    isempty(reasoner.ruleset.backward_rules)
+        bindings_list = if use_delta && !(ri in has_builtins)
             # Semi-naive: match against delta
             match_conjunction_delta(rule.antecedent, reasoner.facts,
                                     delta_index, Binding())
+        elseif use_delta && ri in safe_builtin_rules
+            # Semi-naive with pure (graph-independent) builtins
+            _match_with_builtins_delta(rule.antecedent, reasoner.facts,
+                                       delta_index, Binding())
         else
-            # Full match (first iteration or rules with builtins/backward chaining)
+            # Full match (first iteration, graph-dependent builtins,
+            # or backward chaining)
             _match_with_builtins(rule.antecedent, reasoner.facts, Binding();
                                   reasoner=reasoner)
         end

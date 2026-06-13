@@ -52,6 +52,7 @@ using RDFLib
         v3 = value(g3, ci, skos_pref)
         @test v3 !== nothing
         @test string(v3) == "Côte d'Ivoire"
+        @test lang(v3) == "fr"
     end
 
     # ─── Issue #161: Turtle namespace prefix with underscore ──────────
@@ -305,9 +306,16 @@ using RDFLib
             </dc:description>
         </rdf:Description>
         </rdf:RDF>"""
-        # Should not throw an error
+        # parseType="Literal" must yield exactly one triple whose object is
+        # an rdf:XMLLiteral containing the serialized inner XML.
         g = parse_rdf(rdfxml, RDFXMLFormat())
-        @test length(g) >= 1
+        @test length(g) == 1
+        t = first(g)
+        @test t.subject == URIRef("http://example.org/")
+        @test t.predicate == URIRef("http://purl.org/dc/elements/1.1/description")
+        @test t.object isa Literal
+        @test t.object.datatype == URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral")
+        @test contains(t.object.lexical, "<p")
     end
 
     # ─── Issue #363: RDF/XML parseType="Resource" ─────────────────────
@@ -324,7 +332,18 @@ using RDFLib
         </rdf:RDF>
         """
         g = parse_rdf(rdfxml, RDFXMLFormat())
-        @test length(g) >= 3  # m1 → Location (bnode), bnode → zip, bnode → lat
+        @test length(g) == 3  # m1 → Location (bnode), bnode → zip, bnode → lat
+        m1 = URIRef("http://meetings.example.com/cal#m1")
+        loc_pred = URIRef("http://www.example.org/meeting_organization#Location")
+        locs = collect(objects(g, m1, loc_pred))
+        @test length(locs) == 1
+        @test locs[1] isa BNode
+        # The properties must attach to the SAME blank node m1 points to
+        geo = "http://www.another.example.org/geographical#"
+        zips = collect(objects(g, locs[1], URIRef(geo * "zip")))
+        lats = collect(objects(g, locs[1], URIRef(geo * "lat")))
+        @test zips == [Literal("02139")]
+        @test lats == [Literal("14.124425")]
     end
 
     # ─── Issue #492: Turtle with Unicode escapes ──────────────────────

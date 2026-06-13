@@ -63,4 +63,25 @@ const EX_LT = "http://example.org/"
         g2 = parse_rdf(lt, TurtleFormat())
         @test length(g2) == 2
     end
+
+    @testset "Serialize directional language-tagged literal" begin
+        g = RDFGraph()
+        lit = Literal("hello", lang="en", direction="ltr")
+        add!(g, Triple(URIRef(EX_LT * "s"), URIRef(EX_LT * "p"), lit))
+        result = serialize_longturtle(g)
+        @test occursin("\"hello\"@en--ltr", result)
+        # round-trips through the Turtle parser
+        g2 = parse_rdf(result, TurtleFormat())
+        @test Triple(URIRef(EX_LT * "s"), URIRef(EX_LT * "p"), lit) in g2
+    end
+
+    @testset "Serialize quoted triple term" begin
+        g = RDFGraph()
+        tt = TripleTerm(URIRef(EX_LT * "s"), URIRef(EX_LT * "p"), URIRef(EX_LT * "o"))
+        add!(g, Triple(tt, URIRef(EX_LT * "certainty"), Literal("0.9")))
+        result = serialize_longturtle(g)
+        @test occursin("<< <$(EX_LT)s> <$(EX_LT)p> <$(EX_LT)o> >>", result)
+        g2 = parse_rdf(result, TurtleFormat())
+        @test Triple(tt, URIRef(EX_LT * "certainty"), Literal("0.9")) in g2
+    end
 end

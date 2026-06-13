@@ -57,9 +57,11 @@ using RDFLib
                     OPTIONAL { ?s ex:val ?val }
                 } GROUP BY ?g
             """)
-            mins = Dict(r["g"] => r["minval"] for r in results)
+            mins = Dict(r["g"] => get(r, "minval", nothing) for r in results)
             @test convert(Any, mins[EX("a")]) == 10
             @test convert(Any, mins[EX("b")]) == 5
+            # Group "c" has no values: MIN over empty group is unbound (spec)
+            @test mins[EX("c")] === nothing
         end
 
         @testset "MAX with undefined" begin
@@ -70,9 +72,11 @@ using RDFLib
                     OPTIONAL { ?s ex:val ?val }
                 } GROUP BY ?g
             """)
-            maxs = Dict(r["g"] => r["maxval"] for r in results)
+            maxs = Dict(r["g"] => get(r, "maxval", nothing) for r in results)
             @test convert(Any, maxs[EX("a")]) == 20
             @test convert(Any, maxs[EX("b")]) == 5
+            # Group "c" has no values: MAX over empty group is unbound (spec)
+            @test maxs[EX("c")] === nothing
         end
 
         @testset "SAMPLE with undefined" begin
@@ -83,10 +87,12 @@ using RDFLib
                     OPTIONAL { ?s ex:val ?val }
                 } GROUP BY ?g
             """)
-            samples = Dict(r["g"] => r["samp"] for r in results)
+            samples = Dict(r["g"] => get(r, "samp", nothing) for r in results)
             @test samples[EX("a")] isa Literal
             @test convert(Any, samples[EX("a")]) in (10, 20)
             @test convert(Any, samples[EX("b")]) == 5
+            # Group "c" has no values: SAMPLE over empty group is unbound (spec)
+            @test samples[EX("c")] === nothing
         end
 
         @testset "GROUP_CONCAT with undefined" begin
@@ -946,5 +952,506 @@ using RDFLib
         @test length(results) == 2
         @test parse(Int, results[1]["val"].lexical) == 1
         @test parse(Int, results[2]["val"].lexical) == 2
+    end
+end
+
+# ─── Review regression fixes (evaluator correctness & value semantics) ──────
+@testset "Evaluator Review Regressions" begin
+    EX = Namespace("http://example.org/")
+
+    @testset "FILTER(!BOUND) after star group (item 1)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s1"), EX("p"), Literal(1)))
+        add!(g, Triple(EX("s1"), EX("q"), Literal(2)))
+        add!(g, Triple(EX("s2"), EX("p"), Literal(3)))
+        add!(g, Triple(EX("s2"), EX("q"), Literal(4)))
+        # Used to crash in _collect_vars_in_expr! (ExprUnaryOp field access)
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE {
+                ?s ex:p ?x . ?s ex:q ?y .
+                FILTER(!BOUND(?x))
+            }
+        """)
+        @test isempty(results)
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE {
+                ?s ex:p ?x . ?s ex:q ?y .
+                OPTIONAL { ?s ex:r ?a }
+                FILTER(!BOUND(?a))
+            }
+        """)
+        @test length(results) == 2
+    end
+
+    @testset "Repeated variables in star groups (item 2)" begin
+        g = RDFGraph()
+        # s1: p and q have DIFFERENT values; s2: same value
+        add!(g, Triple(EX("s1"), EX("p"), Literal("a")))
+        add!(g, Triple(EX("s1"), EX("q"), Literal("b")))
+        add!(g, Triple(EX("s2"), EX("p"), Literal("c")))
+        add!(g, Triple(EX("s2"), EX("q"), Literal("c")))
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s ?x WHERE { ?s ex:p ?x . ?s ex:q ?x }
+        """)
+        @test length(results) == 1
+        @test results[1]["s"] == EX("s2")
+
+        # Subject var reused in object position within a star group
+        g2 = RDFGraph()
+        add!(g2, Triple(EX("n1"), EX("p"), EX("n1")))   # self-loop
+        add!(g2, Triple(EX("n1"), EX("q"), Literal("y")))
+        add!(g2, Triple(EX("n2"), EX("p"), EX("n1")))   # NOT a self-loop
+        add!(g2, Triple(EX("n2"), EX("q"), Literal("y")))
+        results = sparql_query(g2, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?x WHERE { ?x ex:p ?x . ?x ex:q ?y }
+        """)
+        @test length(results) == 1
+        @test results[1]["x"] == EX("n1")
+
+        # COUNT(*) fast path must not ignore repeated variables
+        g3 = RDFGraph()
+        add!(g3, Triple(EX("a"), EX("p"), EX("a")))
+        add!(g3, Triple(EX("a"), EX("p"), EX("b")))
+        results = sparql_query(g3, "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?s }")
+        @test length(results) == 1
+        @test results[1]["c"].lexical == "1"
+    end
+
+    @testset "FILTER applies over whole group (item 3)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s1"), EX("p"), Literal(1)))
+        add!(g, Triple(EX("s2"), EX("p"), Literal(2)))
+        # FILTER appears BEFORE the triple that binds ?x
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { FILTER(?x = 1) ?s ex:p ?x }
+        """)
+        @test length(results) == 1
+        @test results[1]["s"] == EX("s1")
+    end
+
+    @testset "Projection always applied (item 7)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a1"), EX("p"), Literal("pv")))
+        add!(g, Triple(EX("a2"), EX("q"), Literal("qv")))
+        add!(g, Triple(EX("a2"), EX("r"), Literal("leak")))
+        # First UNION branch rows bind exactly {a,b}; second branch rows bind
+        # {a,b,c} — ?c must NOT leak into the projected results.
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?a ?b WHERE {
+                { ?a ex:p ?b } UNION { ?a ex:q ?b . ?a ex:r ?c }
+            }
+        """)
+        @test length(results) == 2
+        for r in results
+            @test issubset(keys(r), Set(["a", "b"]))
+        end
+    end
+
+    @testset "Left join with heterogeneous RHS rows (item 8)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s1"), EX("p"), Literal("o")))
+        add!(g, Triple(EX("s2"), EX("p"), Literal("o")))
+        add!(g, Triple(EX("s1"), EX("v"), EX("v1")))
+        add!(g, Triple(EX("v1"), EX("w"), Literal("w1")))
+        # s2 has no ex:v → its row enters the second OPTIONAL with ?v unbound,
+        # which must join (not duplicate, not drop) against the ?v ex:w rows.
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT * WHERE {
+                ?s ex:p ?o .
+                OPTIONAL { ?s ex:v ?v }
+                OPTIONAL { ?v ex:w ?w }
+            }
+        """)
+        @test length(results) == 2
+        by_s = Dict(r["s"] => r for r in results)
+        @test by_s[EX("s1")]["v"] == EX("v1")
+        @test by_s[EX("s1")]["w"].lexical == "w1"
+        # ?v unbound on the s2 side joins the (v1, w1) row
+        @test by_s[EX("s2")]["v"] == EX("v1")
+        @test by_s[EX("s2")]["w"].lexical == "w1"
+    end
+
+    @testset "Datatype-driven numerics (item 9)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("plain"), Literal("42")))
+        add!(g, Triple(EX("s"), EX("typed"), Literal(42)))
+        results = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (ISNUMERIC(?p) AS ?np) (ISNUMERIC(?t) AS ?nt) WHERE {
+                ?s ex:plain ?p . ?s ex:typed ?t
+            }
+        """)
+        @test results[1]["np"].lexical == "false"  # plain literal NOT numeric
+        @test results[1]["nt"].lexical == "true"
+
+        # "10" < "9" is TRUE under codepoint string comparison
+        r = sparql_query(g, """SELECT ?x WHERE { ?x ?p ?o . FILTER("10" < "9") } LIMIT 1""")
+        @test length(r) == 1
+        # 10 < 9 numerically is false
+        r = sparql_query(g, """SELECT ?x WHERE { ?x ?p ?o . FILTER(10 < 9) } LIMIT 1""")
+        @test isempty(r)
+        # langString is not <-comparable (type error → row fails)
+        r = sparql_query(g, """SELECT ?x WHERE { ?x ?p ?o . FILTER("a"@en < "b"@en) } LIMIT 1""")
+        @test isempty(r)
+        # dateTime comparison normalizes timezones to UTC
+        r = sparql_query(g, """SELECT ?x WHERE { ?x ?p ?o .
+            FILTER("2020-01-01T10:00:00+05:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>
+                 < "2020-01-01T06:01:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>) } LIMIT 1""")
+        @test length(r) == 1
+        # Arithmetic typing: integer division yields decimal, + keeps integer
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (5 / 2 AS ?d) (2 + 3 AS ?i) WHERE { ?x ex:typed ?t }""")
+        @test r[1]["d"].lexical == "2.5"
+        @test r[1]["d"].datatype == URIRef("http://www.w3.org/2001/XMLSchema#decimal")
+        @test r[1]["i"].lexical == "5"
+        @test r[1]["i"].datatype == URIRef("http://www.w3.org/2001/XMLSchema#integer")
+    end
+
+    @testset "Equality semantics (item 10)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("label"), Literal("foo", lang="en")))
+        # "foo"@en = "foo" → type error, row fails
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:label ?l . FILTER(?l = "foo") }
+        """)
+        @test isempty(r)
+        # ... and != also fails (error, not true)
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:label ?l . FILTER(?l != "foo") }
+        """)
+        @test isempty(r)
+        # "1"@en = 1 → error, not true
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER("1"@en = 1) }""")
+        @test isempty(r)
+        # same-language different-lexical langStrings are simply unequal
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:label ?l . FILTER(?l = "bar"@en) }
+        """)
+        @test isempty(r)
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:label ?l . FILTER(?l != "bar"@en) }
+        """)
+        @test length(r) == 1
+        # numeric value equality across types and lexical forms
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(1 = 1.0) }""")
+        @test length(r) == 1
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o .
+            FILTER("1"^^<http://www.w3.org/2001/XMLSchema#integer> =
+                   "01"^^<http://www.w3.org/2001/XMLSchema#integer>) }""")
+        @test length(r) == 1
+    end
+
+    @testset "Error semantics (item 11)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal(1)))
+        # error || true → true
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(?undef > 1 || true) }""")
+        @test length(r) == 1
+        # error || false → error (row fails)
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(?undef > 1 || false) }""")
+        @test isempty(r)
+        # error && false → false; !(error && false) → true
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(!(?undef > 1 && false)) }""")
+        @test length(r) == 1
+        # !error → error (row fails)
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(!(?undef > 1)) }""")
+        @test isempty(r)
+        # division by zero is an error, not a match-all
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(1/0 = 1 || true) }""")
+        @test length(r) == 1
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(1/0 = 1) }""")
+        @test isempty(r)
+        # IF(error, ...) → error
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(IF(?undef > 1, true, true)) }""")
+        @test isempty(r)
+        # IN propagates errors per spec: a hit wins, otherwise error poisons
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(2 IN (1/0, 2)) }""")
+        @test length(r) == 1
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(2 IN (1/0, 3)) }""")
+        @test isempty(r)
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(2 NOT IN (1/0, 3)) }""")
+        @test isempty(r)
+        # unknown function → per-row error, NOT a query abort
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ?p ?o . FILTER(ex:noSuchFunction(?o)) }
+        """)
+        @test isempty(r)
+        # EBV of an IRI is a type error
+        r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER(?s) }""")
+        @test isempty(r)
+    end
+
+    @testset "XSD constructor casts (item 11b)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("x")))
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        r = sparql_query(g, """
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (xsd:integer("42") AS ?i) (xsd:double("1.5") AS ?d)
+                   (xsd:boolean("true") AS ?b) (xsd:string(42) AS ?st)
+                   (xsd:decimal("3.14") AS ?dec) (xsd:integer(7.9) AS ?tr)
+                   (xsd:integer("notanint") AS ?bad)
+            WHERE { ?s ?p ?o }
+        """)
+        @test r[1]["i"].lexical == "42"
+        @test r[1]["i"].datatype == URIRef(xsd * "integer")
+        @test r[1]["d"].lexical == "1.5"
+        @test r[1]["d"].datatype == URIRef(xsd * "double")
+        @test r[1]["b"].lexical == "true"
+        @test r[1]["b"].datatype == URIRef(xsd * "boolean")
+        @test r[1]["st"].lexical == "42"
+        @test r[1]["dec"].datatype == URIRef(xsd * "decimal")
+        @test r[1]["tr"].lexical == "7"    # truncation toward zero
+        @test !haskey(r[1], "bad")          # invalid cast → unbound
+        r = sparql_query(g, """
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (xsd:dateTime("2020-05-06T07:08:09") AS ?dt) WHERE { ?s ?p ?o }
+        """)
+        @test r[1]["dt"].datatype == URIRef(xsd * "dateTime")
+    end
+
+    @testset "ORDER BY total order across term types (item 12)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("x")))
+        r = sparql_query(g, """
+            SELECT ?v WHERE {
+                VALUES ?v { UNDEF <http://z.example/iri> "alit" 5 }
+            } ORDER BY ?v
+        """)
+        @test length(r) == 4
+        @test !haskey(r[1], "v")                       # unbound first
+        @test r[2]["v"] == URIRef("http://z.example/iri")  # IRIs before literals
+        @test r[3]["v"].lexical == "5"                  # numeric literal
+        @test r[4]["v"].lexical == "alit"               # then string
+        # DESC inverts
+        r = sparql_query(g, """
+            SELECT ?v WHERE { VALUES ?v { UNDEF <http://z.example/iri> "alit" 5 } }
+            ORDER BY DESC(?v)
+        """)
+        @test r[1]["v"].lexical == "alit"
+        @test !haskey(r[4], "v")
+        # strings sort by codepoint even when they look numeric
+        r = sparql_query(g, """SELECT ?v WHERE { VALUES ?v { "10" "9" } } ORDER BY ?v""")
+        @test r[1]["v"].lexical == "10"
+        # numbers sort by value (incl. with LIMIT top-K fast path)
+        r = sparql_query(g, """SELECT ?v WHERE { VALUES ?v { 10 9 } } ORDER BY ?v LIMIT 2""")
+        @test r[1]["v"].lexical == "9"
+    end
+
+    @testset "Empty-group aggregates (item 13)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal(1)))
+        # No matches + no GROUP BY → exactly one row
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (COUNT(?x) AS ?c) (SUM(?x) AS ?sum) (AVG(?x) AS ?avg)
+                   (MIN(?x) AS ?min) (MAX(?x) AS ?max) (SAMPLE(?x) AS ?smp)
+            WHERE { ?s ex:nomatch ?x }
+        """)
+        @test length(r) == 1
+        @test r[1]["c"].lexical == "0"
+        @test r[1]["sum"].lexical == "0"
+        @test !haskey(r[1], "avg")
+        @test !haskey(r[1], "min")
+        @test !haskey(r[1], "max")
+        @test !haskey(r[1], "smp")
+        # GROUP_CONCAT over the empty group is the empty string
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (GROUP_CONCAT(?x) AS ?gc) WHERE { ?s ex:nomatch ?x }
+        """)
+        @test length(r) == 1
+        @test r[1]["gc"].lexical == ""
+        # With GROUP BY: empty input → zero rows
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s (COUNT(?x) AS ?c) WHERE { ?s ex:nomatch ?x } GROUP BY ?s
+        """)
+        @test isempty(r)
+    end
+
+    @testset "Aggregate typing and errors (item 13b)" begin
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("v"), Literal(10)))
+        add!(g, Triple(EX("b"), EX("v"), Literal(20)))
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (SUM(?x) AS ?sum) (AVG(?x) AS ?avg) WHERE { ?s ex:v ?x }
+        """)
+        @test r[1]["sum"].lexical == "30"   # integer sum stays integer
+        @test r[1]["sum"].datatype == URIRef(xsd * "integer")
+        @test r[1]["avg"].lexical == "15.0" # integer avg promotes to decimal
+        @test r[1]["avg"].datatype == URIRef(xsd * "decimal")
+        # doubles stay doubles
+        g2 = RDFGraph()
+        add!(g2, Triple(EX("a"), EX("v"), Literal(1.5)))
+        add!(g2, Triple(EX("b"), EX("v"), Literal(2.5)))
+        r = sparql_query(g2, """
+            PREFIX ex: <http://example.org/>
+            SELECT (SUM(?x) AS ?sum) WHERE { ?s ex:v ?x }
+        """)
+        @test r[1]["sum"].lexical == "4.0"
+        @test r[1]["sum"].datatype == URIRef(xsd * "double")
+        # a non-numeric value poisons SUM/AVG → unbound, not silently skipped
+        g3 = RDFGraph()
+        add!(g3, Triple(EX("a"), EX("v"), Literal(10)))
+        add!(g3, Triple(EX("b"), EX("v"), Literal("oops")))
+        r = sparql_query(g3, """
+            PREFIX ex: <http://example.org/>
+            SELECT (SUM(?x) AS ?sum) (AVG(?x) AS ?avg) (COUNT(?x) AS ?c) WHERE { ?s ex:v ?x }
+        """)
+        @test length(r) == 1
+        @test !haskey(r[1], "sum")
+        @test !haskey(r[1], "avg")
+        @test r[1]["c"].lexical == "2"
+        # COUNT(DISTINCT *) dedupes by row content
+        g4 = RDFGraph()
+        add!(g4, Triple(EX("a"), EX("p"), Literal("x")))
+        add!(g4, Triple(EX("b"), EX("p"), Literal("y")))
+        r = sparql_query(g4, """
+            PREFIX ex: <http://example.org/>
+            SELECT (COUNT(*) AS ?c) (COUNT(DISTINCT *) AS ?dc) WHERE {
+                { ?s ex:p ?o } UNION { ?s ex:p ?o }
+            }
+        """)
+        @test r[1]["c"].lexical == "4"
+        @test r[1]["dc"].lexical == "2"
+    end
+
+    @testset "NOW/TZ/TIMEZONE (item 14)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("x")))
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        r = sparql_query(g, """SELECT (NOW() AS ?n) WHERE { ?s ?p ?o }""")
+        @test endswith(r[1]["n"].lexical, "Z")
+        @test r[1]["n"].datatype == URIRef(xsd * "dateTime")
+        r = sparql_query(g, """
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (TZ("2011-01-10T14:45:13.815-05:00"^^xsd:dateTime) AS ?tz)
+                   (TIMEZONE("2011-01-10T14:45:13.815-05:00"^^xsd:dateTime) AS ?tzd)
+                   (TZ("2011-01-10T14:45:13Z"^^xsd:dateTime) AS ?tzz)
+                   (TIMEZONE("2011-01-10T14:45:13Z"^^xsd:dateTime) AS ?tzdz)
+                   (TIMEZONE("2011-01-10T14:45:13"^^xsd:dateTime) AS ?notz)
+            WHERE { ?s ?p ?o }
+        """)
+        @test r[1]["tz"].lexical == "-05:00"
+        @test r[1]["tzd"].lexical == "-PT5H"
+        @test r[1]["tzd"].datatype == URIRef(xsd * "dayTimeDuration")
+        @test r[1]["tzz"].lexical == "Z"
+        @test r[1]["tzdz"].lexical == "PT0S"
+        @test !haskey(r[1], "notz")  # TIMEZONE without timezone → error
+    end
+
+    @testset "LANGDIR family (item 15)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("label"), Literal("hello", lang="en")))
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (STRLANGDIR("chat", "fr", "ltr") AS ?dl)
+                   (LANGDIR(STRLANGDIR("chat", "fr", "ltr")) AS ?dir)
+                   (LANGDIR(?l) AS ?nodir)
+                   (hasLANG(?l, "en") AS ?hl)
+                   (hasLANG(?l, "fr") AS ?hlf)
+                   (hasLANG("plain", "en") AS ?hlp)
+                   (hasLANGDIR(STRLANGDIR("chat", "fr", "ltr"), "fr") AS ?hld)
+                   (hasLANGDIR(?l, "en") AS ?hldn)
+            WHERE { ?s ex:label ?l }
+        """)
+        @test r[1]["dl"].language == "fr"
+        @test RDFLib.direction(r[1]["dl"]) == "ltr"
+        @test r[1]["dir"].lexical == "ltr"
+        @test r[1]["nodir"].lexical == ""
+        @test r[1]["hl"].lexical == "true"
+        @test r[1]["hlf"].lexical == "false"
+        @test r[1]["hlp"].lexical == "false"
+        @test r[1]["hld"].lexical == "true"
+        @test r[1]["hldn"].lexical == "false"  # no direction on plain langString
+        # invalid direction → error (unbound)
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT (STRLANGDIR("x", "en", "sideways") AS ?bad) WHERE { ?s ex:label ?l }
+        """)
+        @test !haskey(r[1], "bad")
+    end
+
+    @testset "CONSTRUCT honors ORDER BY before LIMIT (item 6)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("val"), Literal(3)))
+        add!(g, Triple(EX("b"), EX("val"), Literal(1)))
+        add!(g, Triple(EX("c"), EX("val"), Literal(2)))
+        out = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            CONSTRUCT { ?s ex:top ?v } WHERE { ?s ex:val ?v }
+            ORDER BY DESC(?v) LIMIT 1
+        """)
+        ts = collect(RDFLib.triples(out))
+        @test length(ts) == 1
+        @test ts[1].subject == EX("a")
+        @test ts[1].object == Literal(3)
+    end
+
+    @testset "SERVICE query serialization (item 5)" begin
+        q = RDFLib.sparql_parse("""
+            SELECT * WHERE {
+                SERVICE <http://remote.example/sparql> {
+                    ?s <http://p.example/p> ?o .
+                    FILTER(?o > 5)
+                    OPTIONAL { ?s <http://p.example/q> ?n }
+                    BIND(STR(?o) AS ?os)
+                }
+            }
+        """)
+        svc = only(filter(p -> p isa RDFLib.PatService, q.patterns))
+        txt = RDFLib._ast_build_service_query(svc.patterns)
+        @test occursin("?s <http://p.example/p> ?o .", txt)
+        @test occursin("FILTER(", txt)
+        @test occursin("?o > \"5\"^^<http://www.w3.org/2001/XMLSchema#integer>", txt)
+        @test occursin("OPTIONAL {", txt)
+        @test occursin("BIND(STR(?o) AS ?os)", txt)
+        # Unserializable content raises (caller treats per SILENT flag)
+        sub = RDFLib.sparql_parse("SELECT * WHERE { { SELECT ?s WHERE { ?s ?p ?o } } }")
+        @test_throws Exception RDFLib._ast_build_service_query(Vector{RDFLib.SparqlPattern}(sub.patterns))
+    end
+
+    @testset "UNION/MINUS/subquery joins (item 19)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p"), Literal(1)))
+        add!(g, Triple(EX("b"), EX("p"), Literal(2)))
+        add!(g, Triple(EX("a"), EX("q"), Literal(3)))
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:p ?o . { ?s ex:p ?o } UNION { ?s ex:q ?x } }
+        """)
+        @test length(r) == 3  # a (via p), b (via p), a (via q)
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:p ?o . MINUS { ?s ex:q ?x } }
+        """)
+        @test length(r) == 1
+        @test r[1]["s"] == EX("b")
+        r = sparql_query(g, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s ?c WHERE {
+                ?s ex:p ?o .
+                { SELECT ?s (COUNT(?x) AS ?c) WHERE { ?s ex:q ?x } GROUP BY ?s }
+            }
+        """)
+        @test length(r) == 1
+        @test r[1]["s"] == EX("a")
+        @test r[1]["c"].lexical == "1"
     end
 end

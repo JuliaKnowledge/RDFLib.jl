@@ -23,11 +23,20 @@ end
 _longturtle_term(u::URIRef) = "<" * u.value * ">"
 _longturtle_term(b::BNode) = "_:" * b.id
 
+function _longturtle_term(tt::TripleTerm)
+    string("<< ", _longturtle_term(tt.subject), " ",
+           _longturtle_term(tt.predicate), " ",
+           _longturtle_term(tt.object), " >>")
+end
+
 function _longturtle_term(lit::Literal)
     escaped = _lt_escape(lit.lexical)
     s = "\"" * escaped * "\""
     if !isnothing(lit.language)
         s *= "@" * lit.language
+        if !isnothing(lit.direction)
+            s *= "--" * lit.direction
+        end
     elseif !isnothing(lit.datatype)
         s *= "^^<" * lit.datatype.value * ">"
     end

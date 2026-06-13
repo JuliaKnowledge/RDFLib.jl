@@ -288,6 +288,84 @@ end
 The first rule derives `:a :subClassOf :c`, which the second rule uses
 together with `:x :type :a` to derive `:x :type :c`.
 
+## Stratified Negation
+
+The Datalog engine supports negation-as-failure. An antecedent statement
+of the form `?SCOPE log:notIncludes { pattern }` succeeds when no triple
+matching `pattern` is present in the database. The subject of
+`log:notIncludes` is ignored, and the formula must contain exactly one
+triple pattern:
+
+``` julia
+n3 = """
+@prefix : <http://example.org/> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+:alice :type :Person .
+:bob :type :Person .
+:bob :status :banned .
+
+{ ?x :type :Person . ?s log:notIncludes { ?x :status :banned } }
+    => { ?x :status :welcome } .
+"""
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+welcome = URIRef("http://example.org/welcome")
+for t in triples(result, (nothing, URIRef("http://example.org/status"), welcome))
+    println(t.subject, " is welcome")
+end
+```
+
+    URIRef("http://example.org/alice") is welcome
+
+Only `:alice` is welcomed — `:bob` is excluded because the negated
+pattern `{ ?x :status :banned }` matches him.
+
+Negation uses *stratified* semantics: rules are partitioned into strata
+so that any predicate consulted through negation is fully computed by
+lower strata before the negating rule runs. Negation therefore also
+works against **derived** facts:
+
+``` julia
+n3 = """
+@prefix : <http://example.org/> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+:a :p :b .
+:b :p :c .
+:a :p :c .
+
+{ ?x :p ?y . ?y :p ?z } => { ?x :reach ?z } .
+{ ?x :p ?y . ?s log:notIncludes { ?x :reach ?y } } => { ?x :direct ?y } .
+"""
+
+g = parse_rdf(n3, N3Format())
+result = datalog_reason(g)
+
+for t in triples(result, (nothing, URIRef("http://example.org/direct"), nothing))
+    println(t.subject, " :direct ", t.object)
+end
+```
+
+    URIRef("http://example.org/a") :direct URIRef("http://example.org/b")
+    URIRef("http://example.org/b") :direct URIRef("http://example.org/c")
+
+The first stratum computes 2-hop reachability (`:a :reach :c`); the
+second stratum then labels only the edges *not* shortcut by a 2-hop path
+as `:direct` — so `:a :p :c` is excluded.
+
+Two static checks guard correctness, and both raise an `ArgumentError`:
+
+- **Safety:** every variable in a negated pattern must also occur in a
+  positive body atom of the same rule (so the pattern is fully bound
+  when the negation is checked).
+- **Stratifiability:** no predicate may depend on itself through a
+  negated atom (e.g.
+  `{ ... ?s log:notIncludes { ?x :q ?x } } => { ?x :q ?x }` is
+  rejected). Pure-positive programs always trivially stratify.
+
 ## Data Without Rules
 
 When no rules are present, `datalog_reason` returns the original data
@@ -313,9 +391,10 @@ RDFLib.jl provides two reasoning engines. Choose based on your needs:
 
 | Feature | `datalog_reason` | `reason` (N3) |
 |----|----|----|
-| **Evaluation** | Semi-naive bottom-up | Euler Abstract Machine (backward chaining) |
-| **Rule scope** | Pure Datalog (conjunctive body, no built-ins) | Full N3 (built-ins, negation, backward chaining) |
+| **Evaluation** | Stratified semi-naive bottom-up | Euler Abstract Machine (backward chaining) |
+| **Rule scope** | Datalog with stratified negation (conjunctive body, no built-ins) | Full N3 (built-ins, negation, backward chaining) |
 | **Built-in predicates** | None | 100+ (math, string, list, crypto, log) |
+| **Negation** | Stratified `log:notIncludes` (negation-as-failure) | Scoped `log:notIncludes` over formulas |
 | **Backward chaining (`<=`)** | Not supported | Supported |
 | **Inequality (`log:notEqualTo`)** | Not supported | Supported |
 | **Multiple head atoms** | Supported | Supported |
@@ -352,10 +431,10 @@ println("Triples derived: ", length(dl_triples))
     Results match: true
     Triples derived: 10
 
-**When to use `datalog_reason`:** Your rules are pure Datalog — no
-built-in predicates, no backward chaining, no inequality. You want
-straightforward relational inference (transitive closure, type
-propagation, classification).
+**When to use `datalog_reason`:** Your rules are Datalog — conjunctive
+bodies, optionally with stratified negation, but no built-in predicates,
+no backward chaining, no inequality. You want straightforward relational
+inference (transitive closure, type propagation, classification).
 
 **When to use `reason`:** You need built-in predicates (`math:sum`,
 `string:length`, `log:notEqualTo`), backward chaining (`<=`),

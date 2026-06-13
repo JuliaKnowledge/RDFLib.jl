@@ -5,7 +5,7 @@ const EX = Namespace("http://example.org/")
 
 @testset "Inference" begin
 
-    @testset "RDFS subClassOf transitivity (rdfs5)" begin
+    @testset "RDFS subClassOf transitivity (rdfs11)" begin
         g = RDFGraph()
         add!(g, Triple(EX("Dog"), RDFS.subClassOf, EX("Mammal")))
         add!(g, Triple(EX("Mammal"), RDFS.subClassOf, EX("Animal")))
@@ -13,7 +13,7 @@ const EX = Namespace("http://example.org/")
         @test Triple(EX("Dog"), RDFS.subClassOf, EX("Animal")) in result
     end
 
-    @testset "RDFS subclass typing (rdfs2)" begin
+    @testset "RDFS subclass typing (rdfs9)" begin
         g = RDFGraph()
         add!(g, Triple(EX("fido"), RDF.type, EX("Dog")))
         add!(g, Triple(EX("Dog"), RDFS.subClassOf, EX("Mammal")))
@@ -23,7 +23,7 @@ const EX = Namespace("http://example.org/")
         @test Triple(EX("fido"), RDF.type, EX("Animal")) in result
     end
 
-    @testset "RDFS subPropertyOf (rdfs3)" begin
+    @testset "RDFS subPropertyOf usage (rdfs7)" begin
         g = RDFGraph()
         add!(g, Triple(EX("hasFather"), RDFS.subPropertyOf, EX("hasParent")))
         add!(g, Triple(EX("bob"), EX("hasFather"), EX("john")))
@@ -31,7 +31,7 @@ const EX = Namespace("http://example.org/")
         @test Triple(EX("bob"), EX("hasParent"), EX("john")) in result
     end
 
-    @testset "RDFS subPropertyOf transitivity (rdfs7)" begin
+    @testset "RDFS subPropertyOf transitivity (rdfs5)" begin
         g = RDFGraph()
         add!(g, Triple(EX("hasFather"), RDFS.subPropertyOf, EX("hasParent")))
         add!(g, Triple(EX("hasParent"), RDFS.subPropertyOf, EX("hasAncestor")))
@@ -42,7 +42,7 @@ const EX = Namespace("http://example.org/")
         @test Triple(EX("bob"), EX("hasAncestor"), EX("john")) in result
     end
 
-    @testset "RDFS domain inference (rdfs9)" begin
+    @testset "RDFS domain inference (rdfs2)" begin
         g = RDFGraph()
         add!(g, Triple(EX("writes"), RDFS.domain, EX("Author")))
         add!(g, Triple(EX("alice"), EX("writes"), EX("book1")))
@@ -50,7 +50,7 @@ const EX = Namespace("http://example.org/")
         @test Triple(EX("alice"), RDF.type, EX("Author")) in result
     end
 
-    @testset "RDFS range inference (rdfs10)" begin
+    @testset "RDFS range inference (rdfs3)" begin
         g = RDFGraph()
         add!(g, Triple(EX("writes"), RDFS.range, EX("Book")))
         add!(g, Triple(EX("alice"), EX("writes"), EX("book1")))
@@ -66,6 +66,62 @@ const EX = Namespace("http://example.org/")
         result = rdfs_closure(g)
         @test Triple(EX("prof"), RDF.type, EX("Teacher")) in result
         @test Triple(EX("grad"), RDF.type, EX("Student")) in result
+    end
+
+    @testset "RDFS property reflexivity (rdfs6)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("knows"), RDF.type, RDF.Property))
+        result = rdfs_closure(g)
+        @test Triple(EX("knows"), RDFS.subPropertyOf, EX("knows")) in result
+    end
+
+    @testset "RDFS class reflexivity (rdfs10)" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("Dog"), RDF.type, RDFS.Class))
+        result = rdfs_closure(g)
+        @test Triple(EX("Dog"), RDFS.subClassOf, EX("Dog")) in result
+    end
+
+    @testset "RDFS ContainerMembershipProperty (rdfs12)" begin
+        g = RDFGraph()
+        member_1 = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#_1")
+        add!(g, Triple(member_1, RDF.type, RDFS.ContainerMembershipProperty))
+        add!(g, Triple(EX("bag"), member_1, EX("item")))
+        result = rdfs_closure(g)
+        @test Triple(member_1, RDFS.subPropertyOf, RDFS.member) in result
+        # rdfs7 then propagates the membership triple
+        @test Triple(EX("bag"), RDFS.member, EX("item")) in result
+    end
+
+    @testset "RDFS Datatype subclass of Literal (rdfs13)" begin
+        g = RDFGraph()
+        xsd_int = URIRef("http://www.w3.org/2001/XMLSchema#integer")
+        add!(g, Triple(xsd_int, RDF.type, RDFS.Datatype))
+        result = rdfs_closure(g)
+        @test Triple(xsd_int, RDFS.subClassOf, RDFS.Literal) in result
+    end
+
+    @testset "RDFS axiomatic rules (rdfs4a/4b/8) are opt-in" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p"), EX("b")))
+        add!(g, Triple(EX("a"), EX("q"), Literal("text")))
+        add!(g, Triple(EX("C"), RDF.type, RDFS.Class))
+
+        # Default: no rdfs:Resource bloat
+        result = rdfs_closure(g)
+        @test !(Triple(EX("a"), RDF.type, RDFS.Resource) in result)
+        @test !(Triple(EX("C"), RDFS.subClassOf, RDFS.Resource) in result)
+
+        # Opt-in: rdfs4a (subjects), rdfs4b (non-literal objects), rdfs8
+        result_ax = rdfs_closure(g; axiomatic=true)
+        @test Triple(EX("a"), RDF.type, RDFS.Resource) in result_ax        # rdfs4a
+        @test Triple(EX("b"), RDF.type, RDFS.Resource) in result_ax        # rdfs4b
+        @test Triple(EX("C"), RDF.type, RDFS.Resource) in result_ax
+        @test Triple(EX("C"), RDFS.subClassOf, RDFS.Resource) in result_ax # rdfs8
+
+        # axiomatic also threads through infer()
+        result_inf = infer(g; rules=:rdfs, axiomatic=true)
+        @test Triple(EX("a"), RDF.type, RDFS.Resource) in result_inf
     end
 
     @testset "OWL TransitiveProperty" begin

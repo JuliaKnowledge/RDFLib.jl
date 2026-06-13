@@ -366,4 +366,274 @@ using RDFLib
             end
         end
     end
+
+    # ── 12. Full ECHAR set ────────────────────────────────────────────
+    @testset "ECHAR escapes" begin
+        @testset "backspace and form feed roundtrip" begin
+            g = RDFGraph()
+            add!(g, EX("s"), EX("p"), Literal("a\bb\fc"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(nt, "\\b")
+            @test contains(nt, "\\f")
+            @test !contains(nt, "\b")   # raw control chars must not be emitted
+            @test !contains(nt, "\f")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g2, EX("s"), EX("p")))
+            @test string(obj) == "a\bb\fc"
+        end
+
+        @testset "parse \\b, \\f and \\' escapes" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"a\\bb\\fc\\'d\" ."
+            g = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g, EX("s"), EX("p")))
+            @test string(obj) == "a\bb\fc'd"
+        end
+
+        @testset "truncated \\u escape throws" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"x\\u00\" ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+
+        @testset "truncated \\U escape throws" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"x\\U0001F6\" ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+
+        @testset "surrogate code points rejected" begin
+            for esc in ("\\uD800", "\\uDFFF", "\\U0000DC00")
+                nt = "<http://example.org/s> <http://example.org/p> \"x$(esc)\" ."
+                @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+            end
+        end
+
+        @testset "unknown escape sequence throws" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"x\\q\" ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+
+        @testset "valid \\u and \\U escapes decode" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"caf\\u00E9 \\U0001F600\" ."
+            g = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g, EX("s"), EX("p")))
+            @test string(obj) == "café 😀"
+        end
+    end
+
+    # ── 13. UCHAR escapes in IRIs ─────────────────────────────────────
+    @testset "IRI UCHAR escapes" begin
+        @testset "\\u escape decoded in IRI" begin
+            nt = "<http://example.org/caf\\u00E9> <http://example.org/p> \"x\" ."
+            g = parse_rdf(nt, NTriplesFormat())
+            @test first(g).subject == URIRef("http://example.org/café")
+        end
+
+        @testset "\\U escape decoded in IRI" begin
+            nt = "<http://example.org/s> <http://example.org/p> <http://example.org/\\U0001F600> ."
+            g = parse_rdf(nt, NTriplesFormat())
+            @test first(g).object == URIRef("http://example.org/😀")
+        end
+
+        @testset "non-UCHAR backslash escape in IRI throws" begin
+            nt = "<http://example.org/a\\nb> <http://example.org/p> \"x\" ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+
+        @testset "surrogate in IRI escape throws" begin
+            nt = "<http://example.org/\\uD800> <http://example.org/p> \"x\" ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+    end
+
+    # ── 14. Grammar coverage: bnode labels, lang tags, comments ──────
+    @testset "grammar coverage" begin
+        @testset "bnode label with dash" begin
+            g = parse_rdf("_:b-1 <http://example.org/p> \"x\" .", NTriplesFormat())
+            @test first(g).subject == BNode("b-1")
+        end
+
+        @testset "bnode label with internal dot" begin
+            g = parse_rdf("_:b.1 <http://example.org/p> \"x\" .", NTriplesFormat())
+            @test first(g).subject == BNode("b.1")
+        end
+
+        @testset "bnode label followed by statement dot" begin
+            g = parse_rdf("<http://example.org/s> <http://example.org/p> _:b1.", NTriplesFormat())
+            @test first(g).object == BNode("b1")
+        end
+
+        @testset "bnode label with non-ASCII PN_CHARS" begin
+            g = parse_rdf("_:bé <http://example.org/p> \"x\" .", NTriplesFormat())
+            @test first(g).subject == BNode("bé")
+        end
+
+        @testset "bnode label starting with digit" begin
+            g = parse_rdf("_:0b <http://example.org/p> \"x\" .", NTriplesFormat())
+            @test first(g).subject == BNode("0b")
+        end
+
+        @testset "language tag with digits in subtag" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"orthographie\"@de-1996 ."
+            g = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g, EX("s"), EX("p")))
+            @test lang(obj) == "de-1996"
+        end
+
+        @testset "end-of-line comment after dot" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"x\" . # trailing comment"
+            g = parse_rdf(nt, NTriplesFormat())
+            @test length(g) == 1
+        end
+
+        @testset "malformed line throws with line number" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"ok\" .\nthis is garbage\n"
+            err = try
+                parse_rdf(nt, NTriplesFormat())
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test contains(err.msg, "line 2")
+        end
+
+        @testset "missing final dot throws" begin
+            @test_throws ArgumentError parse_rdf("<http://example.org/s> <http://example.org/p> \"x\"", NTriplesFormat())
+        end
+
+        @testset "trailing garbage after dot throws" begin
+            @test_throws ArgumentError parse_rdf("<http://example.org/s> <http://example.org/p> \"x\" . garbage", NTriplesFormat())
+        end
+
+        @testset "parse_ntriples_vec throws on invalid line" begin
+            @test_throws ArgumentError RDFLib.parse_ntriples_vec(IOBuffer("not a triple\n"))
+            ts = RDFLib.parse_ntriples_vec(IOBuffer("_:b-1 <http://example.org/p> \"x\" . # c\n"))
+            @test length(ts) == 1
+            @test ts[1].subject == BNode("b-1")
+        end
+    end
+
+    # ── 15. Serializer IRI escaping ───────────────────────────────────
+    @testset "serializer IRI escaping" begin
+        @testset "space in IRI escaped as \\u0020" begin
+            g = RDFGraph()
+            add!(g, URIRef("http://example.org/a b"), EX("p"), Literal("x"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(nt, "\\u0020")
+            @test !contains(nt, "<http://example.org/a b>")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            @test first(g2).subject == URIRef("http://example.org/a b")
+        end
+
+        @testset "'>' in IRI escaped as \\u003E" begin
+            g = RDFGraph()
+            add!(g, EX("s"), EX("p"), URIRef("http://example.org/a>b"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(uppercase(nt), "\\U003E")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            @test first(g2).object == URIRef("http://example.org/a>b")
+        end
+
+        @testset "control char in IRI escaped" begin
+            g = RDFGraph()
+            add!(g, EX("s"), EX("p"), URIRef("http://example.org/a\tb"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(nt, "\\u0009")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            @test first(g2).object == URIRef("http://example.org/a\tb")
+        end
+
+        @testset "other control chars in literal use \\u form" begin
+            g = RDFGraph()
+            add!(g, EX("s"), EX("p"), Literal("a\x01b"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(nt, "\\u0001")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g2, EX("s"), EX("p")))
+            @test string(obj) == "a\x01b"
+        end
+    end
+
+    # ── 16. SPARQL 1.2 directional literals ───────────────────────────
+    @testset "directional literals" begin
+        @testset "parse @en--ltr" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"hello\"@en--ltr ."
+            g = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g, EX("s"), EX("p")))
+            @test obj isa Literal
+            @test lang(obj) == "en"
+            @test obj.direction == "ltr"
+        end
+
+        @testset "parse @he--rtl with subtag" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"שלום\"@he-IL--rtl ."
+            g = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g, EX("s"), EX("p")))
+            @test lang(obj) == "he-il"
+            @test obj.direction == "rtl"
+        end
+
+        @testset "serialize and roundtrip direction" begin
+            g = RDFGraph()
+            add!(g, EX("s"), EX("p"), Literal("hello", lang="en", direction="ltr"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(nt, "\"hello\"@en--ltr")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            obj = first(objects(g2, EX("s"), EX("p")))
+            @test obj == Literal("hello", lang="en", direction="ltr")
+        end
+
+        @testset "invalid direction throws" begin
+            nt = "<http://example.org/s> <http://example.org/p> \"x\"@en--xyz ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+    end
+
+    # ── 17. RDF-star triple terms ──────────────────────────────────────
+    @testset "triple terms" begin
+        inner = TripleTerm(EX("s"), EX("p"), EX("o"))
+
+        @testset "parse triple term in subject position" begin
+            nt = "<< <http://example.org/s> <http://example.org/p> <http://example.org/o> >> <http://example.org/q> \"v\" ."
+            g = parse_rdf(nt, NTriplesFormat())
+            t = first(g)
+            @test t.subject == inner
+            @test t.object == Literal("v")
+        end
+
+        @testset "parse triple term in object position" begin
+            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/s> <http://example.org/p> <http://example.org/o> >> ."
+            g = parse_rdf(nt, NTriplesFormat())
+            @test first(g).object == inner
+        end
+
+        @testset "parse RDF 1.2 '<<( )>>' triple term form" begin
+            nt = "<http://example.org/x> <http://example.org/q> <<( <http://example.org/s> <http://example.org/p> <http://example.org/o> )>> ."
+            g = parse_rdf(nt, NTriplesFormat())
+            @test first(g).object == inner
+        end
+
+        @testset "nested triple terms" begin
+            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/a> <http://example.org/b> << <http://example.org/s> <http://example.org/p> <http://example.org/o> >> >> ."
+            g = parse_rdf(nt, NTriplesFormat())
+            @test first(g).object == TripleTerm(EX("a"), EX("b"), inner)
+        end
+
+        @testset "triple term serialization roundtrip" begin
+            g = RDFGraph()
+            add!(g, EX("x"), EX("q"), inner)
+            add!(g, inner, EX("q"), Literal("said", lang="en"))
+            nt = serialize(g, NTriplesFormat())
+            @test contains(nt, "<< <http://example.org/s> <http://example.org/p> <http://example.org/o> >>")
+            g2 = parse_rdf(nt, NTriplesFormat())
+            @test length(g2) == 2
+            for t in g
+                @test t in g2
+            end
+        end
+
+        @testset "unterminated triple term throws" begin
+            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/s> <http://example.org/p> <http://example.org/o> ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+    end
 end

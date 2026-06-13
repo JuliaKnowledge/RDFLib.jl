@@ -70,7 +70,7 @@ const RDF = DefinedNamespace(
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     Set(["type", "Property", "Statement", "subject", "predicate", "object",
          "Bag", "Seq", "Alt", "value", "List", "nil", "first", "rest",
-         "XMLLiteral", "HTML", "langString", "JSON", "CompoundLiteral",
+         "XMLLiteral", "HTML", "langString", "dirLangString", "JSON", "CompoundLiteral",
          "language", "direction", "PlainLiteral"])
 )
 

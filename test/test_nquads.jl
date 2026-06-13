@@ -77,4 +77,54 @@ using RDFLib
         qs2 = sort(collect(quads(ds2)), by=q -> string(q))
         @test length(qs1) == length(qs2)
     end
+
+    @testset "blank node graph labels" begin
+        nq = """<http://example.org/s> <http://example.org/p> <http://example.org/o> _:g ."""
+        ds = parse_nquads(nq)
+        @test length(ds) == 1
+        @test length(get_graph(ds)) == 0          # not silently dropped to default
+        g = get_graph(ds, BNode("g"))
+        @test !isnothing(g)
+        @test length(g) == 1
+        @test first(g) == Triple(EX("s"), EX("p"), EX("o"))
+
+        # round-trip: serialize and reparse keeps the bnode graph label
+        nq2 = serialize(ds, NQuadsFormat())
+        @test contains(nq2, "_:g .")
+        ds2 = parse_nquads(nq2)
+        @test length(get_graph(ds2, BNode("g"))) == 1
+
+        # quads carry the BNode graph label
+        q = first(quads(ds))
+        @test q.graph == BNode("g")
+    end
+
+    @testset "invalid lines throw with line number" begin
+        err = try
+            parse_nquads("<http://example.org/s> <http://example.org/p> \"ok\" .\nnot a quad\n")
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test contains(err.msg, "line 2")
+    end
+
+    @testset "directional literals in N-Quads" begin
+        nq = """<http://example.org/s> <http://example.org/p> "hello"@en--ltr <http://example.org/g1> ."""
+        ds = parse_nquads(nq)
+        obj = first(objects(get_graph(ds, EX("g1")), EX("s"), EX("p")))
+        @test obj == Literal("hello", lang="en", direction="ltr")
+
+        nq2 = serialize(ds, NQuadsFormat())
+        @test contains(nq2, "\"hello\"@en--ltr")
+        ds2 = parse_nquads(nq2)
+        @test first(objects(get_graph(ds2, EX("g1")), EX("s"), EX("p"))) == obj
+    end
+
+    @testset "end-of-line comments" begin
+        nq = """<http://example.org/s> <http://example.org/p> "x" <http://example.org/g1> . # comment"""
+        ds = parse_nquads(nq)
+        @test length(ds) == 1
+    end
 end
