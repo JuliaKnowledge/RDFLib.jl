@@ -242,6 +242,16 @@ struct SparqlSelect
     group_by::Vector{SparqlExpr}
     having::Union{SparqlExpr, Nothing}
     select_exprs::Vector{SelectExpr}
+    from::Vector{URIRef}                    # FROM <iri> dataset clauses
+    from_named::Vector{URIRef}              # FROM NAMED <iri> dataset clauses
+end
+
+# Backwards-compatible constructor (no dataset clauses)
+function SparqlSelect(variables, patterns, prefixes, limit, offset, order_by,
+                      distinct, reduced, aggregates, group_by, having, select_exprs)
+    SparqlSelect(variables, patterns, prefixes, limit, offset, order_by,
+                 distinct, reduced, aggregates, group_by, having, select_exprs,
+                 URIRef[], URIRef[])
 end
 
 struct SparqlAsk

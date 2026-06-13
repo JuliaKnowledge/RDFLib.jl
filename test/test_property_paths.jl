@@ -292,4 +292,67 @@
         """)
         @test isempty(r)
     end
+
+    @testset "Zero-length paths include literal endpoints (item 17)" begin
+        gl = RDFGraph()
+        bind!(gl, "ex", EX)
+        add!(gl, Triple(EX("s"), EX("p"), Literal("v")))
+
+        # elt? with a literal object endpoint: the zero-length solution binds
+        # the subject variable to the literal itself
+        r = sparql_query(gl, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?x WHERE { ?x ex:p? "v" }
+        """)
+        vals = Set(b["x"] for b in r)
+        @test EX("s") in vals            # one-step match
+        @test Literal("v") in vals       # zero-length match on the literal
+        @test length(vals) == 2
+
+        # elt* from a bound subject reaches the literal AND includes itself
+        r = sparql_query(gl, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?o WHERE { ex:s ex:p* ?o }
+        """)
+        vals = Set(b["o"] for b in r)
+        @test vals == Set([EX("s"), Literal("v")])
+
+        # elt* with unbound subject and bound literal object
+        r = sparql_query(gl, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?x WHERE { ?x ex:p* "v" }
+        """)
+        vals = Set(b["x"] for b in r)
+        @test Literal("v") in vals
+        @test EX("s") in vals
+    end
+
+    @testset "Bound-endpoint path lookups (item 16)" begin
+        gb = RDFGraph()
+        bind!(gb, "ex", EX)
+        add!(gb, Triple(EX("pa"), EX("p"), EX("pb")))
+        add!(gb, Triple(EX("pb"), EX("q"), EX("pc")))
+        add!(gb, Triple(EX("px"), EX("p"), EX("py")))
+
+        # sequence path with bound start
+        r = sparql_query(gb, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?o WHERE { ex:pa ex:p/ex:q ?o }
+        """)
+        @test length(r) == 1 && r[1]["o"] == EX("pc")
+
+        # inverse path with bound end
+        r = sparql_query(gb, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ^ex:p ex:pa }
+        """)
+        @test length(r) == 1 && r[1]["s"] == EX("pb")
+
+        # negated property set with bound subject
+        r = sparql_query(gb, """
+            PREFIX ex: <http://example.org/>
+            SELECT ?o WHERE { ex:pb !(ex:p) ?o }
+        """)
+        @test length(r) == 1 && r[1]["o"] == EX("pc")
+    end
 end

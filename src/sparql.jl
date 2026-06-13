@@ -75,8 +75,85 @@ results = sparql_query(g, \"\"\"
 ```
 """
 function sparql_query(g::RDFGraph, query::AbstractString)
+    # Note: on a plain RDFGraph there are no named graphs — FROM / FROM NAMED
+    # clauses fall back to querying the graph itself, and GRAPH patterns
+    # yield zero solutions (spec semantics for an empty set of named graphs).
     ast = sparql_parse(String(query))
     _ast_evaluate(g, ast)
+end
+
+"""
+    sparql_query(ds::Dataset, query::AbstractString)
+
+Execute a SPARQL query against a dataset. The default graph is queried
+directly; `GRAPH <iri> { ... }` patterns evaluate against the dataset's
+named graphs and `GRAPH ?g` iterates them. FROM / FROM NAMED clauses are
+honored: FROM graphs are merged into the queried default graph, FROM NAMED
+restricts the named graphs visible to GRAPH.
+"""
+function sparql_query(ds::Dataset, query::AbstractString)
+    ast = sparql_parse(String(query))
+    _sparql_eval_on_dataset(ds, ast)
+end
+
+"""
+    sparql_query(cg, query::AbstractString)
+
+Query a ConjunctiveGraph (or any wrapper exposing a `dataset::Dataset`
+field): the default graph for matching is the union of all graphs
+(rdflib-compatible semantics); GRAPH patterns address the named graphs.
+"""
+function sparql_query(x, query::AbstractString)
+    if hasfield(typeof(x), :dataset) && getfield(x, :dataset) isa Dataset
+        ds = getfield(x, :dataset)::Dataset
+        ast = sparql_parse(String(query))
+        return _sparql_eval_on_dataset(ds, ast; union_default=true)
+    end
+    throw(MethodError(sparql_query, (x, query)))
+end
+
+function _sparql_eval_on_dataset(ds::Dataset, ast; union_default::Bool=false)
+    from = ast isa SparqlSelect ? ast.from : URIRef[]
+    from_named = ast isa SparqlSelect ? ast.from_named : URIRef[]
+
+    default_g, named_filter = if isempty(from) && isempty(from_named)
+        if union_default
+            merged = RDFGraph()
+            for t in triples(ds.default_graph)
+                add!(merged, t)
+            end
+            for (_, ng) in ds.named_graphs, t in triples(ng)
+                add!(merged, t)
+            end
+            (merged, nothing)
+        else
+            (ds.default_graph, nothing)
+        end
+    else
+        # Explicit dataset description: FROM graphs (merged) become the
+        # default graph (empty if only FROM NAMED given); FROM NAMED lists
+        # the named graphs visible to GRAPH.
+        merged = RDFGraph()
+        for iri in from
+            src = get(ds.named_graphs, iri, nothing)
+            src === nothing && continue
+            for t in triples(src)
+                add!(merged, t)
+            end
+        end
+        (merged, Set{GraphName}(from_named))
+    end
+
+    old_ds = _ACTIVE_DATASET[]
+    old_filter = _ACTIVE_NAMED_FILTER[]
+    _ACTIVE_DATASET[] = ds
+    _ACTIVE_NAMED_FILTER[] = named_filter
+    try
+        return _ast_evaluate(default_g, ast)
+    finally
+        _ACTIVE_DATASET[] = old_ds
+        _ACTIVE_NAMED_FILTER[] = old_filter
+    end
 end
 
 # ─── UPDATE types ──────────────────────────────────────────────────

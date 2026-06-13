@@ -1022,17 +1022,23 @@ function _parse_query_body(tz::_SparqlTokenizer, prefixes::Dict{String,String})
     end
 end
 
-# Skip FROM / FROM NAMED clauses (dataset declarations)
-function _skip_from_clauses!(tz::_SparqlTokenizer)
+# Parse FROM / FROM NAMED clauses (dataset declarations).
+# Returns `(from, from_named)` vectors of graph IRIs. Callers that don't
+# support dataset clauses simply discard the result (legacy behavior).
+function _skip_from_clauses!(tz::_SparqlTokenizer, prefixes=Dict{String,String}())
+    from = URIRef[]
+    from_named = URIRef[]
     while _check_keyword(tz, "FROM")
         _advance!(tz)
-        _match_keyword!(tz, "NAMED")
+        named = !isnothing(_match_keyword!(tz, "NAMED"))
+        target = named ? from_named : from
         if _check(tz, TOK_IRI)
-            _advance!(tz)
+            push!(target, _make_uri(_advance!(tz).value, prefixes))
         elseif _check(tz, TOK_PNAME)
-            _advance!(tz)
+            push!(target, _resolve_pname(_advance!(tz).value, prefixes))
         end
     end
+    (from, from_named)
 end
 
 # ─── SELECT ────────────────────────────────────────────────────────
@@ -1071,7 +1077,7 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
         end
     end
 
-    _skip_from_clauses!(tz)
+    from, from_named = _skip_from_clauses!(tz, prefixes)
 
     # WHERE clause
     _match_keyword!(tz, "WHERE")
@@ -1088,14 +1094,14 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
 
     SparqlSelect(variables, patterns, prefixes, limit, offset,
                  order_by, distinct, reduced, aggregates,
-                 group_by, having, select_exprs)
+                 group_by, having, select_exprs, from, from_named)
 end
 
 # ─── ASK ───────────────────────────────────────────────────────────
 
 function _parse_ask(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "ASK")
-    _skip_from_clauses!(tz)
+    _skip_from_clauses!(tz, prefixes)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
     if _check_keyword(tz, "VALUES")
@@ -1110,7 +1116,7 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "CONSTRUCT")
     # CONSTRUCT WHERE { ... } shorthand — WHERE pattern is also the template
     if _check_keyword(tz, "WHERE") || _check_keyword(tz, "FROM")
-        _skip_from_clauses!(tz)
+        _skip_from_clauses!(tz, prefixes)
         _match_keyword!(tz, "WHERE")
         patterns = _parse_group_graph_pattern(tz, prefixes)
         # Extract PatTriple patterns as template
@@ -1122,7 +1128,7 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
         return SparqlConstruct(template, patterns, prefixes, limit, offset, order_by)
     end
     template = _parse_construct_template(tz, prefixes)
-    _skip_from_clauses!(tz)
+    _skip_from_clauses!(tz, prefixes)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
     group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
@@ -1170,7 +1176,7 @@ function _parse_describe(tz::_SparqlTokenizer, prefixes)
             end
         end
     end
-    _skip_from_clauses!(tz)
+    _skip_from_clauses!(tz, prefixes)
     patterns = SparqlPattern[]
     if _check_keyword(tz, "WHERE") || _check(tz, TOK_LBRACE)
         _match_keyword!(tz, "WHERE")
