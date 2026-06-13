@@ -201,7 +201,7 @@ export
     # Term types
     Identifier, Node, IdentifiedNode,
     URIRef, BNode, Literal, Variable, Triple, TripleTerm,
-    n3, datatype, lang, value,
+    n3, datatype, lang, direction, value,
     # convert(Any, lit::Literal) — use convert(Any, lit) to extract native Julia values
     defrag, fragment,
     from_n3, to_term,

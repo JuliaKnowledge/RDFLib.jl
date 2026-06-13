@@ -32,8 +32,10 @@ using Dates
         end
 
         @testset "Parse datetime with offset" begin
+            # Offsets are applied (normalized to UTC), not stripped
             dt = parse_xsd_datetime("2023-01-15T10:30:00+05:30")
-            @test dt == DateTime(2023, 1, 15, 10, 30, 0)
+            @test dt == DateTime(2023, 1, 15, 5, 0, 0)
+            @test dt != parse_xsd_datetime("2023-01-15T10:30:00Z")
         end
 
         @testset "Parse datetime with fractional seconds" begin
@@ -281,7 +283,76 @@ using Dates
             l_nan = Literal(NaN)
             @test datatype(l_inf) == XSD.double
             @test datatype(l_nan) == XSD.double
+            # xsd:double requires INF/-INF/NaN lexicals (not Julia's Inf)
+            @test l_inf.lexical == "INF"
+            @test Literal(-Inf).lexical == "-INF"
+            @test l_nan.lexical == "NaN"
+            @test l_inf == Literal("INF", datatype=XSD.double)
+            @test Literal(-Inf) == Literal("-INF", datatype=XSD.double)
         end
+
+        @testset "Special float lexicals convert to values" begin
+            @test convert(Any, Literal("INF", datatype=XSD.double)) == Inf
+            @test convert(Any, Literal("-INF", datatype=XSD.double)) == -Inf
+            @test isnan(convert(Any, Literal("NaN", datatype=XSD.double)))
+        end
+    end
+
+    # ─── 9. RDF 1.1 simple literal ≡ xsd:string ────────────────────────
+    @testset "Simple literal is xsd:string (RDF 1.1)" begin
+        @testset "Equality, hash, set membership" begin
+            @test Literal("a") == Literal("a", datatype=XSD.string)
+            @test hash(Literal("a")) == hash(Literal("a", datatype=XSD.string))
+            @test Literal("a", datatype=XSD.string) in Set([Literal("a")])
+        end
+
+        @testset "No ^^xsd:string in serialization" begin
+            @test n3(Literal("a", datatype=XSD.string)) == "\"a\""
+        end
+
+        @testset "Graph round-trip: typed and plain are the same triple" begin
+            g = RDFGraph()
+            s = URIRef("http://example.org/s")
+            p = URIRef("http://example.org/p")
+            add!(g, Triple(s, p, Literal("a", datatype=XSD.string)))
+            @test Triple(s, p, Literal("a")) in g
+            add!(g, Triple(s, p, Literal("a")))
+            @test length(g) == 1
+        end
+
+        @testset "DATATYPE() returns xsd:string for simple literals" begin
+            g = RDFGraph()
+            ex = Namespace("http://example.org/")
+            add!(g, Triple(ex("a"), ex("val"), Literal("plain")))
+            results = sparql_query(g, """
+                PREFIX ex: <http://example.org/>
+                SELECT (DATATYPE(?v) AS ?dt) WHERE { ex:a ex:val ?v . }
+            """)
+            @test length(results) == 1
+            @test results[1]["dt"] == XSD.string
+        end
+
+        @testset "DATATYPE() returns rdf:langString for lang literals" begin
+            g = RDFGraph()
+            ex = Namespace("http://example.org/")
+            add!(g, Triple(ex("a"), ex("val"), Literal("chat", lang="fr")))
+            results = sparql_query(g, """
+                PREFIX ex: <http://example.org/>
+                SELECT (DATATYPE(?v) AS ?dt) WHERE { ex:a ex:val ?v . }
+            """)
+            @test length(results) == 1
+            @test results[1]["dt"] == URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+        end
+    end
+
+    # ─── 10. Base direction (SPARQL 1.2) ────────────────────────────────
+    @testset "Directional language-tagged literals" begin
+        l = Literal("مرحبا", lang="ar", direction="rtl")
+        @test direction(l) == "rtl"
+        @test l == Literal("مرحبا", lang="ar", direction="rtl")
+        @test l != Literal("مرحبا", lang="ar")
+        @test_throws ArgumentError Literal("x", direction="ltr")
+        @test_throws ArgumentError Literal("x", lang="en", direction="diagonal")
     end
 
     # ─── 8. Literal Arithmetic ──────────────────────────────────────────

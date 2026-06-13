@@ -1801,7 +1801,14 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
                val isa Literal && !isnothing(val.language) ? Literal(val.language) : Literal("")
     elseif name == "DATATYPE"
         val = _eval_arg(1)
-        return (val isa Literal && !isnothing(val.datatype)) ? val.datatype : nothing
+        val isa Literal || return nothing
+        # Per SPARQL/RDF 1.1: simple literals have datatype xsd:string,
+        # language-tagged literals rdf:langString (rdf:dirLangString when a
+        # base direction is present).
+        if !isnothing(val.language)
+            return isnothing(val.direction) ? _RDF_LANGSTRING_DT : _RDF_DIRLANGSTRING_DT
+        end
+        return isnothing(val.datatype) ? _XSD_STRING_DT : val.datatype
     elseif name == "IRI" || name == "URI"
         val = _eval_arg(1)
         return isnothing(val) ? nothing : URIRef(val isa Literal ? val.lexical : val isa URIRef ? val.value : string(val))
@@ -2115,7 +2122,9 @@ function _ast_datetime_accessor(func::String, val)
     isnothing(val) && return nothing
     s = val isa Literal ? val.lexical : string(val)
     try
-        dt = parse_xsd_datetime(s)
+        # Per SPARQL 17.4.5, YEAR/MONTH/.../SECONDS return the component of the
+        # literal in its own timezone, so parse without normalizing to UTC.
+        dt = parse_xsd_datetime(_strip_tz(strip(s)))
         if func == "YEAR";    return Literal(Dates.year(dt))
         elseif func == "MONTH";   return Literal(Dates.month(dt))
         elseif func == "DAY";     return Literal(Dates.day(dt))
