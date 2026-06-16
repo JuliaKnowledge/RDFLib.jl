@@ -330,6 +330,14 @@ function _nt_parse_literal!(c::_NTCursor)
     end
     lexical = String(take!(buf))
 
+    # Tolerate optional whitespace between the string and a following language
+    # tag or datatype (only consumed when '@' / '^^' actually follows, so a
+    # plain literal before the statement terminator is unaffected). Required by
+    # the W3C c14n "extra_whitespace" tests; no negative test forbids it.
+    mark = c.pos
+    _nt_skip_ws!(c)
+    ch = _nt_peek(c)
+    (ch == '@' || ch == '^') || (c.pos = mark)
     ch = _nt_peek(c)
     if ch == '@'
         _nt_next!(c)
@@ -339,6 +347,7 @@ function _nt_parse_literal!(c::_NTCursor)
         _nt_next!(c)
         (_nt_peek(c) == '^') || _nt_error(c, "expected '^^' before literal datatype")
         _nt_next!(c)
+        _nt_skip_ws!(c)
         (_nt_peek(c) == '<') || _nt_error(c, "expected IRI after '^^'")
         dt = _nt_parse_iriref!(c)
         # rdf:langString / rdf:dirLangString may not be used as an explicit
