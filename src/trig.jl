@@ -144,18 +144,20 @@ end
 
 Parse TriG from an IO stream into a dataset.
 """
-function parse_trig!(ds::Dataset, io::IO)
+function parse_trig!(ds::Dataset, io::IO; base::Union{AbstractString,Nothing}=nothing)
     input = read(io, String)
-    parse_trig!(ds, input)
+    parse_trig!(ds, input; base=base)
 end
 
 """
-    parse_trig!(ds::Dataset, input::AbstractString) -> Dataset
+    parse_trig!(ds::Dataset, input::AbstractString; base=nothing) -> Dataset
 
-Parse TriG from a string into a dataset.
+Parse TriG from a string into a dataset. `base`, if given, is the in-scope base
+IRI against which relative IRIs are resolved before any `@base` directive.
 """
-function parse_trig!(ds::Dataset, input::AbstractString)
+function parse_trig!(ds::Dataset, input::AbstractString; base::Union{AbstractString,Nothing}=nothing)
     parser = _TriGParser(ds, String(input))
+    parser.base = base === nothing ? nothing : String(base)
     _trig_parse_document!(parser)
     ds
 end
@@ -165,12 +167,12 @@ end
 
 Parse TriG from a string or IO stream into a new dataset.
 """
-function parse_trig(source)
+function parse_trig(source; base::Union{AbstractString,Nothing}=nothing)
     ds = Dataset()
     if source isa IO || source isa IOBuffer
-        parse_trig!(ds, source)
+        parse_trig!(ds, source; base=base)
     else
-        parse_trig!(ds, String(source))
+        parse_trig!(ds, String(source); base=base)
     end
 end
 
@@ -181,9 +183,12 @@ mutable struct _TriGParser
     prefixes::Dict{String, String}
     base::Union{String, Nothing}
     bnodecounter::Int
+    # Document-scoped canonical blank nodes for explicit `_:label` labels.
+    label_bnodes::Dict{String, BNode}
 end
 
-_TriGParser(ds::Dataset, input::String) = _TriGParser(ds, input, 1, Dict{String,String}(), nothing, 0)
+_TriGParser(ds::Dataset, input::String) =
+    _TriGParser(ds, input, 1, Dict{String,String}(), nothing, 0, Dict{String,BNode}())
 
 function _trig_parse_document!(p::_TriGParser)
     _trig_skip_ws!(p)
@@ -255,7 +260,21 @@ function _trig_scan_label(p::_TriGParser)
         endpos = pos                       # at '>'
         pos = nextind(p.input, pos)        # past '>'
         return (p.input[p.pos:endpos], pos)
-    elseif c == '[' || c == '('
+    elseif c == '['
+        # An anonymous blank node `[]` (with optional inner whitespace) is a
+        # valid graph label per the grammar (ANON). A non-empty property list
+        # `[ :p :o ]` is NOT a label — it is a bare-triple subject, so report
+        # `nothing` in that case.
+        scan = nextind(p.input, pos)
+        while scan <= lastindex(p.input) && p.input[scan] in (' ', '\t', '\n', '\r')
+            scan = nextind(p.input, scan)
+        end
+        if scan <= lastindex(p.input) && p.input[scan] == ']'
+            after = nextind(p.input, scan)
+            return ("[]", after)
+        end
+        return (nothing, p.pos)
+    elseif c == '('
         return (nothing, p.pos)
     else
         # Blank node label or prefixed name: read until whitespace or '{' or
@@ -290,7 +309,11 @@ function _trig_significant_is_brace(p::_TriGParser, from::Int)
 end
 
 function _trig_resolve_label(p::_TriGParser, label::AbstractString)
-    if startswith(label, '<')
+    if label == "[]"
+        # Anonymous blank-node graph label: mint a fresh blank node.
+        p.bnodecounter += 1
+        return BNode("trig-anon-graph-$(p.bnodecounter)")
+    elseif startswith(label, '<')
         iri = label[nextind(label, firstindex(label)):prevind(label, lastindex(label))]
         return URIRef(_trig_resolve_iri(p, iri))
     elseif startswith(label, "_:")
@@ -307,19 +330,12 @@ function _trig_resolve_label(p::_TriGParser, label::AbstractString)
 end
 
 function _trig_resolve_iri(p::_TriGParser, iri::AbstractString)
-    if p.base !== nothing && !occursin("://", iri) && !startswith(iri, "urn:")
-        # Relative IRI: resolve against base (simple concatenation/last-slash).
-        return _trig_join_base(p.base, iri)
+    if p.base !== nothing && !_is_absolute_uri(iri)
+        # Relative IRI: resolve against base using full RFC 3986 resolution
+        # (shared with the Turtle parser).
+        return _resolve_uri(p.base, iri)
     end
     iri
-end
-
-function _trig_join_base(base::AbstractString, ref::AbstractString)
-    isempty(ref) && return base
-    if startswith(ref, '#') || startswith(ref, '?')
-        return base * ref
-    end
-    base * ref
 end
 
 # Scanner that advances `pos` until reaching `target` (a Char) at bracket-depth
@@ -333,7 +349,13 @@ function _trig_scan_to!(p::_TriGParser, target::Char)
     depth = 0
     while p.pos <= lastidx
         c = input[p.pos]
-        if c == '"' || c == '\''
+        if c == '\\'
+            # Backslash escape (e.g. inside a prefixed-name local part such as
+            # `:\#\}`). Skip the backslash and the escaped character so that an
+            # escaped '#', '}', etc. is not mistaken for a comment or delimiter.
+            p.pos = p.pos < lastidx ? nextind(input, nextind(input, p.pos)) :
+                                      nextind(input, p.pos)
+        elseif c == '"' || c == '\''
             p.pos = _trig_skip_string!(p, c)
         elseif c == '<'
             p.pos = _trig_skip_iri!(p)
@@ -433,13 +455,158 @@ function _trig_parse_graph_block!(p::_TriGParser, graph_name::OptGraphName)
     body = body_start <= prevind(p.input, stop) ? p.input[body_start:prevind(p.input, stop)] : ""
     p.pos = nextind(p.input, stop)  # consume '}'
 
+    # Directives (@prefix / @base / SPARQL PREFIX / BASE) are not allowed inside
+    # a graph block; reject them rather than letting the Turtle parser accept.
+    _trig_reject_directives_in_block(body)
+
     # TriG allows the trailing '.' of the final statement inside a block to be
     # omitted; the Turtle parser requires it, so append one when missing.
-    tb = rstrip(body)
-    if !isempty(tb) && last(tb) != '.'
+    if _trig_body_needs_dot(body)
         body = body * " ."
     end
     _trig_emit_body!(p, body, graph_name)
+end
+
+# A graph-block body is a `triplesBlock` and may not contain directives. Scan
+# the body (respecting strings/IRIs/comments) and throw if a directive is seen.
+# A '@' only legitimately appears as a language tag, which immediately follows a
+# closing quote; any other '@' indicates `@prefix`/`@base`. SPARQL-style
+# `PREFIX`/`BASE` directives are detected as a keyword at a statement boundary.
+function _trig_reject_directives_in_block(body::AbstractString)
+    i = firstindex(body)
+    lastidx = lastindex(body)
+    prev_sig = '\0'   # last significant (non-ws/comment) char before i
+    while i <= lastidx
+        c = body[i]
+        if c in (' ', '\t', '\n', '\r')
+            i = nextind(body, i)
+        elseif c == '#'
+            while i <= lastidx && body[i] != '\n'
+                i = nextind(body, i)
+            end
+        elseif c == '"' || c == '\''
+            i = _trig_skip_str_in(body, i, c)
+            prev_sig = '"'
+        elseif c == '<'
+            j = nextind(body, i)
+            while j <= lastidx && body[j] != '>'
+                body[j] == '\\' && (j = nextind(body, j))
+                j = nextind(body, j)
+            end
+            i = j <= lastidx ? nextind(body, j) : j
+            prev_sig = '>'
+        elseif c == '@'
+            # Language tag iff it directly follows a closing quote.
+            prev_sig == '"' ||
+                throw(ArgumentError("TriG: directive not allowed inside graph block"))
+            i = nextind(body, i)
+            prev_sig = '@'
+        else
+            # SPARQL-style PREFIX / BASE directive at a statement boundary
+            # (start of body, or right after a statement-ending '.').
+            if (prev_sig == '\0' || prev_sig == '.') &&
+               (_trig_at_word(body, i, "PREFIX") || _trig_at_word(body, i, "BASE"))
+                throw(ArgumentError("TriG: directive not allowed inside graph block"))
+            end
+            prev_sig = c
+            i = nextind(body, i)
+        end
+    end
+end
+
+# True iff `word` (case-insensitive) occurs at index `i` in `s` and is followed
+# by a non-pname character (so it is a standalone keyword).
+function _trig_at_word(s::AbstractString, i::Int, word::AbstractString)
+    pos = i
+    for ch in word
+        pos > lastindex(s) && return false
+        lowercase(s[pos]) != lowercase(ch) && return false
+        pos = nextind(s, pos)
+    end
+    pos > lastindex(s) && return true
+    nxt = s[pos]
+    !(nxt == '_' || nxt == ':' || nxt == '-' || ('0' <= nxt <= '9') ||
+      ('a' <= nxt <= 'z') || ('A' <= nxt <= 'Z'))
+end
+
+# True iff `body` is non-empty and its last *significant* character (ignoring
+# trailing whitespace and comments, and respecting strings/IRIs) is not '.'.
+# Used to decide whether the omitted final statement terminator must be added.
+function _trig_body_needs_dot(body::AbstractString)
+    last_sig = '\0'
+    i = firstindex(body)
+    lastidx = lastindex(body)
+    while i <= lastidx
+        c = body[i]
+        if c in (' ', '\t', '\n', '\r')
+            i = nextind(body, i)
+        elseif c == '#'
+            while i <= lastidx && body[i] != '\n'
+                i = nextind(body, i)
+            end
+        elseif c == '"' || c == '\''
+            # Skip the whole string literal; its closing quote is significant.
+            j = _trig_skip_str_in(body, i, c)
+            last_sig = '"'
+            i = j
+        elseif c == '<'
+            j = nextind(body, i)
+            while j <= lastidx && body[j] != '>'
+                body[j] == '\\' && (j = nextind(body, j))
+                j = nextind(body, j)
+            end
+            last_sig = '>'
+            i = j <= lastidx ? nextind(body, j) : j
+        elseif c == '\\'
+            last_sig = c
+            i = i < lastidx ? nextind(body, nextind(body, i)) : nextind(body, i)
+        else
+            last_sig = c
+            i = nextind(body, i)
+        end
+    end
+    last_sig != '\0' && last_sig != '.'
+end
+
+# Skip a (single or triple) quoted string literal starting at index `i` in
+# `s` whose quote char is `q`; return the index just past the closing quote.
+function _trig_skip_str_in(s::AbstractString, i::Int, q::Char)
+    lastidx = lastindex(s)
+    i2 = nextind(s, i)
+    i3 = i2 <= lastidx ? nextind(s, i2) : i2
+    long = i2 <= lastidx && i3 <= lastidx && s[i2] == q && s[i3] == q
+    if long
+        pos = nextind(s, i3)
+        while pos <= lastidx
+            c = s[pos]
+            if c == '\\'
+                pos = pos < lastidx ? nextind(s, nextind(s, pos)) : nextind(s, pos)
+            elseif c == q
+                j2 = nextind(s, pos)
+                j3 = j2 <= lastidx ? nextind(s, j2) : j2
+                if j2 <= lastidx && j3 <= lastidx && s[j2] == q && s[j3] == q
+                    return nextind(s, j3)
+                end
+                pos = nextind(s, pos)
+            else
+                pos = nextind(s, pos)
+            end
+        end
+        return pos
+    else
+        pos = nextind(s, i)
+        while pos <= lastidx
+            c = s[pos]
+            if c == '\\'
+                pos = pos < lastidx ? nextind(s, nextind(s, pos)) : nextind(s, pos)
+            elseif c == q
+                return nextind(s, pos)
+            else
+                pos = nextind(s, pos)
+            end
+        end
+        return pos
+    end
 end
 
 function _trig_parse_bare_statement!(p::_TriGParser)
@@ -465,6 +632,14 @@ end
 
 # Parse a Turtle body (one or more statements) and add the resulting triples
 # to the dataset under `graph_name`.
+#
+# Blank-node scoping: explicit `_:label` blank nodes are document-scoped — the
+# same label in different blocks denotes the same node — while anonymous blank
+# nodes (`[]`, `[ ... ]`, collections) are always fresh. Each block is parsed in
+# its own Turtle sub-document, so Turtle's per-document blank-node numbering
+# would collide across blocks. We therefore remap every blank node coming out of
+# a block: explicit labels go to a shared document-canonical node; everything
+# else (anonymous) gets a fresh globally-unique node, consistent within block.
 function _trig_emit_body!(p::_TriGParser, body::AbstractString, graph_name::OptGraphName)
     strip(body) == "" && return
     temp_g = RDFGraph()
@@ -473,9 +648,71 @@ function _trig_emit_body!(p::_TriGParser, body::AbstractString, graph_name::OptG
     end
     ttl = _trig_prelude(p) * body * "\n"
     parse_turtle!(temp_g, ttl; base=p.base)
+
+    explicit = _trig_scan_explicit_labels(body)
+    local_anon = Dict{String,BNode}()  # block-local anon label → fresh global bnode
+    remap(node) = node isa BNode ? _trig_remap_bnode(p, node, explicit, local_anon) : node
+
     for t in temp_g
-        add!(p.dataset, _trig_fix_dirlang(t), graph_name)
+        t2 = _trig_fix_dirlang(t)
+        nt = Triple(remap(t2.subject), t2.predicate, remap(t2.object))
+        add!(p.dataset, nt, graph_name)
     end
+end
+
+function _trig_remap_bnode(p::_TriGParser, b::BNode, explicit::Set{String},
+                           local_anon::Dict{String,BNode})
+    if b.id in explicit
+        return get!(p.label_bnodes, b.id) do
+            p.bnodecounter += 1
+            BNode("trig-b$(p.bnodecounter)")
+        end
+    else
+        return get!(local_anon, b.id) do
+            p.bnodecounter += 1
+            BNode("trig-b$(p.bnodecounter)")
+        end
+    end
+end
+
+# Collect the set of explicit `_:label` blank-node labels appearing in `body`
+# (respecting strings, IRIs and comments).
+function _trig_scan_explicit_labels(body::AbstractString)
+    labels = Set{String}()
+    i = firstindex(body)
+    lastidx = lastindex(body)
+    while i <= lastidx
+        c = body[i]
+        if c == '#'
+            while i <= lastidx && body[i] != '\n'
+                i = nextind(body, i)
+            end
+        elseif c == '"' || c == '\''
+            i = _trig_skip_str_in(body, i, c)
+        elseif c == '<'
+            j = nextind(body, i)
+            while j <= lastidx && body[j] != '>'
+                body[j] == '\\' && (j = nextind(body, j))
+                j = nextind(body, j)
+            end
+            i = j <= lastidx ? nextind(body, j) : j
+        elseif c == '_' && nextind(body, i) <= lastidx && body[nextind(body, i)] == ':'
+            j = nextind(body, nextind(body, i))  # past "_:"
+            start = j
+            while j <= lastidx && (_nt_is_pn_chars(body[j]) || body[j] == '.')
+                j = nextind(body, j)
+            end
+            # Trim a trailing '.' (a label may not end with one).
+            while j > start && body[prevind(body, j)] == '.'
+                j = prevind(body, j)
+            end
+            j > start && push!(labels, body[start:prevind(body, j)])
+            i = j > i ? j : nextind(body, i)
+        else
+            i = nextind(body, i)
+        end
+    end
+    labels
 end
 
 # SPARQL 1.2 directional literals ("x"@en--ltr) are scanned by the Turtle
@@ -545,7 +782,7 @@ function _trig_parse_prefix!(p::_TriGParser)
     _trig_skip_ws!(p)
     prefix = _trig_read_prefix_name!(p)
     _trig_skip_ws!(p)
-    uri = _trig_read_iriref!(p)
+    uri = _trig_resolve_iri(p, _trig_read_iriref!(p))
     _trig_skip_ws!(p)
     _trig_consume!(p, '.')
     p.prefixes[prefix] = uri
@@ -557,7 +794,7 @@ function _trig_parse_sparql_prefix!(p::_TriGParser)
     _trig_skip_ws!(p)
     prefix = _trig_read_prefix_name!(p)
     _trig_skip_ws!(p)
-    uri = _trig_read_iriref!(p)
+    uri = _trig_resolve_iri(p, _trig_read_iriref!(p))
     p.prefixes[prefix] = uri
     bind!(p.dataset, prefix, Namespace(uri))
 end
@@ -565,7 +802,7 @@ end
 function _trig_parse_base!(p::_TriGParser)
     for _ in 1:5; p.pos = nextind(p.input, p.pos); end
     _trig_skip_ws!(p)
-    p.base = _trig_read_iriref!(p)
+    p.base = _trig_resolve_iri(p, _trig_read_iriref!(p))
     _trig_skip_ws!(p)
     _trig_consume!(p, '.')
 end
@@ -573,7 +810,7 @@ end
 function _trig_parse_sparql_base!(p::_TriGParser)
     for _ in 1:4; p.pos = nextind(p.input, p.pos); end
     _trig_skip_ws!(p)
-    p.base = _trig_read_iriref!(p)
+    p.base = _trig_resolve_iri(p, _trig_read_iriref!(p))
 end
 
 function _trig_read_prefix_name!(p::_TriGParser)
@@ -611,6 +848,13 @@ function _trig_parse_term!(p::_TriGParser)
     c = _trig_peek(p)
     if c == '<'
         return URIRef(_trig_read_iriref!(p))
+    elseif c == '['
+        # Anonymous blank node `[]` as a graph label (e.g. `GRAPH [] { ... }`).
+        p.pos = nextind(p.input, p.pos)  # '['
+        _trig_skip_ws!(p)
+        _trig_consume!(p, ']')
+        p.bnodecounter += 1
+        return BNode("trig-anon-graph-$(p.bnodecounter)")
     elseif c == '_' && _trig_at(p, "_:")
         # Blank node label (e.g. a blank-node-named graph)
         p.pos = nextind(p.input, p.pos)  # '_'

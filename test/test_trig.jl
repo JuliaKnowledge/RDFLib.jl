@@ -194,4 +194,84 @@ using RDFLib
         obj2 = first(objects(get_graph(ds2), EX("s"), EX("q")))
         @test obj2 == Literal("שלום", lang="he", direction="rtl")
     end
+
+    @testset "escaped reserved chars in prefixed-name local part" begin
+        # The brace scanner must not treat an escaped '#', '}', etc. inside a
+        # prefixed name's local part as a comment or block terminator.
+        trig = "@prefix : <http://example/> .\n" *
+               "{:s :p :\\~\\.\\-\\!\\\$\\&\\'\\(\\)\\*\\+\\,\\;\\=\\/\\?\\#\\@\\_\\%AA .}"
+        ds = parse_trig(trig)
+        qs = collect(quads(ds))
+        @test length(qs) == 1
+        @test qs[1].subject == URIRef("http://example/s")
+        @test qs[1].object == URIRef("http://example/~.-!\$&'()*+,;=/?#@_%AA")
+    end
+
+    @testset "trailing comment before closing brace (omitted final dot)" begin
+        # The "needs trailing dot" heuristic must skip trailing comments so it
+        # does not append a spurious '.' that lands inside the comment.
+        trig = "@prefix : <http://example/> .\n{\n_:b.0 :p :o . # comment\n}"
+        ds = parse_trig(trig)
+        @test length(collect(quads(ds))) == 1
+    end
+
+    @testset "anonymous and labeled blank-node graph labels" begin
+        EXP = Namespace("http://example/")
+        ds = parse_trig("[] {<http://example/s> <http://example/p> <http://example/o> .}")
+        qs = collect(quads(ds))
+        @test length(qs) == 1
+        @test qs[1].graph isa BNode
+
+        ds2 = parse_trig("GRAPH [] { <http://example/s> <http://example/p> <http://example/o> }")
+        @test length(collect(quads(ds2))) == 1
+        @test collect(quads(ds2))[1].graph isa BNode
+
+        ds3 = parse_trig("_:g {<http://example/s> <http://example/p> <http://example/o> .}")
+        @test collect(quads(ds3))[1].graph isa BNode
+    end
+
+    @testset "blank nodes are distinct across graph blocks" begin
+        # Anonymous [] in different blocks must be different blank nodes.
+        trig = "@prefix : <http://example/> .\n" *
+               "{[] :x :y .}\n<http://example/g> {[] :x :y .}"
+        ds = parse_trig(trig)
+        qs = collect(quads(ds))
+        @test length(qs) == 2
+        subjects_seen = Set(q.subject for q in qs)
+        @test length(subjects_seen) == 2  # two distinct blank nodes
+    end
+
+    @testset "explicit _:label shared across graph blocks" begin
+        # The same _:label in two blocks denotes the same node.
+        trig = "@prefix : <http://example/> .\n" *
+               "{_:a :p :o .}\n<http://example/g> {_:a :q :o .}"
+        ds = parse_trig(trig)
+        qs = collect(quads(ds))
+        @test length(qs) == 2
+        @test qs[1].subject == qs[2].subject  # same blank node across blocks
+    end
+
+    @testset "directives rejected inside graph blocks" begin
+        @test_throws ArgumentError parse_trig("{\n  @base <http://example/> .\n}")
+        @test_throws ArgumentError parse_trig("{\n  @prefix ex: <http://example/> .\n}")
+        @test_throws ArgumentError parse_trig("{\n  PREFIX ex: <http://example/>\n}")
+        @test_throws ArgumentError parse_trig("{\n  BASE <http://example/>\n}")
+        # A language tag '@en' inside a block must NOT be mistaken for a directive.
+        ds = parse_trig("@prefix : <http://example/> .\n{:s :p \"hi\"@en .}")
+        @test length(collect(quads(ds))) == 1
+    end
+
+    @testset "cumulative @base resolution and base kwarg" begin
+        # @base directives resolve relative to the current in-scope base, and the
+        # initial base kwarg is honoured.
+        trig = "{<a1> <b1> <c1> .}\n@base <http://example.org/ns/> .\n" *
+               "{<a2> <b2> <c2> .}\n@base <foo/> .\n{<a3> <b3> <c3> .}\n" *
+               "@prefix : <bar#> .\n{:a4 :b4 :c4 .}"
+        ds = parse_trig(trig; base="https://example.com/dir/doc.trig")
+        objs = Set(string(q.object) for q in quads(ds))
+        @test "https://example.com/dir/c1" in objs
+        @test "http://example.org/ns/c2" in objs
+        @test "http://example.org/ns/foo/c3" in objs
+        @test "http://example.org/ns/foo/bar#c4" in objs
+    end
 end
