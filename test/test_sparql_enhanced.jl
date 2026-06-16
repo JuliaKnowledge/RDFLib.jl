@@ -415,8 +415,10 @@ using RDFLib
                 BIND(UCASE(?name) AS ?upper)
             }
         """)
-        uppers = Set(r["upper"] for r in results if haskey(r, "upper"))
-        @test Literal("ALICE") in uppers || Literal("BOB") in uppers
+        # UCASE preserves the argument's language tag (W3C: ucase01), so the
+        # labels "Alice"@en / "Bob"@en uppercase to "ALICE"@en / "BOB"@en.
+        uppers = Set(r["upper"].lexical for r in results if haskey(r, "upper"))
+        @test "ALICE" in uppers || "BOB" in uppers
     end
 
     @testset "BIND SUBSTR" begin
@@ -427,8 +429,9 @@ using RDFLib
                 BIND(SUBSTR(?name, 1, 3) AS ?sub)
             }
         """)
-        subs = Set(r["sub"] for r in results if haskey(r, "sub"))
-        @test Literal("Ali") in subs || Literal("Bob") in subs
+        # SUBSTR preserves the argument's language tag (W3C semantics).
+        subs = Set(r["sub"].lexical for r in results if haskey(r, "sub"))
+        @test "Ali" in subs || "Bob" in subs
     end
 
     @testset "BIND STRLEN" begin

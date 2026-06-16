@@ -370,4 +370,60 @@ using RDFLib
         @test EX("b") in ends
         @test EX("c") in ends
     end
+
+    # ─── Quad-aware UPDATE node execution (eval-agent fixes) ──────────
+
+    @testset "UPDATE: INSERT DATA / DELETE DATA with GRAPH routing" begin
+        EX = Namespace("http://example.org/")
+        ds = Dataset()
+        sparql_update(ds, """PREFIX ex: <http://example.org/>
+            INSERT DATA {
+                ex:s ex:p ex:o .
+                GRAPH ex:g1 { ex:s ex:p ex:o1 }
+            }""")
+        @test Triple(EX("s"), EX("p"), EX("o")) in collect(triples(ds.default_graph))
+        g1 = ds.named_graphs[URIRef("http://example.org/g1")]
+        @test Triple(EX("s"), EX("p"), EX("o1")) in collect(triples(g1))
+        # DELETE DATA removes from the named graph only
+        sparql_update(ds, """PREFIX ex: <http://example.org/>
+            DELETE DATA { GRAPH ex:g1 { ex:s ex:p ex:o1 } }""")
+        @test isempty(collect(triples(g1)))
+        @test Triple(EX("s"), EX("p"), EX("o")) in collect(triples(ds.default_graph))
+    end
+
+    @testset "UPDATE: DELETE/INSERT WHERE with GRAPH template" begin
+        EX = Namespace("http://example.org/")
+        ds = Dataset()
+        add!(ds, Triple(EX("s"), EX("p"), EX("o")), URIRef("http://example.org/g1"))
+        sparql_update(ds, """PREFIX ex: <http://example.org/>
+            INSERT { GRAPH ex:g2 { ?s ex:copied ?o } }
+            WHERE  { GRAPH ex:g1 { ?s ex:p ?o } }""")
+        g2 = ds.named_graphs[URIRef("http://example.org/g2")]
+        @test Triple(EX("s"), EX("copied"), EX("o")) in collect(triples(g2))
+    end
+
+    @testset "UPDATE: multi-operation request runs in order" begin
+        EX = Namespace("http://example.org/")
+        ds = Dataset()
+        sparql_update(ds, """PREFIX ex: <http://example.org/>
+            INSERT DATA { ex:s ex:p ex:o } ;
+            DELETE DATA { ex:s ex:p ex:o } ;
+            INSERT DATA { ex:s ex:p ex:o2 }""")
+        ts = collect(triples(ds.default_graph))
+        @test Triple(EX("s"), EX("p"), EX("o2")) in ts
+        @test !(Triple(EX("s"), EX("p"), EX("o")) in ts)
+    end
+
+    @testset "UPDATE: MOVE replaces the destination graph" begin
+        EX = Namespace("http://example.org/")
+        ds = Dataset()
+        add!(ds, Triple(EX("new"), EX("p"), EX("o")))  # default graph
+        add!(ds, Triple(EX("old"), EX("p"), EX("o")), URIRef("http://example.org/g1"))
+        sparql_update(ds, "PREFIX ex: <http://example.org/> MOVE DEFAULT TO ex:g1")
+        g1 = ds.named_graphs[URIRef("http://example.org/g1")]
+        ts = collect(triples(g1))
+        @test Triple(EX("new"), EX("p"), EX("o")) in ts
+        @test !(Triple(EX("old"), EX("p"), EX("o")) in ts)  # destination was replaced
+        @test isempty(collect(triples(ds.default_graph)))   # source cleared
+    end
 end

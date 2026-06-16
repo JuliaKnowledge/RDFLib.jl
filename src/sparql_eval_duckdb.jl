@@ -390,8 +390,10 @@ function _duckdb_pushdown_sql(q::SparqlSelect)
         end
     end
     isempty(select_parts) && error("no projectable columns")
-    # REDUCED permits dedup; the main evaluator dedupes it like DISTINCT.
-    distinct_kw = (q.distinct || q.reduced) ? "DISTINCT " : ""
+    # Only DISTINCT forces dedup. REDUCED is implementation-defined and the main
+    # evaluator keeps all rows (matching the W3C reference results), so the
+    # pushdown must keep them too for backend consistency.
+    distinct_kw = q.distinct ? "DISTINCT " : ""
     select_sql = "SELECT " * distinct_kw * join(select_parts, ", ")
 
     # WHERE

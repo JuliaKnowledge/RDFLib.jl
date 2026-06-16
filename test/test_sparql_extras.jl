@@ -1118,19 +1118,21 @@ end
     @testset "Equality semantics (item 10)" begin
         g = RDFGraph()
         add!(g, Triple(EX("s"), EX("label"), Literal("foo", lang="en")))
-        # "foo"@en = "foo" → type error, row fails
+        # "foo"@en vs plain "foo": a language-tagged literal sits in a value
+        # space disjoint from a simple literal, so RDFterm-equal reports them as
+        # "known different" (FALSE), not a type error (per the W3C open-world
+        # equality tests, e.g. open-eq-08). Hence `=` is false and `!=` is true.
         r = sparql_query(g, """
             PREFIX ex: <http://example.org/>
             SELECT ?s WHERE { ?s ex:label ?l . FILTER(?l = "foo") }
         """)
         @test isempty(r)
-        # ... and != also fails (error, not true)
         r = sparql_query(g, """
             PREFIX ex: <http://example.org/>
             SELECT ?s WHERE { ?s ex:label ?l . FILTER(?l != "foo") }
         """)
-        @test isempty(r)
-        # "1"@en = 1 → error, not true
+        @test length(r) == 1
+        # "1"@en = 1 → known different (lang-tagged vs numeric) → FALSE
         r = sparql_query(g, """SELECT ?s WHERE { ?s ?p ?o . FILTER("1"@en = 1) }""")
         @test isempty(r)
         # same-language different-lexical langStrings are simply unequal
@@ -1208,7 +1210,7 @@ end
         """)
         @test r[1]["i"].lexical == "42"
         @test r[1]["i"].datatype == URIRef(xsd * "integer")
-        @test r[1]["d"].lexical == "1.5"
+        @test r[1]["d"].lexical == "1.5E0"  # canonical xsd:double lexical
         @test r[1]["d"].datatype == URIRef(xsd * "double")
         @test r[1]["b"].lexical == "true"
         @test r[1]["b"].datatype == URIRef(xsd * "boolean")
@@ -1264,7 +1266,7 @@ end
         @test length(r) == 1
         @test r[1]["c"].lexical == "0"
         @test r[1]["sum"].lexical == "0"
-        @test !haskey(r[1], "avg")
+        @test r[1]["avg"].lexical == "0"   # AVG over empty group = 0 (SPARQL §18.5)
         @test !haskey(r[1], "min")
         @test !haskey(r[1], "max")
         @test !haskey(r[1], "smp")
@@ -1304,7 +1306,7 @@ end
             PREFIX ex: <http://example.org/>
             SELECT (SUM(?x) AS ?sum) WHERE { ?s ex:v ?x }
         """)
-        @test r[1]["sum"].lexical == "4.0"
+        @test r[1]["sum"].lexical == "4.0E0"  # canonical xsd:double lexical
         @test r[1]["sum"].datatype == URIRef(xsd * "double")
         # a non-numeric value poisons SUM/AVG → unbound, not silently skipped
         g3 = RDFGraph()
@@ -1330,6 +1332,154 @@ end
         """)
         @test r[1]["c"].lexical == "4"
         @test r[1]["dc"].lexical == "2"
+    end
+
+    # ─── W3C conformance regressions (eval-agent fixes) ───────────────
+
+    @testset "String builtins preserve language / type" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("bar", lang="en")))
+        add!(g, Triple(EX("t"), EX("p"), Literal("foo")))
+        # UCASE/LCASE keep the language tag
+        r = sparql_query(g, "PREFIX ex: <http://example.org/> SELECT (UCASE(?v) AS ?u) WHERE { ex:s ex:p ?v }")
+        @test r[1]["u"].lexical == "BAR"
+        @test r[1]["u"].language == "en"
+        # SUBSTR keeps the language tag
+        r = sparql_query(g, "PREFIX ex: <http://example.org/> SELECT (SUBSTR(?v,1,2) AS ?u) WHERE { ex:s ex:p ?v }")
+        @test r[1]["u"].lexical == "ba"
+        @test r[1]["u"].language == "en"
+        # STRBEFORE: found → keep lang; not found → plain ""; incompatible lang → error
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT (STRBEFORE(?v,"r") AS ?a) (STRBEFORE(?v,"z") AS ?b) WHERE { ex:s ex:p ?v }""")
+        @test r[1]["a"].lexical == "ba" && r[1]["a"].language == "en"
+        @test r[1]["b"].lexical == "" && r[1]["b"].language === nothing
+        # CONCAT of matching langs keeps the lang; mixed → plain
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT (CONCAT(?v,?v) AS ?c) WHERE { ex:s ex:p ?v }""")
+        @test r[1]["c"].lexical == "barbar" && r[1]["c"].language == "en"
+        # STRDT on a non-string literal is a type error → unbound
+        r = sparql_query(g, """PREFIX ex: <http://example.org/> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (STRDT(?v,xsd:string) AS ?d) WHERE { ex:s ex:p ?v }""")
+        @test !haskey(r[1], "d")  # "bar"@en is not a simple literal
+    end
+
+    @testset "ENCODE_FOR_URI / SECONDS / CEIL typing" begin
+        g = RDFGraph(); add!(g, Triple(EX("s"), EX("p"), Literal("x")))
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        r = sparql_query(g, """SELECT (ENCODE_FOR_URI("食べ物") AS ?e) WHERE { ?s ?p ?o }""")
+        @test r[1]["e"].lexical == "%E9%A3%9F%E3%81%B9%E7%89%A9"
+        # SECONDS returns xsd:decimal
+        r = sparql_query(g, """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (SECONDS("2010-06-21T11:28:01Z"^^xsd:dateTime) AS ?s) WHERE { ?x ?p ?o }""")
+        @test r[1]["s"].datatype == URIRef(xsd * "decimal")
+        # CEIL/FLOOR/ROUND of a decimal → integer-lexical decimal
+        r = sparql_query(g, """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (CEIL("2.5"^^xsd:decimal) AS ?c) (FLOOR("2.5"^^xsd:decimal) AS ?f) WHERE { ?x ?p ?o }""")
+        @test r[1]["c"].lexical == "3" && r[1]["c"].datatype == URIRef(xsd * "decimal")
+        @test r[1]["f"].lexical == "2"
+    end
+
+    @testset "IRI() resolves against BASE" begin
+        r = sparql_query(RDFGraph(), """BASE <http://example.org/> SELECT (IRI("a") AS ?i) (URI("b") AS ?u) WHERE {}""")
+        @test r[1]["i"] == URIRef("http://example.org/a")
+        @test r[1]["u"] == URIRef("http://example.org/b")
+    end
+
+    @testset "Decimal SUM has no float noise; xsd:double canonical form" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("v"), Literal("4.1", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decimal"))))
+        add!(g, Triple(EX("b"), EX("v"), Literal("7.0", datatype=URIRef("http://www.w3.org/2001/XMLSchema#decimal"))))
+        r = sparql_query(g, "PREFIX ex: <http://example.org/> SELECT (SUM(?x) AS ?s) WHERE { ?n ex:v ?x }")
+        @test r[1]["s"].lexical == "11.1"
+        # xsd:double cast → canonical scientific lexical
+        r = sparql_query(RDFGraph(), """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT (xsd:double("0.2") AS ?d) WHERE {}""")
+        @test r[1]["d"].lexical == "2.0E-1"
+    end
+
+    @testset "Aggregate-bearing SELECT expressions; empty AVG = 0" begin
+        g = RDFGraph()
+        for v in (1,2,3,4); add!(g, Triple(EX("x"), EX("p"), Literal(v))); end
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT ((MIN(?p)+MAX(?p))/2 AS ?c) WHERE { ?g ex:p ?p }""")
+        @test r[1]["c"].lexical == "2.5"
+        # AVG over an empty group = 0 (SPARQL §18.5)
+        r = sparql_query(RDFGraph(), """SELECT (AVG(?x) AS ?a) WHERE { ?s ?p ?x }""")
+        @test r[1]["a"].lexical == "0"
+    end
+
+    @testset "Blank nodes in query patterns act as variables" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p"), Literal(1)))
+        add!(g, Triple(EX("b"), EX("p"), Literal(2)))
+        r = sparql_query(g, "PREFIX ex: <http://example.org/> SELECT ?v WHERE { _:x ex:p ?v }")
+        @test length(r) == 2
+        # the blank-node variable is not projected in SELECT *
+        r = sparql_query(g, "PREFIX ex: <http://example.org/> SELECT * WHERE { _:x ex:p ?v }")
+        @test all(row -> Set(keys(row)) == Set(["v"]), r)
+    end
+
+    @testset "LANG / LANGMATCHES type errors propagate" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), EX("anIRI")))         # IRI object
+        add!(g, Triple(EX("s"), EX("q"), Literal("x")))        # plain literal
+        # LANG on an IRI is a type error → FILTER removes the row
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT ?o WHERE { ex:s ?p ?o . FILTER(LANG(?o) != "@x@") }""")
+        @test length(r) == 1  # only the plain literal survives
+    end
+
+    @testset "REGEX q (literal) and x (extended) flags" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("a.b")))
+        add!(g, Triple(EX("t"), EX("p"), Literal("axb")))
+        # q flag: '.' is literal, so only "a.b" matches
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:p ?v . FILTER(REGEX(?v, "a.b", "q")) }""")
+        @test length(r) == 1
+        @test r[1]["s"] == EX("s")
+    end
+
+    @testset "Open-world equality and date timezone indeterminacy" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p"), Literal("xyz")))
+        add!(g, Triple(EX("b"), EX("p"), Literal("xyz", lang="en")))
+        # plain vs lang-tagged are known-different → != is true
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT ?x WHERE { ?x ex:p ?v . FILTER(?v != "xyz"@en) }""")
+        @test length(r) == 1 && r[1]["x"] == EX("a")
+        # date with TZ vs without, same day → indeterminate → neither = nor !=
+        g2 = RDFGraph()
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        add!(g2, Triple(EX("d1"), EX("r"), Literal("2006-08-23", datatype=URIRef(xsd*"date"))))
+        add!(g2, Triple(EX("d2"), EX("r"), Literal("2006-08-23Z", datatype=URIRef(xsd*"date"))))
+        r = sparql_query(g2, """PREFIX ex: <http://example.org/> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT ?x WHERE { ?x ex:r ?v . FILTER(?v = "2006-08-23"^^xsd:date) }""")
+        @test length(r) == 1 && r[1]["x"] == EX("d1")  # only the exact lexical match
+    end
+
+    @testset "Fixed-length path multiset; zero-length on bound constant" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p1"), EX("b")))
+        add!(g, Triple(EX("b"), EX("p2"), EX("c")))
+        add!(g, Triple(EX("a"), EX("p1"), EX("d")))
+        add!(g, Triple(EX("d"), EX("p2"), EX("c")))
+        # two distinct intermediate nodes → 2 solutions for ?x = c
+        r = sparql_query(g, """PREFIX ex: <http://example.org/>
+            SELECT ?x WHERE { ex:a ex:p1/ex:p2 ?x }""")
+        @test length(r) == 2
+        # zero-or-more with a constant target on an empty graph → the constant
+        r = sparql_query(RDFGraph(), """PREFIX ex: <http://example.org/>
+            SELECT ?s WHERE { ?s ex:p* ex:o }""")
+        @test length(r) == 1 && r[1]["s"] == EX("o")
+    end
+
+    @testset "REDUCED keeps duplicates" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p"), Literal("x")))
+        add!(g, Triple(EX("b"), EX("p"), Literal("x")))
+        r = sparql_query(g, "PREFIX ex: <http://example.org/> SELECT REDUCED ?v WHERE { ?s ex:p ?v }")
+        @test length(r) == 2  # REDUCED need not eliminate duplicates
     end
 
     @testset "NOW/TZ/TIMEZONE (item 14)" begin

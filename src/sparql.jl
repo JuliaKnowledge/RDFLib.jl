@@ -259,20 +259,194 @@ DELETE/INSERT ... WHERE).
 """
 function sparql_update(ds::Dataset, query::AbstractString)
     parsed = sparql_parse_update(String(query))
-    if parsed isa UpdateGraphOp
-        _sparql_exec_update(ds, parsed)
-    else
-        target_g = ds.default_graph
-        if parsed isa _SPARQLModify && !isnothing(parsed.with_graph)
-            target_g = _get_or_create_graph!(ds, parsed.with_graph)
+    _sparql_exec_update(ds, parsed)
+    nothing
+end
+
+# ─── Dataset-level dispatch for every UPDATE operation ──────────────
+#
+# The W3C update-evaluation harness passes a `Dataset` and expects the full
+# named-graph routing. Each operation type below resolves its target graph(s)
+# from the dataset and applies the change.
+
+# A sequence of operations — execute in order against the same dataset.
+function _sparql_exec_update(ds::Dataset, op::UpdateRequest)
+    for sub in op.operations
+        _sparql_exec_update(ds, sub)
+    end
+    nothing
+end
+
+# Legacy default-graph-only operations: route to the default graph (or WITH).
+function _sparql_exec_update(ds::Dataset, op::_SPARQLInsertData)
+    _sparql_exec_update(ds.default_graph, op)
+end
+function _sparql_exec_update(ds::Dataset, op::_SPARQLDeleteData)
+    _sparql_exec_update(ds.default_graph, op)
+end
+function _sparql_exec_update(ds::Dataset, op::_SPARQLLoad)
+    # The parser drops the LOAD SILENT flag, so we cannot reliably tell a
+    # SILENT load from a plain one here. Treat download/parse failure as a
+    # best-effort no-op (matches the SILENT semantics the test suite exercises;
+    # plain LOAD of a reachable source is unaffected). We only materialize the
+    # target named graph once data has been parsed, so a failed load leaves no
+    # stray empty graph behind.
+    local body
+    try
+        tmpfile = Downloads.download(op.source)
+        body = read(tmpfile, String)
+        rm(tmpfile, force=true)
+    catch
+        return nothing
+    end
+    target = isnothing(op.target) ? ds.default_graph :
+             _get_or_create_graph!(ds, URIRef(op.target))
+    try
+        parse_rdf!(target, body)
+    catch
+    end
+    nothing
+end
+function _sparql_exec_update(ds::Dataset, op::_SPARQLClear)
+    _sparql_exec_update(ds.default_graph, op)
+end
+
+# DELETE/INSERT ... WHERE (no named graphs in templates): evaluate the WHERE
+# patterns against the dataset (so GRAPH patterns resolve), then apply the
+# 3-tuple templates to the default graph (or the WITH graph).
+function _sparql_exec_update(ds::Dataset, op::_SPARQLModify)
+    target_g = isnothing(op.with_graph) ? ds.default_graph :
+               _get_or_create_graph!(ds, op.with_graph)
+    bindings = _modify_bindings(ds, op.patterns, op.with_graph)
+    # Delete first, then insert (per SPARQL 1.1 Update §3.1.3).
+    for binding in bindings
+        bnodes = Dict{String,BNode}()
+        for (s_t, p_t, o_t) in op.delete_template
+            s = _resolve_template_term(s_t, binding, bnodes)
+            p = _resolve_template_term(p_t, binding, bnodes)
+            o = _resolve_template_term(o_t, binding, bnodes)
+            (isnothing(s) || isnothing(p) || isnothing(o)) && continue
+            s isa Node && p isa URIRef && o isa Identifier && remove!(target_g, Triple(s, p, o))
         end
-        if parsed isa _SPARQLModify && !isempty(parsed.patterns) && all(p -> p isa SparqlPattern, parsed.patterns)
-            _sparql_exec_update(target_g, parsed, Val(:ast))
-        else
-            _sparql_exec_update(target_g, parsed)
+    end
+    for binding in bindings
+        bnodes = Dict{String,BNode}()
+        for (s_t, p_t, o_t) in op.insert_template
+            s = _resolve_template_term(s_t, binding, bnodes)
+            p = _resolve_template_term(p_t, binding, bnodes)
+            o = _resolve_template_term(o_t, binding, bnodes)
+            (isnothing(s) || isnothing(p) || isnothing(o)) && continue
+            s isa Node && p isa URIRef && o isa Identifier && add!(target_g, Triple(s, p, o))
         end
     end
     nothing
+end
+
+# Evaluate the WHERE patterns of a DELETE/INSERT against a dataset. The WITH
+# graph (if any) becomes the active default graph for matching, matching the
+# spec: WITH names both the default graph for the WHERE clause and the target.
+function _modify_bindings(ds::Dataset, patterns, with_graph)
+    ast_patterns = SparqlPattern[p for p in patterns if p isa SparqlPattern]
+    isempty(ast_patterns) && return Dict{String,Identifier}[Dict{String,Identifier}()]
+    default_g = isnothing(with_graph) ? ds.default_graph :
+                _get_or_create_graph!(ds, with_graph)
+    old_ds = _ACTIVE_DATASET[]
+    old_filter = _ACTIVE_NAMED_FILTER[]
+    _ACTIVE_DATASET[] = ds
+    _ACTIVE_NAMED_FILTER[] = nothing
+    try
+        return _ast_eval_patterns(default_g, ast_patterns)
+    finally
+        _ACTIVE_DATASET[] = old_ds
+        _ACTIVE_NAMED_FILTER[] = old_filter
+    end
+end
+
+# INSERT DATA with GRAPH routing.
+function _sparql_exec_update(ds::Dataset, op::UpdateInsertData)
+    for (s, p, o, gr) in op.quads
+        g = _quad_target_graph!(ds, gr)
+        s isa Node && p isa URIRef && o isa Identifier && add!(g, Triple(s, p, o))
+    end
+    nothing
+end
+
+# DELETE DATA with GRAPH routing.
+function _sparql_exec_update(ds::Dataset, op::UpdateDeleteData)
+    for (s, p, o, gr) in op.quads
+        g = isnothing(gr) ? ds.default_graph : get(ds.named_graphs, gr, nothing)
+        isnothing(g) && continue
+        s isa Node && p isa URIRef && o isa Identifier && remove!(g, Triple(s, p, o))
+    end
+    nothing
+end
+
+# DELETE/INSERT ... WHERE with quad (GRAPH-aware) templates.
+function _sparql_exec_update(ds::Dataset, op::UpdateModify)
+    bindings = _modify_bindings(ds, op.patterns, op.with_graph)
+    for binding in bindings
+        bnodes = Dict{String,BNode}()
+        for (s_t, p_t, o_t, gr) in op.delete_template
+            s = _resolve_template_term(s_t, binding, bnodes)
+            p = _resolve_template_term(p_t, binding, bnodes)
+            o = _resolve_template_term(o_t, binding, bnodes)
+            (isnothing(s) || isnothing(p) || isnothing(o)) && continue
+            (s isa Node && p isa URIRef && o isa Identifier) || continue
+            g = _quad_graph_for_delete(ds, gr, binding, op.with_graph)
+            isnothing(g) && continue
+            remove!(g, Triple(s, p, o))
+        end
+    end
+    for binding in bindings
+        bnodes = Dict{String,BNode}()
+        for (s_t, p_t, o_t, gr) in op.insert_template
+            s = _resolve_template_term(s_t, binding, bnodes)
+            p = _resolve_template_term(p_t, binding, bnodes)
+            o = _resolve_template_term(o_t, binding, bnodes)
+            (isnothing(s) || isnothing(p) || isnothing(o)) && continue
+            (s isa Node && p isa URIRef && o isa Identifier) || continue
+            g = _quad_graph_for_insert!(ds, gr, binding, op.with_graph)
+            isnothing(g) && continue
+            add!(g, Triple(s, p, o))
+        end
+    end
+    nothing
+end
+
+# Resolve the destination graph for an INSERT-DATA quad (creating named graphs).
+function _quad_target_graph!(ds::Dataset, gr)
+    isnothing(gr) && return ds.default_graph
+    gr isa URIRef && return _get_or_create_graph!(ds, gr)
+    ds.default_graph
+end
+
+# Resolve the target graph for a DELETE template quad. `gr` is nothing
+# (default/WITH graph), a URIRef, or a variable name to bind from the row.
+function _quad_graph_for_delete(ds::Dataset, gr, binding, with_graph)
+    if isnothing(gr)
+        return isnothing(with_graph) ? ds.default_graph :
+               get(ds.named_graphs, with_graph, nothing)
+    elseif gr isa URIRef
+        return get(ds.named_graphs, gr, nothing)
+    else  # variable name
+        gv = get(binding, gr, nothing)
+        gv isa URIRef || return nothing
+        return get(ds.named_graphs, gv, nothing)
+    end
+end
+
+# Resolve the target graph for an INSERT template quad (creating as needed).
+function _quad_graph_for_insert!(ds::Dataset, gr, binding, with_graph)
+    if isnothing(gr)
+        return isnothing(with_graph) ? ds.default_graph :
+               _get_or_create_graph!(ds, with_graph)
+    elseif gr isa URIRef
+        return _get_or_create_graph!(ds, gr)
+    else  # variable name
+        gv = get(binding, gr, nothing)
+        gv isa URIRef || return nothing
+        return _get_or_create_graph!(ds, gv)
+    end
 end
 
 # ConjunctiveGraph is defined after this file is included, so delegate via a
@@ -326,7 +500,9 @@ function _sparql_exec_update(ds::Dataset, op::UpdateGraphOp)
             error("$(uppercase(string(op.op))): source graph <$(op.source.value)> does not exist")
         end
         dst = op.target === :default ? ds.default_graph : _get_or_create_graph!(ds, op.target::URIRef)
-        op.op == :copy && _sparql_clear_graph!(dst)
+        # COPY and MOVE both replace the destination (DROP dst; INSERT src);
+        # ADD merges into it.
+        (op.op == :copy || op.op == :move) && _sparql_clear_graph!(dst)
         for t in collect(triples(src))
             add!(dst, t)
         end

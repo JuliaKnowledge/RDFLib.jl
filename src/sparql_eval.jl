@@ -10,6 +10,7 @@ const _XSD_NS = "http://www.w3.org/2001/XMLSchema#"
 # ─── Top-level evaluation ─────────────────────────────────────────
 
 function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
+    _ACTIVE_BASE[] = get(q.prefixes, "@base", nothing)
     # Fast path: SELECT (COUNT(*) AS ?x) WHERE { ?s ?p ?o } with no other clauses.
     # Bypasses BGP materialisation; uses the store's `length` directly.
     if _is_count_star_query(q)
@@ -124,17 +125,35 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
 
     bindings = _ast_eval_patterns(g, q.patterns; limit=push_limit)
 
-    # Evaluate SELECT expressions
-    for b in bindings
-        for se in q.select_exprs
-            val = _ast_eval_expr(se.expr, b, g)
-            !isnothing(val) && (b[se.alias] = val)
+    # Evaluate SELECT expressions. Those that reference aggregates (e.g.
+    # `(MIN(?p)+MAX(?p))/2 AS ?c`) must be deferred until after grouping; plain
+    # projections are computed per input row here.
+    agg_exprs = SelectExpr[]
+    for se in q.select_exprs
+        if _expr_has_aggregate(se.expr)
+            push!(agg_exprs, se)
+        else
+            for b in bindings
+                val = _ast_eval_expr(se.expr, b, g)
+                !isnothing(val) && (b[se.alias] = val)
+            end
         end
     end
 
-    # Aggregates and GROUP BY
-    if !isempty(q.aggregates) || !isempty(q.group_by)
+    # Aggregates and GROUP BY. A SELECT expression that merely *contains* an
+    # aggregate (e.g. `(MIN(?p)+MAX(?p))/2 AS ?c`) also forces grouping even when
+    # there is no bare aggregate or GROUP BY clause.
+    if !isempty(q.aggregates) || !isempty(q.group_by) || !isempty(agg_exprs)
         bindings = _ast_eval_group_aggregate(q, bindings, g)
+        # Evaluate deferred aggregate-containing SELECT expressions per group row.
+        if !isempty(agg_exprs)
+            for b in bindings
+                for se in agg_exprs
+                    val = _ast_eval_expr(se.expr, b, g)
+                    !isnothing(val) && (b[se.alias] = val)
+                end
+            end
+        end
     end
 
     @label post_aggregate
@@ -193,8 +212,10 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
         end
     end
 
-    # DISTINCT / REDUCED
-    (q.distinct || q.reduced) && (bindings = unique(bindings))
+    # DISTINCT eliminates duplicates. REDUCED *permits but does not require*
+    # duplicate elimination (SPARQL 1.1 §18.2.1); we keep all rows, which is a
+    # conforming choice and matches the W3C REDUCED reference results.
+    q.distinct && (bindings = unique(bindings))
 
     # OFFSET + LIMIT (skipped above when can_slice_first)
     if !can_slice_first
@@ -206,6 +227,7 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
 end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlAsk)
+    _ACTIVE_BASE[] = get(q.prefixes, "@base", nothing)
     !isempty(_ast_eval_patterns(g, q.patterns))
 end
 
@@ -239,6 +261,7 @@ function _is_count_star_query(q::SparqlSelect)
 end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
+    _ACTIVE_BASE[] = get(q.prefixes, "@base", nothing)
     # Push LIMIT into pattern evaluation only when there's no ORDER BY
     # (ORDER BY must see all solutions before LIMIT/OFFSET apply)
     has_order = !isempty(q.order_by)
@@ -269,6 +292,7 @@ function _ast_evaluate(g::RDFGraph, q::SparqlConstruct)
 end
 
 function _ast_evaluate(g::RDFGraph, q::SparqlDescribe)
+    _ACTIVE_BASE[] = get(q.prefixes, "@base", nothing)
     if isempty(q.terms)
         # DESCRIBE * — every triple's subject is described, so the result is
         # the whole graph; a single pass suffices (no per-subject scans).
@@ -338,9 +362,45 @@ function _hoist_filters(patterns::Vector{SparqlPattern})
     append!(nonf, fs)
 end
 
+# A blank node appearing in a query graph pattern acts as a non-distinguished
+# variable (SPARQL 1.1 §4.1.4). Rewrite each BNode term to an internal variable
+# name "_:<label>" (the existing convention for parser-generated bnode vars,
+# which are dropped from SELECT *). The transform is idempotent and only
+# allocates when a pattern actually contains a blank node.
+@inline _bn_to_var(t) = t isa BNode ? "_:" * t.id : t
+
+function _rewrite_query_bnodes(patterns::Vector{SparqlPattern})
+    any(_pattern_has_bnode, patterns) || return patterns
+    SparqlPattern[_rewrite_pattern_bnodes(p) for p in patterns]
+end
+
+_pattern_has_bnode(p::PatTriple) =
+    p.subject isa BNode || p.predicate isa BNode || p.object isa BNode
+_pattern_has_bnode(p::PatOptional) = any(_pattern_has_bnode, p.patterns)
+_pattern_has_bnode(p::PatMinus) = any(_pattern_has_bnode, p.patterns)
+_pattern_has_bnode(p::PatGraph) = any(_pattern_has_bnode, p.patterns)
+_pattern_has_bnode(p::PatUnion) = any(b -> any(_pattern_has_bnode, b), p.branches)
+_pattern_has_bnode(p::PatFilterExists) = any(_pattern_has_bnode, p.patterns)
+_pattern_has_bnode(p) = false
+
+_rewrite_pattern_bnodes(p::PatTriple) =
+    PatTriple(_bn_to_var(p.subject), _bn_to_var(p.predicate), _bn_to_var(p.object))
+_rewrite_pattern_bnodes(p::PatOptional) =
+    PatOptional(SparqlPattern[_rewrite_pattern_bnodes(x) for x in p.patterns])
+_rewrite_pattern_bnodes(p::PatMinus) =
+    PatMinus(SparqlPattern[_rewrite_pattern_bnodes(x) for x in p.patterns])
+_rewrite_pattern_bnodes(p::PatGraph) =
+    PatGraph(p.graph_term, SparqlPattern[_rewrite_pattern_bnodes(x) for x in p.patterns])
+_rewrite_pattern_bnodes(p::PatUnion) =
+    PatUnion(Vector{SparqlPattern}[SparqlPattern[_rewrite_pattern_bnodes(x) for x in b] for b in p.branches])
+_rewrite_pattern_bnodes(p::PatFilterExists) =
+    PatFilterExists(SparqlPattern[_rewrite_pattern_bnodes(x) for x in p.patterns], p.negated)
+_rewrite_pattern_bnodes(p) = p
+
 function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
                              bindings::Vector{Dict{String,Identifier}} = Dict{String,Identifier}[Dict{String,Identifier}()];
                              limit::Int = 0)
+    patterns = _rewrite_query_bnodes(patterns)
     patterns = _hoist_filters(patterns)
     # Ensure store indices are built before querying
     if g.store isa MemoryStore
@@ -1296,6 +1356,9 @@ end
 
 const _ACTIVE_DATASET = Base.RefValue{Any}(nothing)       # Union{Dataset,Nothing}
 const _ACTIVE_NAMED_FILTER = Base.RefValue{Any}(nothing)  # Union{Nothing,Set} (FROM NAMED)
+# The query's BASE IRI (from a `BASE <…>` prologue), used by IRI()/URI() to
+# resolve relative references at evaluation time. `nothing` when no BASE given.
+const _ACTIVE_BASE = Base.RefValue{Union{String,Nothing}}(nothing)
 
 # Named graphs visible to GRAPH patterns: `nothing` when no dataset is
 # active (plain RDFGraph), otherwise name => graph pairs honoring any
@@ -1675,15 +1738,18 @@ function _ast_eval_path_chain(g::RDFGraph, steps::Vector{PathExpr}, start, targe
             push!(results, (s, o))
         end
     end
-    unique(results)
+    # Fixed-length paths (sequence) yield a multiset — duplicates from distinct
+    # intermediate nodes are preserved (SPARQL 1.1 §18.4 / §9.3).
+    results
 end
 
 function _ast_eval_path(g::RDFGraph, path::PathAlternative, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+    # Alternative is a fixed-length path: duplicates across branches are kept.
     results = _PathPair[]
     for option in path.options
         append!(results, _ast_eval_path(g, option, start, target))
     end
-    unique(results)
+    results
 end
 
 function _ast_eval_path(g::RDFGraph, path::PathInverse, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
@@ -1765,6 +1831,11 @@ function _ast_eval_path_closure(g::RDFGraph, path::PathExpr, start::Union{Identi
             elseif include_zero && (isnothing(target) || target == term)
                 push!(results, (term, term))
             end
+        end
+        # A bound target is itself a valid zero-length endpoint even when it does
+        # not occur in the graph (e.g. `?s :p* :o` on an empty graph → `:o`).
+        if include_zero && target !== nothing
+            push!(results, (target, target))
         end
     end
     unique(results)
@@ -1941,8 +2012,25 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         val = _eval_arg(1)
         return _ast_str_op(val, lowercase)
     elseif name == "CONCAT"
-        parts = [let v = _eval_arg(i); isnothing(v) ? "" : v isa Literal ? v.lexical : string(v) end for i in 1:length(args)]
-        return Literal(join(parts))
+        # Each argument must be a string/langString literal (a type error
+        # otherwise → unbound). If every argument shares the same language tag
+        # the result carries it; if all are simple/xsd:string the result is a
+        # simple literal; otherwise the result is a simple literal.
+        vals = Identifier[]
+        for i in 1:length(args)
+            v = _eval_arg(i)
+            isnothing(v) && return nothing
+            _is_str_or_lang_lit(v) || return nothing
+            push!(vals, v)
+        end
+        lex = join(v.lexical for v in vals)
+        if !isempty(vals)
+            lang1 = vals[1].language
+            if lang1 !== nothing && all(v -> v.language == lang1, vals)
+                return Literal(lex; lang=lang1)
+            end
+        end
+        return Literal(lex)
     elseif name == "CONTAINS"
         s = _eval_arg(1); p = _eval_arg(2)
         (isnothing(s) || isnothing(p)) && return nothing
@@ -1958,37 +2046,55 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
     elseif name == "STRBEFORE"
         s = _eval_arg(1); p = _eval_arg(2)
         (isnothing(s) || isnothing(p)) && return nothing
-        ss = _ast_str(s); pp = _ast_str(p)
+        _str_args_compatible(s, p) || return nothing
+        ss = s.lexical; pp = p.lexical
+        isempty(pp) && return _str_like("", s)           # empty needle → "" (arg1 lang)
         idx = findfirst(pp, ss)
-        return Literal(isnothing(idx) ? "" : ss[1:first(idx)-1])
+        isnothing(idx) && return Literal("")             # not found → "" (plain)
+        return _str_like(ss[1:prevind(ss, first(idx))], s)
     elseif name == "STRAFTER"
         s = _eval_arg(1); p = _eval_arg(2)
         (isnothing(s) || isnothing(p)) && return nothing
-        ss = _ast_str(s); pp = _ast_str(p)
+        _str_args_compatible(s, p) || return nothing
+        ss = s.lexical; pp = p.lexical
+        isempty(pp) && return _str_like(ss, s)           # empty needle → arg1 unchanged
         idx = findfirst(pp, ss)
-        return Literal(isnothing(idx) ? "" : ss[last(idx)+1:end])
+        isnothing(idx) && return Literal("")             # not found → "" (plain)
+        return _str_like(ss[last(idx)+1:end], s)
     elseif name == "SUBSTR"
         val = _eval_arg(1)
         isnothing(val) && return nothing
-        s = _ast_str(val)
+        _is_str_or_lang_lit(val) || return nothing
+        s = val.lexical
         start_v = _eval_arg(2)
         isnothing(start_v) && return nothing
-        si = _ast_to_int(start_v)
-        isnothing(si) && return nothing
+        # SUBSTR uses 1-based codepoint indexing per XPath fn:substring.
+        si_f = _ast_to_numeric(start_v)
+        isnothing(si_f) && return nothing
+        si = round(Int, si_f)
+        n = length(s)  # number of codepoints
         if length(args) >= 3
             len_v = _eval_arg(3)
-            len = _ast_to_int(len_v)
-            !isnothing(len) && return Literal(s[si:min(si+len-1, lastindex(s))])
+            len_f = _ast_to_numeric(len_v)
+            isnothing(len_f) && return nothing
+            len = round(Int, len_f)
+            # XPath semantics: characters at positions >= si and < si+len.
+            lo = max(si, 1)
+            hi = min(si + len - 1, n)
+            return _str_like(_substr_chars(s, lo, hi), val)
         end
-        return Literal(s[si:end])
+        lo = max(si, 1)
+        return _str_like(_substr_chars(s, lo, n), val)
     elseif name == "REPLACE"
         val = _eval_arg(1)
         isnothing(val) && return nothing
+        _is_str_or_lang_lit(val) || return nothing
         pat = _eval_arg(2); rep = _eval_arg(3)
         (isnothing(pat) || isnothing(rep)) && return nothing
         flags = length(args) >= 4 ? _ast_str(_eval_arg(4)) : ""
         rx = _ast_make_regex(_ast_str(pat), flags)
-        return Literal(replace(_ast_str(val), rx => _ast_str(rep)))
+        rep_str = replace(_ast_str(rep), r"\$(\d)" => s"\\\1")  # $N → \N (Julia capture refs)
+        return _str_like(replace(val.lexical, rx => SubstitutionString(rep_str)), val)
     elseif name == "ENCODE_FOR_URI"
         val = _eval_arg(1)
         return isnothing(val) ? nothing : Literal(_uri_encode(_ast_str(val)))
@@ -1996,8 +2102,10 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
     # ── RDF term functions ──
     elseif name == "LANG"
         val = _eval_arg(1)
-        return isnothing(val) ? Literal("") :
-               val isa Literal && !isnothing(val.language) ? Literal(val.language) : Literal("")
+        # LANG is only defined on literals; on an IRI/blank node it is a type
+        # error (→ unbound), distinct from a literal with no tag (→ "").
+        val isa Literal || return nothing
+        return Literal(something(val.language, ""))
     elseif name == "DATATYPE"
         val = _eval_arg(1)
         val isa Literal || return nothing
@@ -2010,17 +2118,34 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         return isnothing(val.datatype) ? _XSD_STRING_DT : val.datatype
     elseif name == "IRI" || name == "URI"
         val = _eval_arg(1)
-        return isnothing(val) ? nothing : URIRef(val isa Literal ? val.lexical : val isa URIRef ? val.value : string(val))
+        isnothing(val) && return nothing
+        val isa URIRef && return val            # IRI(<iri>) is the iri unchanged
+        ref = val isa Literal ? val.lexical : string(val)
+        # Resolve a relative reference against the query's BASE, if any. A
+        # reference with a scheme (`scheme:`) is already absolute.
+        base = _ACTIVE_BASE[]
+        if base !== nothing && !occursin(r"^[A-Za-z][A-Za-z0-9+.\-]*:", ref)
+            return URIRef(_sparql_resolve_base(base, ref))
+        end
+        return URIRef(ref)
     elseif name == "BNODE"
         return isempty(args) ? BNode() : BNode(_ast_str(_eval_arg(1)))
     elseif name == "STRDT"
         val = _eval_arg(1); dt = _eval_arg(2)
         (isnothing(val) || isnothing(dt)) && return nothing
-        return Literal(_ast_str(val), datatype=(dt isa URIRef ? dt : URIRef(_ast_str(dt))))
+        # STRDT requires a simple literal (plain / xsd:string) as its first
+        # argument and an IRI as the datatype; anything else is a type error.
+        _is_string_lit(val) || return nothing
+        dt isa URIRef || return nothing
+        return Literal(val.lexical, datatype=dt)
     elseif name == "STRLANG"
         val = _eval_arg(1); lang = _eval_arg(2)
         (isnothing(val) || isnothing(lang)) && return nothing
-        return Literal(_ast_str(val), lang=_ast_str(lang))
+        _is_string_lit(val) || return nothing
+        _is_str_or_lang_lit(lang) || return nothing
+        ls = lang.lexical
+        isempty(ls) && return nothing
+        return Literal(val.lexical, lang=ls)
 
     # ── SPARQL 1.2 direction-aware functions ──
     elseif name == "LANGDIR"
@@ -2050,7 +2175,7 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         return Literal(val.lexical, lang=ls, direction=d)
     elseif name == "LANGMATCHES"
         lang = _eval_arg(1); tag = _eval_arg(2)
-        isnothing(lang) && return Literal(false)
+        (isnothing(lang) || isnothing(tag)) && return nothing  # propagate errors
         ls = lowercase(_ast_str(lang)); ts = lowercase(_ast_str(tag))
         return Literal(ts == "*" ? !isempty(ls) : (ls == ts || startswith(ls, ts * "-")))
     elseif name == "SAMETERM"
@@ -2090,14 +2215,14 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         return tn === nothing ? nothing : _numeric_literal(tn[1], abs(tn[2]))
     elseif name == "CEIL"
         tn = _typed_numeric(_eval_arg(1))
-        return tn === nothing ? nothing : _numeric_literal(tn[1], ceil(tn[2]))
+        return tn === nothing ? nothing : _rounding_literal(tn[1], ceil(tn[2]))
     elseif name == "FLOOR"
         tn = _typed_numeric(_eval_arg(1))
-        return tn === nothing ? nothing : _numeric_literal(tn[1], floor(tn[2]))
+        return tn === nothing ? nothing : _rounding_literal(tn[1], floor(tn[2]))
     elseif name == "ROUND"
         tn = _typed_numeric(_eval_arg(1))
         # Round half toward positive infinity (XPath fn:round)
-        return tn === nothing ? nothing : _numeric_literal(tn[1], floor(tn[2] + 0.5))
+        return tn === nothing ? nothing : _rounding_literal(tn[1], floor(tn[2] + 0.5))
     elseif name == "RAND"
         return Literal(rand())
 
@@ -2361,6 +2486,18 @@ function _typed_numeric(val)
     end
 end
 
+# CEIL/FLOOR/ROUND always yield an integer value; the SPARQL test suite
+# serializes a decimal-typed result with a bare integer lexical (e.g. CEIL of
+# 2.5 → "3"^^xsd:decimal, not "3.0"). For integer/float/double inputs we use
+# the normal typed lexical.
+function _rounding_literal(kind::Symbol, v::Real)
+    if kind === :decimal
+        (isnan(v) || isinf(v)) && return nothing
+        return Literal(string(Int64(v)), datatype=_XSD_DECIMAL_DT)
+    end
+    _numeric_literal(kind, v)
+end
+
 # Build a numeric literal of the given kind from a Julia number.
 function _numeric_literal(kind::Symbol, v::Real)
     if kind === :integer
@@ -2372,13 +2509,100 @@ function _numeric_literal(kind::Symbol, v::Real)
     elseif kind === :decimal
         f = Float64(v)
         (isnan(f) || isinf(f)) && return nothing
-        lex = isinteger(f) && abs(f) < 1e15 ? string(Int64(f)) * ".0" : string(f)
-        return Literal(lex, datatype=_XSD_DECIMAL_DT)
+        return Literal(_decimal_lexical(f), datatype=_XSD_DECIMAL_DT)
     elseif kind === :float
-        return Literal(_float_lexical(Float64(v)), datatype=_XSD_FLOAT_DT)
+        return Literal(_xsd_double_lexical(Float64(v)), datatype=_XSD_FLOAT_DT)
     else
-        return Literal(_float_lexical(Float64(v)), datatype=_XSD_DOUBLE)
+        return Literal(_xsd_double_lexical(Float64(v)), datatype=_XSD_DOUBLE)
     end
+end
+
+# Canonical xsd:decimal lexical form. Float64 arithmetic introduces tiny
+# representation noise (e.g. 4.1 + 7.0 → 11.100000000000001); round to the
+# shortest decimal that reproduces the value, then ensure a fractional digit.
+function _decimal_lexical(f::Float64)
+    if isinteger(f) && abs(f) < 1e15
+        return string(Int64(f)) * ".0"
+    end
+    # Round to 15 significant digits to absorb Float64 representation noise
+    # introduced by decimal arithmetic (e.g. 4.1 + 7.0 → 11.100000000000001 →
+    # "11.1"), then take the shortest round-tripping decimal of that.
+    f = _round_sig(f, 15)
+    s = string(f)  # Julia prints the shortest round-tripping decimal
+    # Julia uses scientific notation for very large/small magnitudes; xsd:decimal
+    # never does, so expand those into plain fixed-point form.
+    (occursin('e', s) || occursin('E', s)) && return _decimal_from_sci(s)
+    occursin('.', s) || (s *= ".0")
+    return s
+end
+
+# Round `f` to `n` significant decimal digits.
+function _round_sig(f::Float64, n::Int)
+    f == 0.0 && return 0.0
+    d = n - 1 - floor(Int, log10(abs(f)))
+    return round(f; digits=d)
+end
+
+# Expand a Julia scientific-notation string (e.g. "1.0e-7") into plain
+# fixed-point decimal notation ("0.0000001").
+function _decimal_from_sci(s::AbstractString)
+    m = match(r"^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$", s)
+    m === nothing && return String(s)
+    sign, intp, frac, exps = m.captures[1], m.captures[2], m.captures[3], m.captures[4]
+    frac = frac === nothing ? "" : frac
+    digits = intp * frac
+    point = length(intp) + parse(Int, exps)   # position of the decimal point
+    out = if point <= 0
+        "0." * "0"^(-point) * digits
+    elseif point >= length(digits)
+        digits * "0"^(point - length(digits)) * ".0"
+    else
+        digits[1:point] * "." * digits[point+1:end]
+    end
+    out = replace(out, r"(\.\d*?)0+$" => s"\1")
+    endswith(out, '.') && (out *= "0")
+    return sign * out
+end
+
+# Canonical xsd:double / xsd:float lexical form per the XSD spec: a mantissa
+# with exactly one digit before the point and at least one after, an "E", and
+# an integer exponent (e.g. 0.2 → "2.0E-1", 100 → "1.0E2").
+function _xsd_double_lexical(v::Float64)
+    isnan(v) && return "NaN"
+    isinf(v) && return v > 0 ? "INF" : "-INF"
+    v == 0.0 && return (1/v < 0 ? "-0.0E0" : "0.0E0")
+    neg = v < 0
+    # Start from Julia's shortest round-tripping decimal, then normalize to the
+    # required single-digit-mantissa scientific form by shifting the point.
+    base = string(abs(v))
+    digits, exp10 = _mantissa_digits_and_exp(base)
+    # `digits` is the significant digits (no point); place the point after the
+    # first digit. `exp10` is the exponent for digits[1].digits[2:] * 10^exp10.
+    frac = length(digits) > 1 ? digits[2:end] : "0"
+    frac = rstrip(frac, '0'); isempty(frac) && (frac = "0")
+    (neg ? "-" : "") * string(digits[1]) * "." * frac * "E" * string(exp10)
+end
+
+# Decompose a plain/scientific decimal string into (significant-digit string,
+# exponent) such that value == d[1].d[2:] × 10^exp.
+function _mantissa_digits_and_exp(s::AbstractString)
+    m = match(r"^(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$", s)
+    m === nothing && return ("0", 0)
+    intp = m.captures[1]
+    frac = m.captures[2] === nothing ? "" : m.captures[2]
+    e = m.captures[3] === nothing ? 0 : parse(Int, m.captures[3])
+    alldig = intp * frac
+    # exponent of the first overall digit
+    firstexp = length(intp) - 1 + e
+    # strip leading zeros, adjusting the exponent
+    i = findfirst(c -> c != '0', alldig)
+    if i === nothing
+        return ("0", 0)
+    end
+    firstexp -= (i - 1)
+    sig = rstrip(alldig[i:end], '0')
+    isempty(sig) && (sig = "0")
+    return (sig, firstexp)
 end
 
 # Plain numeric value of a literal (no kind), or `nothing`. Plain literals
@@ -2403,7 +2627,47 @@ end
 
 function _ast_str_op(val, f)
     isnothing(val) && return nothing
-    Literal(f(val isa Literal ? val.lexical : string(val)))
+    lex = f(val isa Literal ? val.lexical : string(val))
+    # UCASE/LCASE preserve the language tag (and base direction) of the argument.
+    if val isa Literal && val.language !== nothing
+        return Literal(lex; lang=val.language, direction=val.direction)
+    end
+    Literal(lex)
+end
+
+# Build a string-result literal that inherits the language tag / direction of
+# the source argument `src` (used by SUBSTR, STRBEFORE, STRAFTER, REPLACE).
+# Per SPARQL 1.1, these functions propagate arg1's language tag.
+function _str_like(lex::AbstractString, src)
+    if src isa Literal && src.language !== nothing
+        return Literal(lex; lang=src.language, direction=src.direction)
+    end
+    Literal(lex)
+end
+
+# Codepoint-based substring: characters at 1-based positions `lo..hi`
+# (inclusive), clamped to the string. Empty if the range is empty.
+function _substr_chars(s::AbstractString, lo::Int, hi::Int)
+    n = length(s)
+    lo = max(lo, 1); hi = min(hi, n)
+    hi < lo && return ""
+    String(collect(s)[lo:hi])
+end
+
+# True if `val` is a plain/xsd:string or language-tagged literal (the argument
+# kinds the SPARQL string built-ins accept). Numeric/boolean/date literals,
+# URIs and blank nodes are type errors.
+@inline _is_str_or_lang_lit(val) =
+    val isa Literal && (val.language !== nothing ||
+                        val.datatype === nothing || val.datatype == _XSD_STRING_DT)
+
+# SPARQL "argument compatibility" for STRBEFORE/STRAFTER/REPLACE-style pairs:
+# arg1 and arg2 are compatible if arg2 is a plain string, or both carry the
+# same language tag. Returns false (→ type error) otherwise.
+function _str_args_compatible(arg1, arg2)
+    (_is_str_or_lang_lit(arg1) && _is_str_or_lang_lit(arg2)) || return false
+    arg2.language === nothing && return true
+    arg1.language == arg2.language
 end
 
 # A "string literal" for comparison purposes: simple literal or xsd:string
@@ -2489,13 +2753,7 @@ function _ast_value_cmp(a, b)
     end
     ca = _datetime_class(a); cb = _datetime_class(b)
     if ca !== nothing && ca === cb
-        try
-            da = ca === :date ? parse_xsd_date(a.lexical) : parse_xsd_datetime(a.lexical)
-            db = cb === :date ? parse_xsd_date(b.lexical) : parse_xsd_datetime(b.lexical)
-            return da < db ? -1 : da > db ? 1 : 0
-        catch
-            return nothing
-        end
+        return _xsd_temporal_cmp(a.lexical, b.lexical, ca)
     end
     nothing
 end
@@ -2510,14 +2768,84 @@ function _ast_term_eq(a, b)
     if a isa Literal && b isa Literal
         c = _ast_value_cmp(a, b)
         c !== nothing && return c == 0
-        # Same-language lang-tagged literals differ only in lexical form →
-        # definitely different values.
-        if a.language !== nothing && a.language == b.language && a.direction == b.direction
+        # Not value-comparable and not the same term.
+        # A language-tagged literal occupies its own (per-tag) value space that
+        # is disjoint from every other kind of literal; since a==b already ruled
+        # out an identical term, such a pair is "known different" → FALSE.
+        if a.language !== nothing || b.language !== nothing
             return false
         end
-        return nothing  # incomparable typed pair → type error
+        # Classify each operand by value space. Two literals in *different*
+        # recognized spaces are known-different → FALSE. Within the *same* space
+        # an indeterminate value comparison (e.g. timezoned vs untimezoned date)
+        # is a genuine type error → nothing. An unknown datatype is also a type
+        # error.
+        ka = _value_class(a); kb = _value_class(b)
+        (ka === :unknown || kb === :unknown) && return nothing
+        ka == kb ? nothing : false
+    else
+        false
     end
-    false
+end
+
+# Classify a (non-language) literal into a value space for RDFterm-equal:
+# `:string`, `:numeric`, `:boolean`, a datetime class (`:date`/`:dateTime`/…),
+# or `:unknown` (unrecognized datatype or ill-formed lexical).
+function _value_class(l::Literal)
+    dt = l.datatype
+    (dt === nothing || dt == _XSD_STRING_DT) && return :string
+    _typed_numeric(l) !== nothing && return :numeric
+    _is_boolean_lit(l) && return :boolean
+    dc = _datetime_class(l)
+    dc !== nothing && return dc
+    return :unknown
+end
+
+# Compare two xsd:date / xsd:dateTime lexical forms by value, applying the XSD
+# rule that an operand with no timezone spans the ±14h indeterminacy window.
+# Returns -1/0/1, or `nothing` when the order is indeterminate (a type error,
+# e.g. `2006-08-23` vs `2006-08-23Z`).
+function _xsd_temporal_cmp(lex_a::AbstractString, lex_b::AbstractString, cls::Symbol)
+    pa = _temporal_instant(lex_a, cls); pa === nothing && return nothing
+    pb = _temporal_instant(lex_b, cls); pb === nothing && return nothing
+    (ta, has_a) = pa
+    (tb, has_b) = pb
+    if has_a == has_b
+        return ta < tb ? -1 : ta > tb ? 1 : 0
+    end
+    # Exactly one is timezoned: the untimezoned operand could lie anywhere in a
+    # ±14h band. If that whole band falls on one side, the order is determinate;
+    # otherwise it is indeterminate.
+    band = Dates.Hour(14)
+    if has_a   # b is untimezoned → compare a against b's band
+        ta < tb - band && return -1
+        ta > tb + band && return 1
+        return nothing
+    else       # a is untimezoned
+        ta + band < tb && return -1
+        ta - band > tb && return 1
+        return nothing
+    end
+end
+
+# Parse a date/dateTime lexical into (DateTime-in-UTC, has_timezone). Dates are
+# treated as the midnight instant. Returns `nothing` on a malformed lexical.
+function _temporal_instant(lex::AbstractString, cls::Symbol)
+    try
+        base, tzmin = _split_tz(strip(lex))
+        if cls === :date
+            d = parse_xsd_date(base)
+            dt = DateTime(d)
+            tzmin !== nothing && tzmin != 0 && (dt -= Dates.Minute(tzmin))
+            return (dt, tzmin !== nothing)
+        else
+            # parse_xsd_datetime already applies the timezone offset.
+            dt = parse_xsd_datetime(lex)
+            return (dt, tzmin !== nothing)
+        end
+    catch
+        return nothing
+    end
 end
 
 function _ast_eval_comparison(op::Symbol, left, right)
@@ -2567,17 +2895,41 @@ end
 _ast_values_equal(a, b) = _ast_term_eq(a, b) === true
 
 function _ast_make_regex(pattern::String, flags::String)
+    # The XPath/SPARQL `q` flag (RDF 1.1 / XPath 3) treats the whole pattern as a
+    # literal string: all metacharacters lose their special meaning. Apply it by
+    # escaping the pattern before compiling. (When combined with `i`, the `i`
+    # flag still applies.)
+    pat = 'q' in flags ? _regex_quote(pattern) : pattern
     opts = ""
     'i' in flags && (opts *= "i")
     's' in flags && (opts *= "s")
     'm' in flags && (opts *= "m")
-    Regex(pattern, opts)
+    'x' in flags && (opts *= "x")  # extended / ignore-whitespace mode
+    try
+        return Regex(pat, opts)
+    catch
+        # Some XSD/XPath regex constructs aren't valid PCRE; treat such a pattern
+        # as one that never matches rather than erroring out the whole query.
+        return r"(?!)"
+    end
+end
+
+# Escape every PCRE metacharacter so the pattern matches itself literally.
+function _regex_quote(s::AbstractString)
+    out = IOBuffer()
+    for c in s
+        c in ('\\','^','$','.','[',']','|','(',')','?','*','+','{','}','-') && write(out, '\\')
+        write(out, c)
+    end
+    String(take!(out))
 end
 
 function _uri_encode(s::String)
     buf = IOBuffer()
     for c in s
-        if isletter(c) || isdigit(c) || c in ('-', '_', '.', '~')
+        # Per SPARQL ENCODE_FOR_URI only the ASCII unreserved set is preserved;
+        # non-ASCII letters/digits must be percent-encoded.
+        if (c in 'A':'Z') || (c in 'a':'z') || (c in '0':'9') || c in ('-', '_', '.', '~')
             write(buf, c)
         else
             for b in codeunits(string(c))
@@ -2603,7 +2955,11 @@ function _ast_datetime_accessor(func::String, val)
         elseif func == "DAY";     return Literal(Dates.day(dt))
         elseif func == "HOURS";   return Literal(Dates.hour(dt))
         elseif func == "MINUTES"; return Literal(Dates.minute(dt))
-        elseif func == "SECONDS"; return Literal(Dates.second(dt))
+        elseif func == "SECONDS"
+            # SECONDS returns an xsd:decimal (including any fractional part).
+            sec = Dates.second(dt); ms = Dates.millisecond(dt)
+            return ms == 0 ? Literal(string(sec), datatype=_XSD_DECIMAL_DT) :
+                             _numeric_literal(:decimal, sec + ms / 1000)
         elseif func == "TZ"
             # TZ returns the timezone designator as a simple literal ("" if none)
             return Literal(_extract_tz(s))
@@ -2888,6 +3244,10 @@ function _ast_eval_group_aggregate(q::SparqlSelect, bindings, g)
             v = _ast_compute_aggregate(sa.agg, Dict{String,Identifier}[])
             v === nothing || (result[sa.alias] = v)
         end
+        for se in q.select_exprs
+            _expr_has_aggregate(se.expr) &&
+                _ast_stash_agg_values!(se.expr, result, Dict{String,Identifier}[])
+        end
         if !isnothing(q.having)
             having_row = copy(result)
             _ast_stash_agg_values!(q.having, having_row, Dict{String,Identifier}[])
@@ -2933,6 +3293,11 @@ function _ast_eval_group_aggregate(q::SparqlSelect, bindings, g)
             v = _ast_compute_aggregate(sa.agg, group)
             v === nothing || (result[sa.alias] = v)
         end
+        # Stash aggregate values used by computed SELECT expressions
+        # (e.g. `(MIN(?p)+MAX(?p))/2 AS ?c`) so they can be evaluated post-group.
+        for se in q.select_exprs
+            _expr_has_aggregate(se.expr) && _ast_stash_agg_values!(se.expr, result, group)
+        end
         # HAVING filter — compute aggregate values in having expression context
         if !isnothing(q.having)
             having_row = copy(result)
@@ -2950,6 +3315,9 @@ end
 function _streaming_aggregate_safe(q::SparqlSelect)
     !isnothing(q.having) && return false
     isempty(q.aggregates) && return false
+    # Computed SELECT expressions containing aggregates (e.g.
+    # `(MIN(?p)+MAX(?p))/2 AS ?c`) need full per-group bindings; not streamable.
+    any(se -> _expr_has_aggregate(se.expr), q.select_exprs) && return false
     for sa in q.aggregates
         agg = sa.agg
         # COUNT DISTINCT, SUM DISTINCT, AVG DISTINCT supported via Set-based accumulator
@@ -3612,16 +3980,24 @@ function _agg_finalize(acc, agg::ExprAggregate)
         if acc isa Tuple{Float64,Int,Int,Bool}
             s, c, kr, err = acc
             err && return nothing
-            c == 0 && return nothing
+            c == 0 && return Literal(0)  # AVG over empty group = 0 (per spec)
             return _numeric_literal(_promote_kind(_rank_kind(kr), :decimal), s / c)
         end
         s, c = acc::Tuple{Float64,Int}  # legacy encoded accumulator
-        return c == 0 ? nothing : Literal(s / c)
+        return c == 0 ? Literal(0) : Literal(s / c)
     elseif f == "MIN" || f == "MAX" || f == "SAMPLE"
         return acc === nothing ? nothing : acc::Identifier
     end
     return nothing
 end
+
+# True if an expression tree contains an aggregate (COUNT/SUM/AVG/...).
+_expr_has_aggregate(e::ExprAggregate) = true
+_expr_has_aggregate(e::ExprBinaryOp) = _expr_has_aggregate(e.left) || _expr_has_aggregate(e.right)
+_expr_has_aggregate(e::ExprUnaryOp) = _expr_has_aggregate(e.arg)
+_expr_has_aggregate(e::ExprFunctionCall) = any(_expr_has_aggregate, e.args)
+_expr_has_aggregate(e::ExprIn) = _expr_has_aggregate(e.expr) || any(_expr_has_aggregate, e.values)
+_expr_has_aggregate(e) = false
 
 """Recursively find ExprAggregate nodes and stash their computed values in the binding."""
 function _ast_stash_agg_values!(expr::ExprAggregate, binding::Dict{String,Identifier}, group)
@@ -3725,7 +4101,7 @@ function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Id
         s === :error && return nothing
         return _numeric_literal(s[1], s[2])
     elseif agg.func == "AVG"
-        isempty(vals) && return nothing  # empty group → unbound
+        isempty(vals) && return Literal(0)  # AVG over empty group = 0 (per spec)
         s = _typed_sum(vals)
         s === :error && return nothing
         kind = _promote_kind(s[1], :decimal)  # integer avg promotes to decimal
