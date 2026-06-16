@@ -144,7 +144,7 @@ function _parse_dataset(path::String, base::String)
     if fmt isa NQuadsFormat
         RDFLib.parse_nquads!(ds, txt)
     elseif fmt isa TriGFormat
-        RDFLib.parse_trig!(ds, txt)
+        RDFLib.parse_trig!(ds, txt; base = base)
     else
         g = _parse_graph(path, base)
         for t in g

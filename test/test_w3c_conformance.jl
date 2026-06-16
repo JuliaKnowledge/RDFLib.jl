@@ -21,7 +21,7 @@ const _W3C_SUITES = [
     ("Turtle",          "rdf/rdf11/rdf-turtle/manifest.ttl",                313),
     ("N-Triples",       "rdf/rdf11/rdf-n-triples/manifest.ttl",             70),
     ("N-Quads",         "rdf/rdf11/rdf-n-quads/manifest.ttl",               87),
-    ("TriG",            "rdf/rdf11/rdf-trig/manifest.ttl",                  343),
+    ("TriG",            "rdf/rdf11/rdf-trig/manifest.ttl",                  354),
     ("RDF/XML",         "rdf/rdf11/rdf-xml/manifest.ttl",                   166),
     ("SPARQL 1.1 query","sparql/sparql11/manifest-sparql11-query.ttl",      296),
     ("SPARQL 1.1 update","sparql/sparql11/manifest-sparql11-update.ttl",    148),

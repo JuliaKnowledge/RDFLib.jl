@@ -290,7 +290,7 @@ RDFLib.jl is tested against the **official W3C [rdf-tests](https://github.com/w3
 | N-Triples | 70 / 70 (100%) |
 | N-Quads | 87 / 87 (100%) |
 | RDF/XML | 166 / 166 (100%) |
-| TriG | 343 / 356 (96%) |
+| TriG | 354 / 356 (99%) |
 | SPARQL 1.1 Query | 296 / 328 (90%) |
 | SPARQL 1.1 Update | 148 / 157 (94%) |
 | SPARQL 1.0 | 444 / 482 (92%) |
