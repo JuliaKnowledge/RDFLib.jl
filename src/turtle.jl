@@ -299,11 +299,15 @@ end
 
 # ─── Term formatting ────────────────────────────────────────────────
 
+# Full `<IRI>` form, escaping characters the IRIREF grammar forbids
+# (controls, space, `<>"{}|^\``, backslash) as \uXXXX so the output re-parses.
+_turtle_iri(u::URIRef) = string("<", _nt_escape_iri(u.value), ">")
+
 function _turtle_format_node(ctx::_TurtleSerContext, u::URIRef)
     # Use cached qname if available
     cached = get(ctx.qname_cache, u.value, missing)
     if cached !== missing
-        return cached !== nothing ? cached : n3(u)
+        return cached !== nothing ? cached : _turtle_iri(u)
     end
     # Try prefixed name
     try
@@ -311,14 +315,14 @@ function _turtle_format_node(ctx::_TurtleSerContext, u::URIRef)
         escaped = _escape_pn_local(localname)
         if escaped === nothing
             ctx.qname_cache[u.value] = nothing
-            return n3(u)
+            return _turtle_iri(u)
         end
         result = string(prefix, ":", escaped)
         ctx.qname_cache[u.value] = result
         return result
     catch
         ctx.qname_cache[u.value] = nothing
-        return n3(u)
+        return _turtle_iri(u)
     end
 end
 
@@ -600,22 +604,54 @@ function _parse_sparql_base!(p::_TurtleParser)
     p.base = uri
 end
 
+# PNAME_NS ::= PN_PREFIX? ':'
+# PN_PREFIX ::= PN_CHARS_BASE ( ( PN_CHARS | '.' )* PN_CHARS )?
+# Internal dots are allowed; a trailing dot is not (it would belong to the
+# terminator). Dots are buffered and only flushed when another PN_CHARS follows.
 function _parse_prefix_name!(p::_TurtleParser)
     buf = IOBuffer()
+    # An empty prefix (":") is valid.
+    if _peek(p) == ':'
+        p.pos = nextind(p.input, p.pos)
+        return ""
+    end
+    c = _peek(p)
+    (c !== nothing && _is_pn_chars_base(c)) ||
+        throw(ArgumentError("Invalid prefix name at position $(p.pos)"))
+    write(buf, c)
+    p.pos = nextind(p.input, p.pos)
+    pending_dots = 0
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
         if c == ':'
             p.pos = nextind(p.input, p.pos)
+            # A pending trailing dot before ':' is illegal (PN_PREFIX must end
+            # in PN_CHARS), e.g. "e.g.:".
+            pending_dots > 0 &&
+                throw(ArgumentError("Prefix name may not end with '.' at position $(p.pos)"))
             return String(take!(buf))
-        elseif c in (' ', '\t', '\n', '\r')
-            throw(ArgumentError("Unexpected whitespace in prefix name at position $(p.pos)"))
-        else
+        elseif c == '.'
+            pending_dots += 1
+            p.pos = nextind(p.input, p.pos)
+        elseif _is_pn_chars(c)
+            while pending_dots > 0
+                write(buf, '.'); pending_dots -= 1
+            end
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
+        else
+            throw(ArgumentError("Invalid character $(repr(c)) in prefix name at position $(p.pos)"))
         end
     end
     throw(ArgumentError("Unexpected end of input in prefix name"))
 end
+
+# Characters forbidden to appear (raw or via \u/\U escape) inside an IRIREF
+# per the Turtle/N-Triples grammar:
+#   #x00-#x20, '<', '>', '"', '{', '}', '|', '^', '`', '\'
+_iri_char_forbidden(c::Char) =
+    UInt32(c) <= 0x20 || c == '<' || c == '>' || c == '"' ||
+    c == '{' || c == '}' || c == '|' || c == '^' || c == '`' || c == '\\'
 
 function _parse_iriref!(p::_TurtleParser)
     _consume!(p, '<')
@@ -632,7 +668,16 @@ function _parse_iriref!(p::_TurtleParser)
             return uri
         elseif c == '\\'
             p.pos = nextind(p.input, p.pos)
-            write(buf, _parse_iri_escape!(p))
+            ec = _parse_iri_escape!(p)
+            # A UCHAR escape may encode IRI characters the grammar forbids only
+            # in raw form (e.g. | → '|'), but it must not encode characters
+            # that would make the IRI structurally invalid: control characters,
+            # space, '<' or '>' (W3C turtle-eval-bad-01/02/03).
+            (UInt32(ec) <= 0x20 || ec == '<' || ec == '>') &&
+                throw(ArgumentError("Illegal character $(repr(ec)) (from escape) in IRI reference at position $(p.pos)"))
+            write(buf, ec)
+        elseif _iri_char_forbidden(c)
+            throw(ArgumentError("Illegal character $(repr(c)) in IRI reference at position $(p.pos)"))
         else
             write(buf, c)
             p.pos = nextind(p.input, p.pos)
@@ -654,12 +699,19 @@ function _parse_triples!(p::_TurtleParser)
     c = _peek(p)
     c === nothing && return
 
+    # A blankNodePropertyList ('[...]') subject may stand alone (its nested
+    # predicateObjectList already produced triples); every other subject form
+    # requires a non-empty predicateObjectList.
+    subject_is_bnpl = c == '['
+
     # Parse subject
     subject = _parse_subject!(p)
     _skip_ws_and_comments!(p)
 
     # Parse predicate-object list
-    _parse_predicate_object_list!(p, subject)
+    n = _parse_predicate_object_list!(p, subject)
+    (n == 0 && !subject_is_bnpl) &&
+        throw(ArgumentError("Subject has no predicate-object list at position $(p.pos)"))
 
     _skip_ws_and_comments!(p)
     _consume!(p, '.')
@@ -682,6 +734,7 @@ function _parse_subject!(p::_TurtleParser)
 end
 
 function _parse_predicate_object_list!(p::_TurtleParser, subject::Node)
+    npreds = 0
     while true
         _skip_ws_and_comments!(p)
         c = _peek(p)
@@ -690,12 +743,17 @@ function _parse_predicate_object_list!(p::_TurtleParser, subject::Node)
         predicate = _parse_verb!(p)
         _skip_ws_and_comments!(p)
         _parse_object_list!(p, subject, predicate)
+        npreds += 1
 
         _skip_ws_and_comments!(p)
         c = _peek(p)
         if c == ';'
-            p.pos = nextind(p.input, p.pos)
-            _skip_ws_and_comments!(p)
+            # Consume one or more consecutive ';' separators (the grammar's
+            # `(';' (verb objectList)?)*` permits repeated/empty `;;`).
+            while _peek(p) == ';'
+                p.pos = nextind(p.input, p.pos)
+                _skip_ws_and_comments!(p)
+            end
             # Check for trailing semicolon before . or ]
             c2 = _peek(p)
             (c2 === nothing || c2 == '.' || c2 == ']') && break
@@ -703,6 +761,7 @@ function _parse_predicate_object_list!(p::_TurtleParser, subject::Node)
             break
         end
     end
+    npreds
 end
 
 function _parse_verb!(p::_TurtleParser)
@@ -922,21 +981,12 @@ end
 # ─── Prefixed name parsing ─────────────────────────────────────────
 
 function _parse_prefixed_name!(p::_TurtleParser)
-    buf = IOBuffer()
-    # Read prefix part (before :)
-    while p.pos <= lastindex(p.input)
-        c = p.input[p.pos]
-        if c == ':'
-            p.pos = nextind(p.input, p.pos)
-            break
-        elseif c in (' ', '\t', '\n', '\r', '.', ';', ',', ')', ']', '}')
-            throw(ArgumentError("Invalid prefixed name at position $(p.pos)"))
-        else
-            write(buf, c)
-            p.pos = nextind(p.input, p.pos)
-        end
-    end
-    prefix = String(take!(buf))
+    # Read prefix part (PN_PREFIX) up to and including the ':'. PN_PREFIX allows
+    # internal '.', but a '.' immediately before ':' is illegal.
+    c = _peek(p)
+    (c !== nothing && (_is_pn_chars_base(c) || c == ':')) ||
+        throw(ArgumentError("Invalid prefixed name at position $(p.pos)"))
+    prefix = _parse_prefix_name!(p)
 
     # Read local part (after :) following the PN_LOCAL grammar
     localname = _parse_pn_local!(p)
@@ -1069,24 +1119,28 @@ function _parse_long_string!(p::_TurtleParser)
     quote_char = p.input[p.pos]
     _consume_str!(p, string(quote_char, quote_char, quote_char))
     buf = IOBuffer()
+    # STRING_LITERAL_LONG ::= '"""' ( ('"' | '""')? (CHAR | ECHAR | UCHAR) )* '"""'
+    # The string closes at the FIRST run of exactly three quotes. A run of one
+    # or two quotes is content only when followed by a non-closing character;
+    # four or more quotes at the close is a syntax error (stray quote).
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
         if c == quote_char
-            # Longest match: in a run of n >= 3 quotes, the final three close
-            # the string and any preceding quotes belong to the content.
             run = 0
             while p.pos <= lastindex(p.input) && p.input[p.pos] == quote_char
                 run += 1
                 p.pos = nextind(p.input, p.pos)
             end
-            if run >= 3
-                for _ in 1:(run - 3)
+            if run == 3
+                return String(take!(buf))
+            elseif run < 3
+                # 1-2 quotes belong to content (they must be followed by a
+                # non-quote, which the loop will handle on the next iteration).
+                for _ in 1:run
                     write(buf, quote_char)
                 end
-                return String(take!(buf))
-            end
-            for _ in 1:run
-                write(buf, quote_char)
+            else
+                throw(ArgumentError("Stray quote(s) before end of long string literal at position $(p.pos)"))
             end
         elseif c == '\\'
             p.pos = nextind(p.input, p.pos)
@@ -1117,7 +1171,7 @@ function _parse_escape_char!(p::_TurtleParser)
     elseif c == 'U'
         return _parse_hex_escape!(p, 8)
     else
-        return c
+        throw(ArgumentError("Invalid string escape '\\$c' at position $(p.pos)"))
     end
 end
 
@@ -1152,26 +1206,30 @@ function _parse_iri_escape!(p::_TurtleParser)
     throw(ArgumentError("Invalid escape '\\$c' in IRI reference; only \\u and \\U are allowed"))
 end
 
+# LANGTAG ::= '@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)*  (the leading '@' is already
+# consumed by the caller). The primary subtag must be one or more ASCII
+# letters; each '-' subtag must be one or more ASCII alphanumerics.
 function _parse_lang_tag!(p::_TurtleParser)
+    _ascii_letter(c) = ('a' <= c <= 'z') || ('A' <= c <= 'Z')
+    _ascii_alnum(c) = _ascii_letter(c) || ('0' <= c <= '9')
     buf = IOBuffer()
-    while p.pos <= lastindex(p.input)
-        c = p.input[p.pos]
-        if isletter(c) || isdigit(c)
-            write(buf, c)
+    first = _peek(p)
+    (first !== nothing && _ascii_letter(first)) ||
+        throw(ArgumentError("Invalid language tag (must start with a letter) at position $(p.pos)"))
+    while p.pos <= lastindex(p.input) && _ascii_letter(p.input[p.pos])
+        write(buf, p.input[p.pos])
+        p.pos = nextind(p.input, p.pos)
+    end
+    while p.pos <= lastindex(p.input) && p.input[p.pos] == '-'
+        # A '-' continues the tag only when followed by an alphanumeric subtag;
+        # "--" introduces a base direction (handled by the caller).
+        next_pos = nextind(p.input, p.pos)
+        (next_pos <= lastindex(p.input) && _ascii_alnum(p.input[next_pos])) || break
+        write(buf, '-')
+        p.pos = next_pos
+        while p.pos <= lastindex(p.input) && _ascii_alnum(p.input[p.pos])
+            write(buf, p.input[p.pos])
             p.pos = nextind(p.input, p.pos)
-        elseif c == '-'
-            # A '-' only continues the tag when followed by an alphanumeric
-            # subtag; "--" introduces a base direction (handled by the caller).
-            next_pos = nextind(p.input, p.pos)
-            if next_pos <= lastindex(p.input) &&
-               (isletter(p.input[next_pos]) || isdigit(p.input[next_pos]))
-                write(buf, c)
-                p.pos = nextind(p.input, p.pos)
-            else
-                break
-            end
-        else
-            break
         end
     end
     String(take!(buf))
@@ -1179,10 +1237,20 @@ end
 
 # ─── Numeric literal parsing ───────────────────────────────────────
 
+# Turtle numeric grammar:
+#   INTEGER  ::= [+-]? [0-9]+
+#   DECIMAL  ::= [+-]? [0-9]* '.' [0-9]+
+#   DOUBLE   ::= [+-]? ( [0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT
+#                        | [0-9]+ EXPONENT )
+#   EXPONENT ::= [eE] [+-]? [0-9]+
+# Note that a DOUBLE may have a '.' followed by zero digits (e.g. `123.E+1`)
+# provided an EXPONENT follows; a DECIMAL requires at least one digit after '.'.
 function _parse_numeric_literal!(p::_TurtleParser)
     buf = IOBuffer()
     has_dot = false
     has_exp = false
+    digits_before_dot = 0
+    digits_after_dot = 0
 
     # Optional sign
     c = _peek(p)
@@ -1192,44 +1260,70 @@ function _parse_numeric_literal!(p::_TurtleParser)
     end
 
     # Integer part
-    while p.pos <= lastindex(p.input)
-        c = p.input[p.pos]
-        if isdigit(c)
-            write(buf, c)
-            p.pos = nextind(p.input, p.pos)
-        elseif c == '.' && !has_dot && !has_exp
-            # Check it's not a statement terminator
-            next_pos = nextind(p.input, p.pos)
-            if next_pos <= lastindex(p.input) && isdigit(p.input[next_pos])
-                has_dot = true
-                write(buf, c)
-                p.pos = next_pos
-            else
-                break
-            end
-        elseif (c == 'e' || c == 'E') && !has_exp
-            has_exp = true
-            write(buf, c)
-            p.pos = nextind(p.input, p.pos)
-            # Optional sign after exponent
-            c2 = _peek(p)
-            if c2 == '+' || c2 == '-'
-                write(buf, c2)
+    while p.pos <= lastindex(p.input) && isdigit(p.input[p.pos])
+        write(buf, p.input[p.pos])
+        digits_before_dot += 1
+        p.pos = nextind(p.input, p.pos)
+    end
+
+    # Fractional part: '.' is consumed only when it is part of the number,
+    # i.e. when followed by a digit (DECIMAL/DOUBLE) or by an exponent marker
+    # after at least one integer digit (DOUBLE like `123.E+1`). Otherwise the
+    # '.' is the statement terminator and is left unconsumed.
+    if _peek(p) == '.'
+        next_pos = nextind(p.input, p.pos)
+        nextc = next_pos <= lastindex(p.input) ? p.input[next_pos] : '\0'
+        if isdigit(nextc) || ((nextc == 'e' || nextc == 'E') && digits_before_dot > 0)
+            has_dot = true
+            write(buf, '.')
+            p.pos = next_pos
+            while p.pos <= lastindex(p.input) && isdigit(p.input[p.pos])
+                write(buf, p.input[p.pos])
+                digits_after_dot += 1
                 p.pos = nextind(p.input, p.pos)
             end
-        else
-            break
         end
+    end
+
+    # Exponent
+    c = _peek(p)
+    if c == 'e' || c == 'E'
+        has_exp = true
+        write(buf, c)
+        p.pos = nextind(p.input, p.pos)
+        c2 = _peek(p)
+        if c2 == '+' || c2 == '-'
+            write(buf, c2)
+            p.pos = nextind(p.input, p.pos)
+        end
+        # EXPONENT requires at least one digit.
+        ndig = 0
+        while p.pos <= lastindex(p.input) && isdigit(p.input[p.pos])
+            write(buf, p.input[p.pos])
+            ndig += 1
+            p.pos = nextind(p.input, p.pos)
+        end
+        ndig == 0 &&
+            throw(ArgumentError("Invalid numeric literal: exponent has no digits at position $(p.pos)"))
     end
 
     lexical = String(take!(buf))
     xsd = "http://www.w3.org/2001/XMLSchema#"
 
+    # Validate digit requirements per production.
     if has_exp
+        # DOUBLE: need digits before-dot or after-dot (the [0-9]+ in each branch).
+        (digits_before_dot + digits_after_dot == 0) &&
+            throw(ArgumentError("Invalid numeric literal '$lexical'"))
         Literal(lexical, datatype=URIRef(xsd * "double"))
     elseif has_dot
+        # DECIMAL: requires at least one digit after the dot.
+        digits_after_dot == 0 &&
+            throw(ArgumentError("Invalid decimal literal '$lexical'"))
         Literal(lexical, datatype=URIRef(xsd * "decimal"))
     else
+        digits_before_dot == 0 &&
+            throw(ArgumentError("Invalid integer literal '$lexical'"))
         Literal(lexical, datatype=URIRef(xsd * "integer"))
     end
 end

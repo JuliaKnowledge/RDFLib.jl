@@ -625,16 +625,24 @@ end
         @test Triple(EX("s"), URIRef("http://example.org/a#p"), EX("o")) in g3
     end
 
-    @testset "long string greedy termination" begin
-        g = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\" .")
-        @test Triple(EX("s"), EX("p"), Literal("a\"")) in g
+    @testset "long string termination per W3C grammar" begin
+        # A long string closes at the FIRST run of three quotes; a stray quote
+        # adjacent to the closing delimiter is a syntax error (W3C
+        # turtle-syntax-bad-string-06/07), not "greedy" content.
+        @test_throws ArgumentError RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\" .")
+        @test_throws ArgumentError RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\"\" .")
 
-        g2 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\"\" .")
-        @test Triple(EX("s"), EX("p"), Literal("a\"\"")) in g2
-
-        # quotes inside content
+        # 1-2 quotes inside content (each followed by a non-quote) are kept.
         g3 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"b\"\"\" .")
         @test Triple(EX("s"), EX("p"), Literal("a\"\"b")) in g3
+
+        # An escaped quote may sit right before the closing delimiter.
+        g4 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\\\"\"\"\" .")
+        @test Triple(EX("s"), EX("p"), Literal("a\"")) in g4
+
+        # Empty long string.
+        g5 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"\"\"\" .")
+        @test Triple(EX("s"), EX("p"), Literal("")) in g5
     end
 
     @testset "truncated and invalid unicode escapes" begin
@@ -666,10 +674,11 @@ end
     @testset "serializer falls back to full IRI for unrepresentable local names" begin
         g = RDFGraph()
         bind!(g, "ex", EX)
-        # '|' cannot appear in a PN_LOCAL even escaped
+        # '|' cannot appear in a PN_LOCAL even escaped, and is also forbidden
+        # raw inside an IRIREF, so the serializer must emit it as a \u escape.
         add!(g, Triple(URIRef("http://example.org/a|b"), EX("p"), Literal("v")))
         ttl = serialize(g, TurtleFormat())
-        @test contains(ttl, "<http://example.org/a|b>")
+        @test contains(ttl, "<http://example.org/a\\u007Cb>")
         g2 = parse_rdf(ttl, TurtleFormat())
         @test length(g2) == 1
         @test Triple(URIRef("http://example.org/a|b"), EX("p"), Literal("v")) in g2
@@ -754,5 +763,77 @@ end
         # annotations attach to the quoted triple term
         @test Triple(tt, EX("certainty"), Literal("0.9", datatype=xsd_decimal)) in g
         @test Triple(tt, EX("source"), EX("doc")) in g
+    end
+
+    # ── W3C strictness regressions ────────────────────────────────────
+    @testset "IRIREF forbidden characters rejected" begin
+        P = "<http://a/s> <http://a/p> "
+        # Raw forbidden characters (space, <, >, ", {, }, |, ^, `, control).
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/ x> <http://a/p> <http://a/o> .")
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/{abc}> <http://a/p> <http://a/o> .")
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/a^b> <http://a/p> <http://a/o> .")
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/a`b> <http://a/p> <http://a/o> .")
+        # \u escapes that decode to structurally-invalid characters.
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/x\\u0020y> <http://a/p> <http://a/o> .")
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/x\\u003Cy> <http://a/p> <http://a/o> .")
+        @test_throws ArgumentError RDFLib.parse_turtle("<http://a/x\\u003Ey> <http://a/p> <http://a/o> .")
+        # A \u escape encoding a char only forbidden RAW (|) is accepted.
+        g = RDFLib.parse_turtle("<http://a/x\\u007Cy> <http://a/p> <http://a/o> .")
+        @test Triple(URIRef("http://a/x|y"), URIRef("http://a/p"), URIRef("http://a/o")) in g
+    end
+
+    @testset "bad language tags rejected" begin
+        P = "@prefix ex: <http://example.org/> . ex:s ex:p "
+        @test_throws ArgumentError RDFLib.parse_turtle(P * "\"x\"@1 .")
+        @test_throws ArgumentError RDFLib.parse_turtle(P * "\"x\"@ .")
+        # valid tag with numeric subtag still parses
+        g = RDFLib.parse_turtle(P * "\"x\"@en-US .")
+        @test Literal("x", lang="en-US") in [t.object for t in g]
+    end
+
+    @testset "invalid string escapes rejected" begin
+        P = "@prefix ex: <http://example.org/> . ex:s ex:p "
+        @test_throws ArgumentError RDFLib.parse_turtle(P * "\"a\\zb\" .")
+        @test_throws ArgumentError RDFLib.parse_turtle(P * "\"a\\xb\" .")
+    end
+
+    @testset "invalid numeric literals rejected, valid edge forms accepted" begin
+        P = "<http://a/s> <http://a/p> "
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        @test_throws ArgumentError RDFLib.parse_turtle(P * "123e .")
+        @test_throws ArgumentError RDFLib.parse_turtle(P * "123e+ .")
+        # `123.E+1` is a valid DOUBLE (dot followed directly by exponent).
+        g = RDFLib.parse_turtle(P * "123.E+1 .")
+        @test Triple(URIRef("http://a/s"), URIRef("http://a/p"),
+                     Literal("123.E+1", datatype=URIRef(xsd * "double"))) in g
+        # `1.E0` likewise.
+        g2 = RDFLib.parse_turtle(P * "1.e0 .")
+        @test Literal("1.e0", datatype=URIRef(xsd * "double")) in [t.object for t in g2]
+    end
+
+    @testset "prefixed names with internal dots / extra PN_CHARS" begin
+        # Internal dots in PN_PREFIX (turtle-syntax-ns-dots).
+        g = RDFLib.parse_turtle("@prefix e.g: <http://x/> . e.g:s e.g:p e.g:o .")
+        @test Triple(URIRef("http://x/s"), URIRef("http://x/p"), URIRef("http://x/o")) in g
+    end
+
+    @testset "repeated semicolons in predicate list" begin
+        # repeated_semis_not_at_end / struct-04
+        g = RDFLib.parse_turtle(
+            "<http://a/s> <http://a/p1> <http://a/o1> ;; <http://a/p2> <http://a/o2> .")
+        @test Triple(URIRef("http://a/s"), URIRef("http://a/p1"), URIRef("http://a/o1")) in g
+        @test Triple(URIRef("http://a/s"), URIRef("http://a/p2"), URIRef("http://a/o2")) in g
+        # repeated_semis_at_end / struct-05
+        g2 = RDFLib.parse_turtle("<http://a/s> <http://a/p1> <http://a/o1> ;; .")
+        @test Triple(URIRef("http://a/s"), URIRef("http://a/p1"), URIRef("http://a/o1")) in g2
+    end
+
+    @testset "subject with empty predicate-object list rejected" begin
+        # N3 path-style input that is invalid Turtle (turtle-syntax-bad-n3-extras).
+        @test_throws ArgumentError RDFLib.parse_turtle("@prefix : <http://x/> . :a.:b.:c .")
+        @test_throws ArgumentError RDFLib.parse_turtle("@prefix : <http://x/> . :x .")
+        # A blankNodePropertyList subject may legitimately stand alone.
+        g = RDFLib.parse_turtle("@prefix : <http://x/> . [ :p :o ] .")
+        @test length(g) == 1
     end
 end

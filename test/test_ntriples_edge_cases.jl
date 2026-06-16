@@ -636,4 +636,15 @@ using RDFLib
             @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
         end
     end
+
+    @testset "relative IRIs rejected (no base in N-Triples)" begin
+        # nt-syntax-bad-uri-06/07/08/09: relative IRIs are illegal.
+        @test_throws ArgumentError parse_rdf("<s> <http://a/p> <http://a/o> .", NTriplesFormat())
+        @test_throws ArgumentError parse_rdf("<http://a/s> <p> <http://a/o> .", NTriplesFormat())
+        @test_throws ArgumentError parse_rdf("<http://a/s> <http://a/p> <o> .", NTriplesFormat())
+        @test_throws ArgumentError parse_rdf("<http://a/s> <http://a/p> \"x\"^^<dt> .", NTriplesFormat())
+        # Absolute IRIs still parse.
+        g = parse_rdf("<http://a/s> <http://a/p> <http://a/o> .", NTriplesFormat())
+        @test Triple(URIRef("http://a/s"), URIRef("http://a/p"), URIRef("http://a/o")) in g
+    end
 end

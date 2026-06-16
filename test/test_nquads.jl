@@ -127,4 +127,14 @@ using RDFLib
         ds = parse_nquads(nq)
         @test length(ds) == 1
     end
+
+    @testset "relative IRIs rejected (no base in N-Quads)" begin
+        # nq-syntax-bad-uri-01 and the inherited nt-syntax-bad-uri-06..09.
+        @test_throws ArgumentError parse_nquads("<http://a/s> <http://a/p> <http://a/o> <g> .")
+        @test_throws ArgumentError parse_nquads("<s> <http://a/p> <http://a/o> .")
+        @test_throws ArgumentError parse_nquads("<http://a/s> <http://a/p> <http://a/o> <g>.")
+        # Absolute IRIs (including the graph label) still parse.
+        ds = parse_nquads("<http://a/s> <http://a/p> <http://a/o> <http://a/g> .")
+        @test length(ds) == 1
+    end
 end

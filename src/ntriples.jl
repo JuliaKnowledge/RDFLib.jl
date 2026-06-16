@@ -219,6 +219,28 @@ function _nt_read_uchar!(c::_NTCursor, kind::Char)
     Char(v)
 end
 
+# An absolute IRI must begin with a scheme: ALPHA *( ALPHA / DIGIT / "+" /
+# "-" / "." ) ":".  N-Triples and N-Quads forbid relative IRIs.
+function _nt_is_absolute_iri(s::AbstractString)
+    isempty(s) && return false
+    i = firstindex(s)
+    c = s[i]
+    (('A' <= c <= 'Z') || ('a' <= c <= 'z')) || return false
+    i = nextind(s, i)
+    while i <= lastindex(s)
+        c = s[i]
+        if c == ':'
+            return true
+        elseif ('A' <= c <= 'Z') || ('a' <= c <= 'z') || ('0' <= c <= '9') ||
+               c == '+' || c == '-' || c == '.'
+            i = nextind(s, i)
+        else
+            return false
+        end
+    end
+    false
+end
+
 "Parse an IRIREF; the cursor is positioned at `<`. Decodes \\u/\\U escapes."
 function _nt_parse_iriref!(c::_NTCursor)
     _nt_next!(c)  # consume '<'
@@ -227,7 +249,10 @@ function _nt_parse_iriref!(c::_NTCursor)
         _nt_eof(c) && _nt_error(c, "unterminated IRI reference")
         ch = _nt_next!(c)
         if ch == '>'
-            return URIRef(String(take!(buf)))
+            iri = String(take!(buf))
+            _nt_is_absolute_iri(iri) ||
+                _nt_error(c, "relative IRI <$iri> is not allowed (an absolute IRI with a scheme is required)")
+            return URIRef(iri)
         elseif ch == '\\'
             _nt_eof(c) && _nt_error(c, "truncated escape sequence in IRI reference")
             esc = _nt_next!(c)
