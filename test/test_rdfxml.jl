@@ -216,7 +216,10 @@ using RDFLib
         @test t.predicate == EX("content")
         @test t.object isa Literal
         @test t.object.datatype == URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral")
-        @test t.object.lexical == "<b>bold</b> and text"
+        # parseType="Literal" is canonicalized: in-scope namespace declarations
+        # are inlined on the apex element (RDF/XML XMLLiteral canonical form).
+        @test t.object.lexical ==
+            "<b xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:ex=\"http://example.org/\">bold</b> and text"
     end
 
     @testset "literal whitespace preserved verbatim" begin
@@ -424,5 +427,114 @@ line2</ex:multi>
         for t in g1
             @test t in g2
         end
+    end
+
+    @testset "property attributes on a property element" begin
+        # An empty property element with rdf:resource and an extra property
+        # attribute: the property attribute describes the resource node.
+        xml = """<?xml version="1.0"?>
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+          xmlns:random="http://random.ioctl.org/#">
+        <rdf:Description rdf:about="http://random.ioctl.org/#bar">
+          <random:someProperty rdf:resource="http://random.ioctl.org/#foo"
+                random:prop2="baz" />
+        </rdf:Description>
+        </rdf:RDF>"""
+        g = parse_rdf(xml, RDFXMLFormat())
+        bar = URIRef("http://random.ioctl.org/#bar")
+        foo = URIRef("http://random.ioctl.org/#foo")
+        someprop = URIRef("http://random.ioctl.org/#someProperty")
+        prop2 = URIRef("http://random.ioctl.org/#prop2")
+        @test length(g) == 2
+        @test Triple(bar, someprop, foo) in g
+        @test Triple(foo, prop2, Literal("baz")) in g
+    end
+
+    @testset "property attributes with no resource → fresh bnode object" begin
+        xml = """<?xml version="1.0"?>
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:eg="http://example.org/">
+          <rdf:Description rdf:about="http://example.org/doc">
+            <eg:Creator eg:named="Dürst"/>
+          </rdf:Description>
+        </rdf:RDF>"""
+        g = parse_rdf(xml, RDFXMLFormat())
+        @test length(g) == 2
+        creator = collect(objects(g, URIRef("http://example.org/doc"),
+                                  URIRef("http://example.org/Creator")))
+        @test length(creator) == 1
+        @test creator[1] isa BNode
+        @test collect(objects(g, creator[1], URIRef("http://example.org/named"))) ==
+            [Literal("Dürst")]
+    end
+
+    @testset "negative syntax: forbidden RDF names as property elements" begin
+        for bad in ("Description", "RDF", "ID", "about", "bagID", "parseType",
+                    "resource", "nodeID", "aboutEach", "aboutEachPrefix")
+            xml = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+              <rdf:Description rdf:about="http://example.org/a">
+                <rdf:$bad rdf:resource="http://example.org/b"/>
+              </rdf:Description>
+            </rdf:RDF>"""
+            @test_throws Exception parse_rdf(xml, RDFXMLFormat())
+        end
+    end
+
+    @testset "negative syntax: rdf:ID / rdf:nodeID must be valid NCNames" begin
+        # colon is not allowed in an NCName
+        xml1 = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:eg="http://example.org/">
+          <rdf:Description><eg:prop rdf:ID="q:name"/></rdf:Description>
+        </rdf:RDF>"""
+        @test_throws Exception parse_rdf(xml1, RDFXMLFormat())
+        # combining mark is not allowed as the first NCName character
+        xml2 = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:eg="http://example.org/">
+          <rdf:Description rdf:ID="&#x301;bb" eg:prop="val"/>
+        </rdf:RDF>"""
+        @test_throws Exception parse_rdf(xml2, RDFXMLFormat())
+        # nodeID with a colon on a property element
+        xml3 = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:eg="http://example.org/">
+          <rdf:Description><eg:prop rdf:nodeID="q:name"/></rdf:Description>
+        </rdf:RDF>"""
+        @test_throws Exception parse_rdf(xml3, RDFXMLFormat())
+    end
+
+    @testset "negative syntax: incompatible attribute combinations" begin
+        # rdf:nodeID and rdf:resource together
+        xml1 = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:eg="http://example.org/">
+          <rdf:Description>
+            <eg:prop rdf:nodeID="a" rdf:resource="http://example.org/"/>
+          </rdf:Description>
+        </rdf:RDF>"""
+        @test_throws Exception parse_rdf(xml1, RDFXMLFormat())
+        # rdf:parseType="Literal" and rdf:resource together
+        xml2 = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+          xmlns:random="http://random.ioctl.org/#">
+          <rdf:Description rdf:about="http://random.ioctl.org/#bar">
+            <random:someProperty rdf:parseType="Literal"
+              rdf:resource="http://random.ioctl.org/#foo"/>
+          </rdf:Description>
+        </rdf:RDF>"""
+        @test_throws Exception parse_rdf(xml2, RDFXMLFormat())
+    end
+
+    @testset "parseType=Literal canonicalizes apex namespaces" begin
+        xml = """<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:eg="http://example.org/">
+          <rdf:Description rdf:about="http://www.example.org/a">
+            <eg:prop rdf:parseType="Literal"><br /></eg:prop>
+          </rdf:Description>
+        </rdf:RDF>"""
+        g = parse_rdf(xml, RDFXMLFormat())
+        @test length(g) == 1
+        t = first(g)
+        @test t.object isa Literal
+        @test t.object.datatype ==
+            URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral")
+        @test t.object.lexical ==
+            "<br xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:eg=\"http://example.org/\"></br>"
     end
 end

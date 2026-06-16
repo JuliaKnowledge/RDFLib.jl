@@ -83,14 +83,24 @@ function _local_path(manifest_dir::String, iri::String)
     normpath(joinpath(manifest_dir, s))
 end
 
-# The base IRI a parser should assume for a given action file.
-function _base_iri(assumed_base, action_iri::String)
+# The base IRI a parser should assume for a given action file. mf:assumedTestBase
+# names the IRI of the manifest's own directory, so the correct base for an
+# action is assumedTestBase + (action path relative to the manifest directory) —
+# preserving any subdirectory the action sits in.
+function _base_iri(assumed_base, manifest_dir::String, action_iri::String)
+    local_action = startswith(action_iri, "file://") ? action_iri[8:end] :
+                   occursin("://", action_iri) ? action_iri : normpath(joinpath(manifest_dir, action_iri))
     if assumed_base !== nothing
         b = assumed_base isa URIRef ? assumed_base.value : string(assumed_base)
-        fn = occursin("://", action_iri) ? last(split(action_iri, '/')) : action_iri
-        return endswith(b, "/") ? b * fn : b * "/" * fn
+        endswith(b, "/") || (b *= "/")
+        rel = try
+            relpath(local_action, manifest_dir)
+        catch
+            basename(local_action)
+        end
+        return b * replace(rel, '\\' => '/')
     end
-    return action_iri
+    return startswith(action_iri, "file://") ? action_iri : "file://" * local_action
 end
 
 # ─── parsing helpers by extension ───────────────────────────────────
@@ -361,11 +371,11 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
         ds = Dataset()
         if data_iri !== nothing
             dp = _local_path(manifest_dir, data_iri.value)
-            for t in _parse_graph(dp, _base_iri(assumed_base, data_iri.value)); add!(ds, t); end
+            for t in _parse_graph(dp, _base_iri(assumed_base, manifest_dir, data_iri.value)); add!(ds, t); end
         end
         for gd in gdata
             gp = _local_path(manifest_dir, gd.value)
-            for t in _parse_graph(gp, _base_iri(assumed_base, gd.value))
+            for t in _parse_graph(gp, _base_iri(assumed_base, manifest_dir, gd.value))
                 add!(ds, t, URIRef(gd.value))
             end
         end
@@ -376,7 +386,7 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
     end
 
     rpath = _local_path(manifest_dir, result.value)
-    kind, payload = _parse_expected_result(rpath, _base_iri(assumed_base, result.value))
+    kind, payload = _parse_expected_result(rpath, _base_iri(assumed_base, manifest_dir, result.value))
 
     if kind == :ask
         ok = (actual === payload) || (actual isa Bool && actual == payload)
@@ -426,12 +436,12 @@ function _run_update_eval(g_manifest, name, id, cls, action_node, result_node, m
 
     ds = Dataset()
     if data_iri !== nothing
-        for t in _parse_graph(_local_path(manifest_dir, data_iri.value), _base_iri(assumed_base, data_iri.value)); add!(ds, t); end
+        for t in _parse_graph(_local_path(manifest_dir, data_iri.value), _base_iri(assumed_base, manifest_dir, data_iri.value)); add!(ds, t); end
     end
     for gd in gdata
         fileiri, name = _graphdata_entry(g_manifest, gd, UT)
         isempty(fileiri) && continue
-        for t in _parse_graph(_local_path(manifest_dir, fileiri), _base_iri(assumed_base, fileiri))
+        for t in _parse_graph(_local_path(manifest_dir, fileiri), _base_iri(assumed_base, manifest_dir, fileiri))
             add!(ds, t, URIRef(name))
         end
     end
@@ -443,12 +453,12 @@ function _run_update_eval(g_manifest, name, id, cls, action_node, result_node, m
     rgdata = _objs(g_manifest, result_node, URIRef(UT * "graphData"))
     expds = Dataset()
     if rdata_iri !== nothing
-        for t in _parse_graph(_local_path(manifest_dir, rdata_iri.value), _base_iri(assumed_base, rdata_iri.value)); add!(expds, t); end
+        for t in _parse_graph(_local_path(manifest_dir, rdata_iri.value), _base_iri(assumed_base, manifest_dir, rdata_iri.value)); add!(expds, t); end
     end
     for gd in rgdata
         fileiri, name = _graphdata_entry(g_manifest, gd, UT)
         isempty(fileiri) && continue
-        for t in _parse_graph(_local_path(manifest_dir, fileiri), _base_iri(assumed_base, fileiri))
+        for t in _parse_graph(_local_path(manifest_dir, fileiri), _base_iri(assumed_base, manifest_dir, fileiri))
             add!(expds, t, URIRef(name))
         end
     end
@@ -531,33 +541,33 @@ function _dispatch_entry(g, entry, manifest_dir, assumed_base)
         if cls in ("TestTrigEval", "TestTriGEval", "TestNQuadsPositiveC")
             apath = _local_path(manifest_dir, action.value)
             rpath = _local_path(manifest_dir, result.value)
-            return _run_quad_eval(name, id, cls, apath, rpath, _base_iri(assumed_base, action.value))
+            return _run_quad_eval(name, id, cls, apath, rpath, _base_iri(assumed_base, manifest_dir, action.value))
 
         # RDF eval tests producing triples (Turtle/N-Triples/RDF-XML)
         elseif cls in ("TestTurtleEval", "TestXMLEval", "TestNTriplesPositiveC")
             apath = _local_path(manifest_dir, action.value)
             rpath = _local_path(manifest_dir, result.value)
-            return _run_rdf_eval(name, id, cls, apath, rpath, _base_iri(assumed_base, action.value))
+            return _run_rdf_eval(name, id, cls, apath, rpath, _base_iri(assumed_base, manifest_dir, action.value))
 
         # quad positive syntax → parse into a Dataset
         elseif cls in ("TestTrigPositiveSyntax", "TestTriGPositiveSyntax", "TestNQuadsPositiveSyntax")
             apath = _local_path(manifest_dir, action.value)
-            return _run_positive_syntax_quad(name, id, cls, apath, _base_iri(assumed_base, action.value))
+            return _run_positive_syntax_quad(name, id, cls, apath, _base_iri(assumed_base, manifest_dir, action.value))
 
         elseif cls in ("TestTurtlePositiveSyntax", "TestNTriplesPositiveSyntax")
             apath = _local_path(manifest_dir, action.value)
-            return _run_positive_syntax(name, id, cls, apath, _base_iri(assumed_base, action.value))
+            return _run_positive_syntax(name, id, cls, apath, _base_iri(assumed_base, manifest_dir, action.value))
 
         # quad negative syntax → parse into a Dataset, must throw
         elseif cls in ("TestTrigNegativeSyntax", "TestTriGNegativeSyntax", "TestNQuadsNegativeSyntax",
                        "TestTrigNegativeEval", "TestTriGNegativeEval")
             apath = _local_path(manifest_dir, action.value)
-            return _run_negative_quad(name, id, cls, apath, _base_iri(assumed_base, action.value))
+            return _run_negative_quad(name, id, cls, apath, _base_iri(assumed_base, manifest_dir, action.value))
 
         elseif cls in ("TestTurtleNegativeSyntax", "TestNTriplesNegativeSyntax", "TestXMLNegativeSyntax",
                        "TestTurtleNegativeEval", "TestTurtleNegatitveSyntax")
             apath = _local_path(manifest_dir, action.value)
-            return _run_negative(name, id, cls, apath, _base_iri(assumed_base, action.value))
+            return _run_negative(name, id, cls, apath, _base_iri(assumed_base, manifest_dir, action.value))
 
         # SPARQL
         elseif cls == "QueryEvaluationTest"
