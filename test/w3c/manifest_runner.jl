@@ -253,7 +253,9 @@ function _decode_result_set(g)
     if b !== nothing
         return (:ask, b isa Literal && b.lexical == "true")
     end
-    rows = Dict{String,Identifier}[]
+    # Collect (index, row); rs:index (when present) records the ORDER BY position.
+    indexed = Tuple{Int,Dict{String,Identifier}}[]
+    any_index = false
     for sol in _objs(g, rsnode, URIRef(rs * "solution"))
         row = Dict{String,Identifier}()
         for bnd in _objs(g, sol, URIRef(rs * "binding"))
@@ -262,8 +264,15 @@ function _decode_result_set(g)
             (var === nothing || val === nothing) && continue
             row[var isa Literal ? var.lexical : string(var)] = val
         end
-        push!(rows, row)
+        idxobj = _obj(g, sol, URIRef(rs * "index"))
+        idx = idxobj isa Literal ? something(tryparse(Int, idxobj.lexical), typemax(Int)) : typemax(Int)
+        idxobj !== nothing && (any_index = true)
+        push!(indexed, (idx, row))
     end
+    # Honor rs:index ordering when the expected result records it (ORDER BY tests):
+    # put rows in solution order so the query's ORDER BY comparison is stable.
+    any_index && sort!(indexed; by = first)
+    rows = Dict{String,Identifier}[r for (_, r) in indexed]
     (:select, rows)
 end
 
