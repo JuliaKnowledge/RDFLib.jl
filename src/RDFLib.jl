@@ -197,6 +197,9 @@ include("querybuilder.jl")
 # Full-Text Search Index
 include("textindex.jl")
 
+# RDF Dataset Canonicalization (RDFC-1.0)
+include("canonicalization.jl")
+
 export
     # Term types
     Identifier, Node, IdentifiedNode,
@@ -431,6 +434,9 @@ export
     OTTRParamType, OTTRTypeUnknown, OTTRTypeIRI, OTTRTypeLiteral, OTTRTypeList,
     parse_ottr, add_template!, ottr_map!,
     # SHACL/Datalog integration
-    rdf_validate, rdf_reason!
+    rdf_validate, rdf_reason!,
+
+    # RDF Dataset Canonicalization (RDFC-1.0)
+    rdf_canonicalize, rdfc10, canonical_bnode_labels
 
 end # module
