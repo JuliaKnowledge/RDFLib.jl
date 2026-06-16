@@ -156,54 +156,251 @@ end
 
 # ─── result-set comparison (SELECT/ASK) ─────────────────────────────
 
-# Canonicalize a row to a comparable, blank-node-blind key. Blank nodes are
-# replaced by a structural placeholder so two result sets that differ only in
-# bnode labels still compare equal in the common (≤ trivial bnode) cases.
-function _row_key(row::Dict{String,Identifier})
+function _row_sig(row::Dict{String,Identifier})
     parts = String[]
     for k in sort(collect(keys(row)))
-        v = row[k]
-        token = v isa BNode ? "_:bnode" : _term_token(v)
-        push!(parts, k * "=" * token)
+        push!(parts, k * "=" * _term_token(row[k]))
     end
-    join(parts, "")
+    join(parts, "")
 end
 
-function _term_token(v::Identifier)
+# Collect the blank nodes appearing in a row (recursing into TripleTerms).
+function _row_bnodes!(acc::Set{BNode}, v)
+    if v isa BNode
+        push!(acc, v)
+    elseif v isa TripleTerm
+        _row_bnodes!(acc, v.subject); _row_bnodes!(acc, v.object)
+    end
+end
+function _rows_bnodes(rows)
+    acc = Set{BNode}()
+    for r in rows, v in values(r); _row_bnodes!(acc, v); end
+    acc
+end
+
+# Whether a term contains a blank node (directly or inside a TripleTerm).
+_has_bnode(v) = v isa BNode ? true :
+                v isa TripleTerm ? (_has_bnode(v.subject) || _has_bnode(v.object)) :
+                false
+
+# Apply a bnode->bnode mapping to a term (recursing into TripleTerms).
+function _map_term(v, m::Dict{BNode,BNode})
+    if v isa BNode
+        return get(m, v, v)
+    elseif v isa TripleTerm
+        return TripleTerm(_map_term(v.subject, m), v.predicate, _map_term(v.object, m))
+    else
+        return v
+    end
+end
+
+const _EMPTYM = Dict{BNode,BNode}()
+
+# Exact (value-identity) token for a row once its bnodes are concrete labels.
+function _row_exact(row::Dict{String,Identifier}, m::Dict{BNode,BNode})
+    parts = String[]
+    for k in sort(collect(keys(row)))
+        push!(parts, k * "=" * _term_concrete(_map_term(row[k], m)))
+    end
+    join(parts, "")
+end
+function _term_concrete(v)
+    if v isa BNode
+        return "B:" * v.id
+    elseif v isa TripleTerm
+        return string("T:<<", _term_concrete(v.subject), " ",
+                      _term_token(v.predicate), " ", _term_concrete(v.object), ">>")
+    else
+        return _term_token(v)
+    end
+end
+
+function _term_token(v)
     if v isa URIRef
         return "U:" * v.value
     elseif v isa BNode
-        return "B"
-    else  # Literal
-        lex = v.lexical
-        dt = RDFLib.datatype(v)
+        return "B:?"
+    elseif v isa TripleTerm
+        return string("T:<<", _term_token(v.subject), " ",
+                      _term_token(v.predicate), " ", _term_token(v.object), ">>")
+    elseif v isa Literal
+        lex  = v.lexical
+        dt   = RDFLib.datatype(v)
         lang = v.language
-        dts = dt === nothing ? "" : dt.value
-        return string("L:", lex, "|", dts, "|", lang === nothing ? "" : lang)
+        dir  = RDFLib.direction(v)
+        dts  = dt === nothing ? "" : dt.value
+        return string("L:", lex, "|", dts, "|",
+                      lang === nothing ? "" : lang, "|",
+                      dir === nothing ? "" : dir)
+    else
+        return string("X:", v)
     end
 end
 
 _bag(rows) = begin
     d = Dict{String,Int}()
     for r in rows
-        k = _row_key(r)
+        k = _row_sig(r)
         d[k] = get(d, k, 0) + 1
     end
     d
 end
 
-function _compare_select(actual::Vector{Dict{String,Identifier}}, expected::Vector{Dict{String,Identifier}}, ordered::Bool)
+# Maximum bnode-assignment search states before falling back to signature bags.
+const _ISO_CAP = 200_000
+
+# Decide whether two row sequences are equal under SOME bijection of the blank
+# nodes of `actual` onto the blank nodes of `expected`. When `ordered`, the
+# bijection must additionally make the rows match position-by-position; when
+# unordered, it must make the multisets of rows equal.
+# Returns (ok::Bool, capped::Bool); capped means the search hit _ISO_CAP and the
+# documented signature-bag fallback was used.
+function _iso_rows(actual, expected, ordered::Bool)
+    length(actual) == length(expected) || return (false, false)
+    ba = _rows_bnodes(actual); be = _rows_bnodes(expected)
+    length(ba) == length(be) || return (false, false)
+
+    if isempty(ba)   # no blank nodes anywhere -> direct value comparison
+        if ordered
+            for i in eachindex(actual)
+                _row_exact(actual[i], _EMPTYM) == _row_exact(expected[i], _EMPTYM) || return (false, false)
+            end
+            return (true, false)
+        else
+            return (_bag(actual) == _bag(expected), false)
+        end
+    end
+
+    bav = collect(ba); bev = collect(be)
+    counter = Ref(0); capped = Ref(false)
+    m = Dict{BNode,BNode}(); used = Set{BNode}()
+    ok = _assign(1, bav, bev, actual, expected, ordered, m, used, counter, capped)
+    if capped[]
+        if ordered
+            for i in eachindex(actual)
+                _row_sig(actual[i]) == _row_sig(expected[i]) || return (false, true)
+            end
+            return (true, true)
+        else
+            return (_bag(actual) == _bag(expected), true)
+        end
+    end
+    (ok, false)
+end
+
+# Backtracking assignment of actual-bnode bav[i] to some unused expected-bnode.
+function _assign(i, bav, bev, actual, expected, ordered, m, used, counter, capped)
+    if i > length(bav)
+        return _rows_match(actual, expected, ordered, m)
+    end
+    for cand in bev
+        cand in used && continue
+        counter[] += 1
+        if counter[] > _ISO_CAP
+            capped[] = true
+            return false
+        end
+        m[bav[i]] = cand
+        push!(used, cand)
+        _assign(i + 1, bav, bev, actual, expected, ordered, m, used, counter, capped) && return true
+        delete!(used, cand); delete!(m, bav[i])
+        capped[] && return false
+    end
+    return false
+end
+
+function _rows_match(actual, expected, ordered, m)
     if ordered
-        length(actual) == length(expected) || return (false, "row count $(length(actual)) vs $(length(expected))")
         for i in eachindex(actual)
-            _row_key(actual[i]) == _row_key(expected[i]) || return (false, "row $i differs")
+            _row_exact(actual[i], m) == _row_exact(expected[i], _EMPTYM) || return false
+        end
+        return true
+    else
+        da = Dict{String,Int}(); db = Dict{String,Int}()
+        for r in actual;   k = _row_exact(r, m);       da[k] = get(da, k, 0) + 1; end
+        for r in expected; k = _row_exact(r, _EMPTYM); db[k] = get(db, k, 0) + 1; end
+        return da == db
+    end
+end
+
+function _compare_select(actual::Vector{Dict{String,Identifier}}, expected::Vector{Dict{String,Identifier}}, ordered::Bool)
+    ok, capped = _iso_rows(actual, expected, ordered)
+    ok && return (true, "")
+    note = capped ? " [bnode search capped; signature-bag fallback]" : ""
+    return (false, ordered ?
+        "ordered results differ ($(length(actual)) vs $(length(expected)) rows)$note" :
+        "result bags differ ($(length(actual)) vs $(length(expected)) rows)$note")
+end
+
+# TSV preserves term types, but the TSV result format writes bare numeric/boolean
+# tokens (e.g. `4`, `5.5`, `1.0e6`, `true`) which our TSV parser surfaces as
+# plain literals with no datatype. Re-type such bare tokens to their canonical
+# xsd datatype so a value-faithful query result compares equal.
+const _XSD = "http://www.w3.org/2001/XMLSchema#"
+function _retype_numeric(v)
+    v isa Literal || return v
+    v.language === nothing || return v
+    dt = RDFLib.datatype(v)
+    lex = v.lexical
+    if dt === nothing
+        # Bare TSV token → infer its canonical datatype.
+        ndt = occursin(r"^[+-]?\d+$", lex)                              ? _XSD * "integer" :
+              occursin(r"^[+-]?(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+$", lex) ? _XSD * "double"  :
+              occursin(r"^[+-]?(\d*\.\d+|\d+\.\d*)$", lex)              ? _XSD * "decimal" :
+              (lex == "true" || lex == "false")                        ? _XSD * "boolean" :
+              nothing
+        ndt === nothing && return v
+        return Literal(lex; datatype = URIRef(ndt))
+    end
+    # Already typed: normalize the lexical of float/double so that case-only
+    # exponent differences (1.0E6 vs 1.0e6) compare equal by value.
+    if dt isa URIRef && (dt.value == _XSD * "double" || dt.value == _XSD * "float")
+        f = tryparse(Float64, lex)
+        f === nothing || return Literal(string(f); datatype = dt)
+    end
+    return v
+end
+_retype_row(r::Dict{String,Identifier}) =
+    Dict{String,Identifier}(k => _retype_numeric(v) for (k, v) in r)
+function _compare_tsv(actual, expected, ordered::Bool)
+    _compare_select([_retype_row(r) for r in actual],
+                    [_retype_row(r) for r in expected], ordered)
+end
+
+# Lenient CSV comparison: CSV loses datatypes and bnode labels, so compare the
+# STRING value of each cell only (per the W3C CSVResultFormatTest design).
+function _csv_cell(v)
+    v isa URIRef  ? v.value :
+    v isa BNode   ? "_:bnode" :
+    v isa Literal ? v.lexical :
+    v isa TripleTerm ? string("<<", _csv_cell(v.subject), " ",
+                              v.predicate.value, " ", _csv_cell(v.object), ">>") :
+    string(v)
+end
+function _row_csvsig(row::Dict{String,Identifier})
+    parts = String[]
+    for k in sort(collect(keys(row)))
+        v = get(row, k, nothing)
+        push!(parts, k * "=" * (v === nothing ? "" : _csv_cell(v)))
+    end
+    join(parts, "")
+end
+function _compare_csv(actual, expected, ordered::Bool)
+    length(actual) == length(expected) ||
+        return (false, "row count $(length(actual)) vs $(length(expected))")
+    if ordered
+        for i in eachindex(actual)
+            _row_csvsig(actual[i]) == _row_csvsig(expected[i]) || return (false, "row $i differs (csv)")
         end
         return (true, "")
     else
-        _bag(actual) == _bag(expected) ? (true, "") :
-            (false, "result bags differ ($(length(actual)) vs $(length(expected)) rows)")
+        da = Dict{String,Int}(); db = Dict{String,Int}()
+        for r in actual;   k = _row_csvsig(r); da[k] = get(da, k, 0) + 1; end
+        for r in expected; k = _row_csvsig(r); db[k] = get(db, k, 0) + 1; end
+        return da == db ? (true, "") : (false, "csv result bags differ")
     end
 end
+
 
 # Parse an expected SPARQL result file (.srx/.srj/.csv/.tsv) → (kind, payload)
 # kind ∈ :select (Vector rows), :ask (Bool), :graph (RDFGraph)
@@ -292,20 +489,112 @@ end
 
 # ─── per-test runners ───────────────────────────────────────────────
 
-# Pragmatic dataset isomorphism: default graphs isomorphic, same set of named
-# graph names, each named graph pairwise isomorphic. (Does not model a single
-# blank-node bijection shared across graphs; rare cross-graph-bnode tests that
-# fail spuriously are recorded in the known-failures list.)
-function _dataset_iso(a::Dataset, b::Dataset)
-    isomorphic(get_graph(a), get_graph(b)) || return false
-    na = Dict{String,RDFGraph}(); nb = Dict{String,RDFGraph}()
-    for (n, g) in graphs(a); n === nothing || (na[string(n)] = g); end
-    for (n, g) in graphs(b); n === nothing || (nb[string(n)] = g); end
-    keys(na) == keys(nb) || return false
-    for (k, g) in na
-        isomorphic(g, nb[k]) || return false
+# Dataset (RDF 1.1) isomorphism with a SINGLE blank-node bijection shared across
+# the default graph and all named graphs, AND across the graph NAMES themselves
+# (a blank-node-named graph matches up to the bijection). Implemented by
+# flattening the dataset to a set of quads (s,p,o,gname) — gname=nothing for the
+# default graph — and searching for a consistent bnode mapping.
+#
+# Fast paths: if no blank nodes appear anywhere (incl. graph names) we compare
+# the quad sets directly; otherwise we color-refinement-bucket the blank nodes
+# (via the per-graph machinery) and, failing a cheap match, backtrack over the
+# whole-dataset bnode bijection (capped). When all graph names are ground we
+# defer to the library's per-graph `isomorphic`, which already shares a bijection
+# within each graph (sufficient since RDF datasets cannot share bnodes across
+# graph boundaries when the names are ground IRIs — each graph is independent).
+
+# All blank nodes anywhere in a dataset (S/O/gname; TripleTerms recursed).
+function _dataset_bnodes(ds::Dataset)
+    acc = Set{BNode}()
+    for (n, g) in graphs(ds)
+        n isa BNode && push!(acc, n)
+        for t in g
+            _row_bnodes!(acc, t.subject); _row_bnodes!(acc, t.object)
+        end
     end
-    true
+    acc
+end
+
+# Flatten a dataset to a Vector of (s,p,o,gname) tuples.
+function _dataset_quads(ds::Dataset)
+    out = Tuple{Node,URIRef,Identifier,Union{Nothing,Node}}[]
+    for (n, g) in graphs(ds)
+        for t in g
+            push!(out, (t.subject, t.predicate, t.object, n))
+        end
+    end
+    out
+end
+
+_map_node(v, m::Dict{BNode,BNode}) = v === nothing ? nothing : _map_term(v, m)
+
+# Quad signature under a bnode mapping (concrete; bnodes -> their mapped label).
+function _quad_sig(q, m::Dict{BNode,BNode})
+    s, p, o, gn = q
+    gns = gn === nothing ? "·default·" : _term_concrete(_map_node(gn, m))
+    string(_term_concrete(_map_term(s, m)), " | ", p.value, " | ",
+           _term_concrete(_map_term(o, m)), " | ", gns)
+end
+
+function _dataset_quadbag(qs, m::Dict{BNode,BNode})
+    d = Dict{String,Int}()
+    for q in qs; k = _quad_sig(q, m); d[k] = get(d, k, 0) + 1; end
+    d
+end
+
+function _dataset_iso(a::Dataset, b::Dataset)
+    qa = _dataset_quads(a); qb = _dataset_quads(b)
+    length(qa) == length(qb) || return false
+    ba = _dataset_bnodes(a); bb = _dataset_bnodes(b)
+    length(ba) == length(bb) || return false
+
+    # No blank nodes anywhere → direct quad-set (multiset) comparison.
+    if isempty(ba)
+        return _dataset_quadbag(qa, _EMPTYM) == _dataset_quadbag(qb, _EMPTYM)
+    end
+
+    # If no blank node appears as a graph NAME, the graphs are bnode-independent
+    # across graph boundaries: defer to per-graph isomorphism (fast & complete).
+    if !any(n isa BNode for (n, _) in graphs(a)) && !any(n isa BNode for (n, _) in graphs(b))
+        isomorphic(get_graph(a), get_graph(b)) || return false
+        na = Dict{String,RDFGraph}(); nb = Dict{String,RDFGraph}()
+        for (n, g) in graphs(a); n === nothing || (na[string(n)] = g); end
+        for (n, g) in graphs(b); n === nothing || (nb[string(n)] = g); end
+        keys(na) == keys(nb) || return false
+        for (k, g) in na
+            isomorphic(g, nb[k]) || return false
+        end
+        return true
+    end
+
+    # Blank-node graph name(s) present: search a whole-dataset bnode bijection.
+    bav = collect(ba); bev = collect(bb)
+    counter = Ref(0); capped = Ref(false)
+    m = Dict{BNode,BNode}(); used = Set{BNode}()
+    ok = _ds_assign(1, bav, bev, qa, qb, m, used, counter, capped)
+    capped[] || return ok
+    # Fallback (rare, large): ground-blind structural bag equality.
+    return _dataset_quadbag(qa, _EMPTYM) == _dataset_quadbag(qb, _EMPTYM)
+end
+
+function _ds_assign(i, bav, bev, qa, qb, m, used, counter, capped)
+    if i > length(bav)
+        return _dataset_quadbag(qa, m) == _dataset_quadbag(qb, _EMPTYM)
+    end
+    for cand in bev
+        cand in used && continue
+        counter[] += 1
+        if counter[] > _ISO_CAP
+            capped[] = true
+            return false
+        end
+        m[bav[i]] = cand
+        push!(used, cand)
+        _ds_assign(i + 1, bav, bev, qa, qb, m, used, counter, capped) && return true
+        delete!(used, cand); delete!(m, bav[i])
+        capped[] && return false
+    end
+    return false
 end
 
 function _run_quad_eval(name, id, cls, action, result, base)
@@ -368,6 +657,22 @@ function _run_negative(name, id, cls, action, base)
     end
 end
 
+# Extract FROM / FROM NAMED IRIs from a parsed query AST (best effort).
+function _query_from_clauses(query::String)
+    from = String[]; fromnamed = String[]
+    try
+        ast = RDFLib.sparql_parse(query)
+        if hasproperty(ast, :from)
+            for u in ast.from; push!(from, u isa URIRef ? u.value : string(u)); end
+        end
+        if hasproperty(ast, :from_named)
+            for u in ast.from_named; push!(fromnamed, u isa URIRef ? u.value : string(u)); end
+        end
+    catch
+    end
+    (from, fromnamed)
+end
+
 function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifest_dir, assumed_base)
     query_iri = _obj(g_manifest, action_node, URIRef(QT * "query"))
     data_iri  = _obj(g_manifest, action_node, URIRef(QT * "data"))
@@ -376,7 +681,18 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
     qpath = _local_path(manifest_dir, query_iri.value)
     query = read(qpath, String)
 
-    if data_iri !== nothing || !isempty(gdata)
+    # Evaluate with the query's own base IRI so relative IRIs in the query
+    # (GRAPH <ng-01.ttl>, FROM <rel>, IRI()) resolve the same way the data was
+    # loaded. If the query has no explicit BASE prologue, prepend one.
+    qbase = _base_iri(assumed_base, manifest_dir, query_iri.value)
+    if match(r"(?im)^\s*BASE\b"m, query) === nothing
+        query = "BASE <" * qbase * ">\n" * query
+    end
+
+    # FROM / FROM NAMED dataset declarations resolved against the query base.
+    fromq, fromnamedq = _query_from_clauses(query)
+
+    if data_iri !== nothing || !isempty(gdata) || !isempty(fromq) || !isempty(fromnamedq)
         ds = Dataset()
         if data_iri !== nothing
             dp = _local_path(manifest_dir, data_iri.value)
@@ -388,13 +704,25 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
                 add!(ds, t, URIRef(gd.value))
             end
         end
-        # Query the default graph unless named graphs are present; then pass dataset.
-        actual = sparql_query(isempty(gdata) ? get_graph(ds) : ds, query)
+        # FROM <rel> / FROM NAMED <rel>: load each referenced document as a named
+        # graph under its resolved IRI; the evaluator merges FROM graphs into the
+        # default graph and restricts named graphs to FROM NAMED.
+        for iri in vcat(fromq, fromnamedq)
+            fp = _local_path(manifest_dir, iri)
+            isfile(fp) || continue
+            for t in _parse_graph(fp, iri)
+                add!(ds, t, URIRef(iri))
+            end
+        end
+        # Pass the dataset whenever named graphs / FROM clauses are present.
+        use_ds = !isempty(gdata) || !isempty(fromq) || !isempty(fromnamedq)
+        actual = sparql_query(use_ds ? ds : get_graph(ds), query)
     else
         actual = sparql_query(RDFGraph(), query)
     end
 
     rpath = _local_path(manifest_dir, result.value)
+    rext  = lowercase(splitext(rpath)[2])
     kind, payload = _parse_expected_result(rpath, _base_iri(assumed_base, manifest_dir, result.value))
 
     if kind == :ask
@@ -404,7 +732,11 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
     elseif kind == :select
         actual isa Vector || return TestOutcome(id, name, cls, :error, "expected SELECT rows, got $(typeof(actual))")
         ordered = occursin("ORDER BY", uppercase(query))
-        ok, why = _compare_select(actual, payload, ordered)
+        # CSV is lossy (no datatypes/bnode labels): compare cell strings only.
+        # TSV preserves types but writes bare numeric tokens: re-type before compare.
+        ok, why = rext == ".csv" ? _compare_csv(actual, payload, ordered) :
+                  rext == ".tsv" ? _compare_tsv(actual, payload, ordered) :
+                                   _compare_select(actual, payload, ordered)
         return ok ? TestOutcome(id, name, cls, :pass, "") : TestOutcome(id, name, cls, :fail, why)
     else  # graph (CONSTRUCT/DESCRIBE)
         actual isa RDFGraph || return TestOutcome(id, name, cls, :error, "expected graph, got $(typeof(actual))")
@@ -476,6 +808,135 @@ function _run_update_eval(g_manifest, name, id, cls, action_node, result_node, m
 end
 
 _short(e) = first(sprint(showerror, e), 120)
+
+# ─── RDF Canonicalization (RDFC-1.0) ────────────────────────────────
+#
+# Parse the action (.nt/.nq) into a graph/dataset, produce the canonical
+# N-Triples/N-Quads form, and compare AS AN EXACT STRING to the expected
+# `-c14n.nt`/`.nq` file (canonical-byte equality, modulo a trailing newline).
+# The algorithm itself is implemented in the library as `RDFLib.rdf_canonicalize`
+# (or the first matching exported canonicalizer); until it lands we :skip.
+
+# Candidate RDFC-1.0 canonicalizer names (the agreed one is `rdf_canonicalize`).
+# We deliberately exclude the generic `canonicalize` (that is `Dates.canonicalize`
+# re-exported, not RDF canonicalization).
+const _C14N_FNS = (:rdf_canonicalize, :rdf_c14n, :rdfc10, :rdfc_1_0)
+
+function _c14n_fn()
+    for s in _C14N_FNS
+        isdefined(RDFLib, s) || continue
+        f = getfield(RDFLib, s)
+        # Require a method defined in RDFLib itself (not an unrelated re-export).
+        any(m -> parentmodule(m) === RDFLib, methods(f)) && return f
+    end
+    nothing
+end
+
+_strip_trailing_nl(s) = endswith(s, "\n") ? rstrip(s, '\n') * "\n" : s
+
+function _run_c14n(name, id, cls, action, result, base)
+    fn = _c14n_fn()
+    fn === nothing && return TestOutcome(id, name, cls, :skip, "awaiting RDFC-1.0")
+    quads_class = endswith(lowercase(action), ".nq")
+    input = quads_class ? _parse_dataset(action, base) : _parse_graph(action, base)
+    produced = try
+        String(fn(input))
+    catch e
+        return TestOutcome(id, name, cls, :error, "canonicalize failed: $(_short(e))")
+    end
+    expected = read(result, String)
+    # Canonical byte-equality, tolerating a single trailing-newline difference.
+    if produced == expected ||
+       _strip_trailing_nl(produced) == _strip_trailing_nl(expected) ||
+       rstrip(produced, '\n') == rstrip(expected, '\n')
+        TestOutcome(id, name, cls, :pass, "")
+    else
+        TestOutcome(id, name, cls, :fail, "canonical form differs")
+    end
+end
+
+# ─── Entailment regime tests ────────────────────────────────────────
+#
+# Positive/NegativeEntailmentTest: premise (mf:action — a file or list) entails
+# (or not) the conclusion (mf:result — a graph, or a boolean false meaning the
+# premise is inconsistent / entails the false graph). The check delegates to
+# `RDFLib.entails(premise, conclusion; regime=...)::Bool`; until that exists we
+# :skip.
+
+# Normalize an entailment-regime label (string or IRI) to a short symbol.
+function _entail_regime(g, entry)
+    r = _obj(g, entry, URIRef(MF * "entailmentRegime"))
+    r === nothing && return "simple"
+    s = r isa Literal ? r.lexical : (r isa URIRef ? r.value : string(r))
+    s = last(split(s, ('#', '/')))
+    isempty(s) ? "simple" : s
+end
+
+# Resolve mf:action which may be a single file IRI or an RDF list of file IRIs.
+function _entail_premise_files(g, entry, manifest_dir, assumed_base)
+    a = _obj(g, entry, URIRef(MF * "action"))
+    a === nothing && return Tuple{String,String}[]
+    nodes = Identifier[]
+    # Is it a list head?
+    if _obj(g, a, URIRef(RDFNS * "first")) !== nothing
+        append!(nodes, _collection(g, a))
+    else
+        push!(nodes, a)
+    end
+    [(_local_path(manifest_dir, n.value), _base_iri(assumed_base, manifest_dir, n.value))
+     for n in nodes if n isa URIRef]
+end
+
+# True iff the library exposes an entailment predicate taking (premise,
+# conclusion; regime=...) — i.e. a method with a `regime` keyword.
+function _has_entails()
+    isdefined(RDFLib, :entails) || return false
+    for m in methods(RDFLib.entails)
+        kws = Base.kwarg_decl(m)
+        :regime in kws && return true
+    end
+    false
+end
+
+# Merge a set of premise files (per regime, with recognizedDatatypes) into one
+# graph; conclusion is either a graph or the boolean `false`.
+function _run_entailment(g, entry, name, id, cls, manifest_dir, assumed_base; positive::Bool)
+    _has_entails() || return TestOutcome(id, name, cls, :skip, "awaiting entailment regime")
+    regime = _entail_regime(g, entry)
+
+    premise = RDFGraph()
+    for (pf, pb) in _entail_premise_files(g, entry, manifest_dir, assumed_base)
+        isfile(pf) || continue
+        for t in _parse_graph(pf, pb); add!(premise, t); end
+    end
+
+    result = _obj(g, entry, URIRef(MF * "result"))
+    # Boolean result (typically `false`): premise must be inconsistent under the
+    # regime (entails everything / the false graph). Represent as conclusion=false.
+    conclusion = if result isa Literal && result.lexical in ("true", "false")
+        result.lexical == "true"
+    elseif result isa URIRef
+        rf = _local_path(manifest_dir, result.value)
+        if isfile(rf)
+            cg = RDFGraph()
+            for t in _parse_graph(rf, _base_iri(assumed_base, manifest_dir, result.value)); add!(cg, t); end
+            cg
+        else
+            false
+        end
+    else
+        false
+    end
+
+    ent = try
+        RDFLib.entails(premise, conclusion; regime = regime)
+    catch e
+        return TestOutcome(id, name, cls, :error, "entails failed: $(_short(e))")
+    end
+    pass = positive ? ent : !ent
+    pass ? TestOutcome(id, name, cls, :pass, "") :
+           TestOutcome(id, name, cls, :fail, "$(positive ? "expected" : "unexpected") entailment ($regime)")
+end
 
 # ─── manifest walking ───────────────────────────────────────────────
 
@@ -558,6 +1019,18 @@ function _dispatch_entry(g, entry, manifest_dir, assumed_base)
             rpath = _local_path(manifest_dir, result.value)
             return _run_rdf_eval(name, id, cls, apath, rpath, _base_iri(assumed_base, manifest_dir, action.value))
 
+        # RDF Canonicalization (RDFC-1.0): canonical-byte string compare
+        elseif cls in ("TestNTriplesPositiveC14N", "TestNQuadsPositiveC14N")
+            apath = _local_path(manifest_dir, action.value)
+            rpath = _local_path(manifest_dir, result.value)
+            return _run_c14n(name, id, cls, apath, rpath, _base_iri(assumed_base, manifest_dir, action.value))
+
+        # Entailment regime tests
+        elseif cls == "PositiveEntailmentTest"
+            return _run_entailment(g, entry, name, id, cls, manifest_dir, assumed_base; positive = true)
+        elseif cls == "NegativeEntailmentTest"
+            return _run_entailment(g, entry, name, id, cls, manifest_dir, assumed_base; positive = false)
+
         # quad positive syntax → parse into a Dataset
         elseif cls in ("TestTrigPositiveSyntax", "TestTriGPositiveSyntax", "TestNQuadsPositiveSyntax")
             apath = _local_path(manifest_dir, action.value)
@@ -579,7 +1052,7 @@ function _dispatch_entry(g, entry, manifest_dir, assumed_base)
             return _run_negative(name, id, cls, apath, _base_iri(assumed_base, manifest_dir, action.value))
 
         # SPARQL
-        elseif cls == "QueryEvaluationTest"
+        elseif cls in ("QueryEvaluationTest", "CSVResultFormatTest")
             return _run_query_eval(g, name, id, cls, action, result, manifest_dir, assumed_base)
         elseif cls in ("PositiveSyntaxTest", "PositiveSyntaxTest11")
             apath = _local_path(manifest_dir, action.value)
