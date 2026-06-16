@@ -129,6 +129,55 @@ using RDFLib
         @test length(g) == 1
     end
 
+    @testset "anonymous blank-node property-list subjects (no whitespace)" begin
+        # Regression: this used to hang the parser forever (DoS).
+        trig = "@prefix : <http://example/> .\n{[:p :o].[:p\"Alice\"].[:p _:o].}"
+        ds = parse_trig(trig)               # must return, not hang
+        @test length(collect(quads(ds))) == 3
+    end
+
+    @testset "collections inside anonymous property lists" begin
+        # Regression: anon plists containing collections used to hang.
+        trig = "@prefix : <http://example/> .\n" *
+               "{[:p(:o)].[:p(_:o)].[:p(\"Alice\")].[:p(<http://example/o>)].}"
+        ds = parse_trig(trig)               # must return, not hang
+        # 4 plist triples + 4 collection rdf:first + 4 rdf:rest = 12 quads
+        @test length(collect(quads(ds))) == 12
+    end
+
+    @testset "minimal-whitespace directives" begin
+        trig = "BASE<http://example/base>\n" *
+               "PREFIX :<http://example/a/>\n" *
+               "PREFIX b:<http://example/b/>\n" *
+               "@prefix:<http://example/c/>.\n" *
+               ":s :p :o .b:s b:p b:o ."
+        ds = parse_trig(trig)
+        @test length(collect(quads(ds))) == 2
+        # The empty prefix ':' is redeclared by '@prefix:<.../c/>.' (last wins).
+        EXC = Namespace("http://example/c/")
+        EXB = Namespace("http://example/b/")
+        @test first(objects(get_graph(ds), EXC("s"), EXC("p"))) == EXC("o")
+        @test first(objects(get_graph(ds), EXB("s"), EXB("p"))) == EXB("o")
+    end
+
+    @testset "empty-prefix subjects in graph blocks" begin
+        trig = "@prefix : <http://example/> .\n:{: : :}{: : :}:{[]:[]}"
+        ds = parse_trig(trig)               # must return, not hang
+        @test length(collect(quads(ds))) == 3
+        EXP = Namespace("http://example/")
+        named = get_graph(ds, EXP(""))      # graph label ':'
+        @test !isnothing(named)
+    end
+
+    @testset "minimal-whitespace W3C suite file" begin
+        path = joinpath(@__DIR__, "w3c", "suite", "rdf", "rdf11",
+                        "rdf-trig", "trig-syntax-minimal-whitespace-01.trig")
+        if isfile(path)
+            ds = parse_trig(read(path, String))   # must return, not hang
+            @test length(collect(quads(ds))) == 47
+        end
+    end
+
     @testset "directional literals round-trip" begin
         ds = Dataset()
         bind!(ds, "ex", EX)

@@ -188,6 +188,7 @@ _TriGParser(ds::Dataset, input::String) = _TriGParser(ds, input, 1, Dict{String,
 function _trig_parse_document!(p::_TriGParser)
     _trig_skip_ws!(p)
     while p.pos <= lastindex(p.input)
+        start = p.pos
         if _trig_at(p, "@prefix")
             _trig_parse_prefix!(p)
         elseif _trig_at_ci(p, "PREFIX") && !_trig_at_ci(p, "PREFIX:")
@@ -199,20 +200,30 @@ function _trig_parse_document!(p::_TriGParser)
         elseif _trig_peek(p) == '{'
             # Default graph block
             _trig_parse_graph_block!(p, nothing)
-        elseif _trig_at_ci(p, "GRAPH")
+        elseif _trig_at_ci(p, "GRAPH") && !_trig_at_ci(p, "GRAPH:")
             _trig_parse_named_graph!(p)
         else
-            # Try as graph name followed by {
-            graph_name = _trig_parse_term!(p)
-            _trig_skip_ws!(p)
-            if _trig_peek(p) == '{'
-                _trig_parse_graph_block!(p, graph_name isa GraphName ? graph_name : nothing)
+            # Either `LABEL { ... }` (named graph) or a bare statement in the
+            # default graph (`subject predicate object .`). Disambiguate by
+            # scanning a single leading label token and checking whether the
+            # next significant character is '{'.
+            label, after_label = _trig_scan_label(p)
+            if label !== nothing && _trig_significant_is_brace(p, after_label)
+                p.pos = after_label
+                _trig_skip_ws!(p)
+                graph_name = _trig_resolve_label(p, label)
+                _trig_parse_graph_block!(p, graph_name)
             else
-                # Bare triples in default graph (no GRAPH keyword, no braces)
-                _trig_parse_triples_in_graph!(p, nothing, graph_name)
+                # Bare statement: scan to the terminating '.' at depth 0 and
+                # delegate the whole segment to the Turtle parser.
+                _trig_parse_bare_statement!(p)
             end
         end
         _trig_skip_ws!(p)
+        # Anti-hang guard: every iteration must make forward progress.
+        p.pos <= start && throw(ArgumentError(
+            "TriG: parser made no progress at pos $start (near " *
+            "$(repr(p.input[start:min(end, nextind(p.input, start, 20))])))"))
     end
 end
 
@@ -225,102 +236,243 @@ function _trig_parse_named_graph!(p::_TriGParser)
     _trig_parse_graph_block!(p, graph_name)
 end
 
-function _trig_parse_graph_block!(p::_TriGParser, graph_name::OptGraphName)
-    _trig_consume!(p, '{')
-    _trig_skip_ws!(p)
-
-    # Create a temporary graph + turtle parser for the block content
-    while _trig_peek(p) != '}'
-        _trig_skip_ws!(p)
-        _trig_peek(p) == '}' && break
-        _trig_parse_triples_in_graph!(p, graph_name, nothing)
-        _trig_skip_ws!(p)
+# Scan one graph-label token without committing pos. Returns
+# (label_string_or_nothing, position_after_label). Handles IRIrefs,
+# blank-node labels and prefixed names (including the empty prefix ':').
+# Returns `nothing` for the label when the token is `[`/`(` (a blank-node
+# property list or collection can never be a graph label, so the statement
+# must be a bare default-graph triple).
+function _trig_scan_label(p::_TriGParser)
+    pos = p.pos
+    c = _trig_peek(p)
+    if c == '<'
+        # IRIref <...>
+        pos = nextind(p.input, pos)
+        while pos <= lastindex(p.input) && p.input[pos] != '>'
+            pos = nextind(p.input, pos)
+        end
+        pos > lastindex(p.input) && return (nothing, p.pos)
+        endpos = pos                       # at '>'
+        pos = nextind(p.input, pos)        # past '>'
+        return (p.input[p.pos:endpos], pos)
+    elseif c == '[' || c == '('
+        return (nothing, p.pos)
+    else
+        # Blank node label or prefixed name: read until whitespace or '{' or
+        # one of the statement delimiters. The empty prefix ':' is included.
+        start = pos
+        while pos <= lastindex(p.input)
+            ch = p.input[pos]
+            (ch in (' ', '\t', '\n', '\r', '{', '}', '#')) && break
+            pos = nextind(p.input, pos)
+        end
+        pos == start && return (nothing, p.pos)
+        return (p.input[start:prevind(p.input, pos)], pos)
     end
-    _trig_consume!(p, '}')
 end
 
-function _trig_parse_triples_in_graph!(p::_TriGParser, graph_name::OptGraphName, first_subject)
-    # Use the Turtle parser infrastructure to parse triples
-    # Create a temporary graph
+# True iff the next non-whitespace/comment character at or after `from` is '{'.
+function _trig_significant_is_brace(p::_TriGParser, from::Int)
+    pos = from
+    while pos <= lastindex(p.input)
+        c = p.input[pos]
+        if c in (' ', '\t', '\n', '\r')
+            pos = nextind(p.input, pos)
+        elseif c == '#'
+            while pos <= lastindex(p.input) && p.input[pos] != '\n'
+                pos = nextind(p.input, pos)
+            end
+        else
+            return c == '{'
+        end
+    end
+    false
+end
+
+function _trig_resolve_label(p::_TriGParser, label::AbstractString)
+    if startswith(label, '<')
+        iri = label[nextind(label, firstindex(label)):prevind(label, lastindex(label))]
+        return URIRef(_trig_resolve_iri(p, iri))
+    elseif startswith(label, "_:")
+        return BNode(label[3:end])
+    else
+        idx = findfirst(':', label)
+        idx === nothing && throw(ArgumentError("Cannot resolve TriG graph label: $label"))
+        prefix = label[1:prevind(label, idx)]
+        localname = label[nextind(label, idx):end]
+        ns = get(p.prefixes, prefix, nothing)
+        ns === nothing && throw(ArgumentError("Cannot resolve TriG graph label: $label"))
+        return URIRef(ns * localname)
+    end
+end
+
+function _trig_resolve_iri(p::_TriGParser, iri::AbstractString)
+    if p.base !== nothing && !occursin("://", iri) && !startswith(iri, "urn:")
+        # Relative IRI: resolve against base (simple concatenation/last-slash).
+        return _trig_join_base(p.base, iri)
+    end
+    iri
+end
+
+function _trig_join_base(base::AbstractString, ref::AbstractString)
+    isempty(ref) && return base
+    if startswith(ref, '#') || startswith(ref, '?')
+        return base * ref
+    end
+    base * ref
+end
+
+# Scanner that advances `pos` until reaching `target` (a Char) at bracket-depth
+# 0 while respecting string literals (including triple-quoted), <...> IRIs and
+# the nesting of both [] and (). Also stops at an unescaped '}' at depth 0
+# (used for the final statement in a block that omits its trailing '.').
+# Returns the index of the stopping character (or lastindex+1 if EOF reached).
+function _trig_scan_to!(p::_TriGParser, target::Char)
+    input = p.input
+    lastidx = lastindex(input)
+    depth = 0
+    while p.pos <= lastidx
+        c = input[p.pos]
+        if c == '"' || c == '\''
+            p.pos = _trig_skip_string!(p, c)
+        elseif c == '<'
+            p.pos = _trig_skip_iri!(p)
+        elseif c == '#'
+            # comment to end of line
+            while p.pos <= lastidx && input[p.pos] != '\n'
+                p.pos = nextind(input, p.pos)
+            end
+        elseif c == '[' || c == '('
+            depth += 1
+            p.pos = nextind(input, p.pos)
+        elseif c == ']' || c == ')'
+            depth > 0 && (depth -= 1)
+            p.pos = nextind(input, p.pos)
+        elseif depth == 0 && (c == target || c == '}')
+            return p.pos
+        else
+            p.pos = nextind(input, p.pos)
+        end
+    end
+    p.pos
+end
+
+# At a quote char; skip past the matching closing quote. Handles both single
+# and triple-quoted (long) string literals and backslash escapes.
+function _trig_skip_string!(p::_TriGParser, q::Char)
+    input = p.input
+    lastidx = lastindex(input)
+    # Detect long (triple) quote.
+    i2 = nextind(input, p.pos)
+    i3 = i2 <= lastidx ? nextind(input, i2) : i2
+    long = i2 <= lastidx && i3 <= lastidx && input[i2] == q && input[i3] == q
+    if long
+        pos = nextind(input, i3)  # past the three opening quotes
+        while pos <= lastidx
+            c = input[pos]
+            if c == '\\'
+                pos = pos < lastidx ? nextind(input, nextind(input, pos)) : nextind(input, pos)
+            elseif c == q
+                j2 = nextind(input, pos)
+                j3 = j2 <= lastidx ? nextind(input, j2) : j2
+                if j2 <= lastidx && j3 <= lastidx && input[j2] == q && input[j3] == q
+                    return nextind(input, j3)  # past the three closing quotes
+                end
+                pos = nextind(input, pos)
+            else
+                pos = nextind(input, pos)
+            end
+        end
+        return pos
+    else
+        pos = nextind(input, p.pos)  # past opening quote
+        while pos <= lastidx
+            c = input[pos]
+            if c == '\\'
+                pos = pos < lastidx ? nextind(input, nextind(input, pos)) : nextind(input, pos)
+            elseif c == q
+                return nextind(input, pos)  # past closing quote
+            else
+                pos = nextind(input, pos)
+            end
+        end
+        return pos
+    end
+end
+
+# At '<'; skip past the closing '>'.
+function _trig_skip_iri!(p::_TriGParser)
+    input = p.input
+    lastidx = lastindex(input)
+    pos = nextind(input, p.pos)
+    while pos <= lastidx
+        c = input[pos]
+        if c == '>'
+            return nextind(input, pos)
+        elseif c == '\\'
+            pos = pos < lastidx ? nextind(input, nextind(input, pos)) : nextind(input, pos)
+        else
+            pos = nextind(input, pos)
+        end
+    end
+    return pos
+end
+
+# Prefix/base declarations in scope, to prepend to a Turtle sub-document.
+function _trig_prelude(p::_TriGParser)
+    join(["@prefix $k: <$v> .\n" for (k, v) in p.prefixes])
+end
+
+function _trig_parse_graph_block!(p::_TriGParser, graph_name::OptGraphName)
+    _trig_consume!(p, '{')
+    body_start = p.pos
+    # Scan to the matching '}' with a fully string/IRI/bracket-aware scanner.
+    stop = _trig_scan_to!(p, '}')
+    (stop > lastindex(p.input) || p.input[stop] != '}') &&
+        throw(ArgumentError("TriG: unterminated graph block (missing '}')"))
+    body = body_start <= prevind(p.input, stop) ? p.input[body_start:prevind(p.input, stop)] : ""
+    p.pos = nextind(p.input, stop)  # consume '}'
+
+    # TriG allows the trailing '.' of the final statement inside a block to be
+    # omitted; the Turtle parser requires it, so append one when missing.
+    tb = rstrip(body)
+    if !isempty(tb) && last(tb) != '.'
+        body = body * " ."
+    end
+    _trig_emit_body!(p, body, graph_name)
+end
+
+function _trig_parse_bare_statement!(p::_TriGParser)
+    start = p.pos
+    stop = _trig_scan_to!(p, '.')
+    if stop <= lastindex(p.input) && p.input[stop] == '.'
+        segment = p.input[start:prevind(p.input, stop)]
+        p.pos = nextind(p.input, stop)  # consume '.'
+        _trig_emit_body!(p, segment * " .", nothing)
+    elseif stop <= lastindex(p.input) && p.input[stop] == '}'
+        # Shouldn't normally happen at document level, but stay defensive.
+        segment = p.input[start:prevind(p.input, stop)]
+        p.pos = stop
+        _trig_emit_body!(p, segment * " .", nothing)
+    else
+        # Reached EOF: treat remaining text as a final statement.
+        segment = start <= lastindex(p.input) ? p.input[start:lastindex(p.input)] : ""
+        p.pos = nextind(p.input, lastindex(p.input))
+        strip(segment) == "" && return
+        _trig_emit_body!(p, segment * " .", nothing)
+    end
+end
+
+# Parse a Turtle body (one or more statements) and add the resulting triples
+# to the dataset under `graph_name`.
+function _trig_emit_body!(p::_TriGParser, body::AbstractString, graph_name::OptGraphName)
+    strip(body) == "" && return
     temp_g = RDFGraph()
     for (prefix, uri) in p.prefixes
         bind!(temp_g, prefix, Namespace(uri))
     end
-
-    # Extract remaining text until '.' and parse as Turtle triples
-    # We need to find the subject-predicate-object-list and dot
-    start_pos = p.pos
-
-    # If we already parsed the first term, reconstruct
-    prefix_decls = join(["@prefix $k: <$v> .\n" for (k, v) in p.prefixes])
-
-    if !isnothing(first_subject)
-        subj_str = n3(first_subject)
-    else
-        subj_str = ""
-        # Read subject
-        while p.pos <= lastindex(p.input)
-            c = p.input[p.pos]
-            c in (' ', '\t', '\n', '\r') && break
-            p.pos = nextind(p.input, p.pos)
-        end
-        subj_str = p.input[start_pos:prevind(p.input, p.pos)]
-    end
-
-    # Read until we find a '.' that's not inside quotes or URIs
-    _trig_skip_ws!(p)
-    rest_start = p.pos
-    in_string = false
-    in_iri = false
-    quote_char = nothing
-    depth = 0
-    while p.pos <= lastindex(p.input)
-        c = p.input[p.pos]
-        if in_string
-            if c == '\\' && p.pos < lastindex(p.input)
-                p.pos = nextind(p.input, p.pos)  # skip escaped char
-            elseif c == quote_char
-                in_string = false
-            end
-        elseif in_iri
-            if c == '>'
-                in_iri = false
-            end
-        else
-            if c == '"' || c == '\''
-                in_string = true
-                quote_char = c
-            elseif c == '<'
-                in_iri = true
-            elseif c == '['
-                depth += 1
-            elseif c == ']'
-                depth -= 1
-            elseif c == '.' && depth == 0
-                break
-            elseif c == '}' && depth == 0
-                # End of graph block without final dot
-                break
-            end
-        end
-        p.pos = nextind(p.input, p.pos)
-    end
-
-    rest_str = p.input[rest_start:prevind(p.input, p.pos)]
-    if p.pos <= lastindex(p.input) && p.input[p.pos] == '.'
-        p.pos = nextind(p.input, p.pos)
-    end
-
-    # Parse the complete triple statement via Turtle parser
-    ttl = prefix_decls * subj_str * " " * rest_str * " .\n"
-    try
-        parse_turtle!(temp_g, ttl)
-    catch e
-        @warn "Failed to parse TriG triple block: $e"
-        return
-    end
-
-    # Add parsed triples to the appropriate graph in the dataset
+    ttl = _trig_prelude(p) * body * "\n"
+    parse_turtle!(temp_g, ttl; base=p.base)
     for t in temp_g
         add!(p.dataset, _trig_fix_dirlang(t), graph_name)
     end

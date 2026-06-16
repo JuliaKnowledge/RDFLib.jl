@@ -19,3 +19,4 @@ docs/build/
 # Temporary files
 *.tmp
 *.bak
+test/w3c/suite/
