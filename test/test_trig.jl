@@ -274,4 +274,29 @@ using RDFLib
         @test "http://example.org/ns/foo/c3" in objs
         @test "http://example.org/ns/foo/bar#c4" in objs
     end
+
+    @testset "RDF 1.2 reifier, triple term and annotation in graph blocks" begin
+        reifies = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+        EXT = Namespace("http://example/")
+        # reifier inside a named graph block
+        ds = parse_trig("PREFIX : <http://example/>\n:g { << :s :p :o >> :q :z . }")
+        qs = collect(quads(ds))
+        @test any(q -> q.predicate == reifies &&
+                       q.object == TripleTerm(EXT("s"), EXT("p"), EXT("o")), qs)
+        @test any(q -> q.predicate == EXT("q") && q.object == EXT("z"), qs)
+
+        # annotation block (contains |}) must not confuse the block scanner
+        ds2 = parse_trig("PREFIX : <http://example/>\n{ :s :p :o {| :r :z |} . }")
+        qs2 = collect(quads(ds2))
+        @test any(q -> q.subject == EXT("s") && q.predicate == EXT("p") &&
+                       q.object == EXT("o"), qs2)
+        @test any(q -> q.predicate == reifies &&
+                       q.object == TripleTerm(EXT("s"), EXT("p"), EXT("o")), qs2)
+        @test any(q -> q.predicate == EXT("r") && q.object == EXT("z"), qs2)
+
+        # triple term as object inside a block
+        ds3 = parse_trig("PREFIX : <http://example/>\n{ :a :b <<( :s :p :o )>> . }")
+        @test any(q -> q.object == TripleTerm(EXT("s"), EXT("p"), EXT("o")),
+                  collect(quads(ds3)))
+    end
 end

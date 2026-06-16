@@ -370,6 +370,15 @@ function _trig_scan_to!(p::_TriGParser, target::Char)
         elseif c == ']' || c == ')'
             depth > 0 && (depth -= 1)
             p.pos = nextind(input, p.pos)
+        elseif c == '{' && (np = nextind(input, p.pos); np <= lastidx && input[np] == '|')
+            # RDF 1.2 annotation block opener `{|` — treat as a bracket pair so
+            # the closing '}' of '|}' is not mistaken for the graph-block end.
+            depth += 1
+            p.pos = nextind(input, np)
+        elseif c == '|' && (np = nextind(input, p.pos); np <= lastidx && input[np] == '}')
+            # Annotation block closer `|}`.
+            depth > 0 && (depth -= 1)
+            p.pos = nextind(input, np)
         elseif depth == 0 && (c == target || c == '}')
             return p.pos
         else
@@ -651,7 +660,14 @@ function _trig_emit_body!(p::_TriGParser, body::AbstractString, graph_name::OptG
 
     explicit = _trig_scan_explicit_labels(body)
     local_anon = Dict{String,BNode}()  # block-local anon label → fresh global bnode
-    remap(node) = node isa BNode ? _trig_remap_bnode(p, node, explicit, local_anon) : node
+    remap(node) =
+        if node isa BNode
+            _trig_remap_bnode(p, node, explicit, local_anon)
+        elseif node isa TripleTerm
+            TripleTerm(remap(node.subject), node.predicate, remap(node.object))
+        else
+            node
+        end
 
     for t in temp_g
         t2 = _trig_fix_dirlang(t)

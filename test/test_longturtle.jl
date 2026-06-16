@@ -75,13 +75,13 @@ const EX_LT = "http://example.org/"
         @test Triple(URIRef(EX_LT * "s"), URIRef(EX_LT * "p"), lit) in g2
     end
 
-    @testset "Serialize quoted triple term" begin
+    @testset "Serialize RDF 1.2 triple term (object position)" begin
         g = RDFGraph()
         tt = TripleTerm(URIRef(EX_LT * "s"), URIRef(EX_LT * "p"), URIRef(EX_LT * "o"))
-        add!(g, Triple(tt, URIRef(EX_LT * "certainty"), Literal("0.9")))
+        add!(g, Triple(URIRef(EX_LT * "a"), URIRef(EX_LT * "b"), tt))
         result = serialize_longturtle(g)
-        @test occursin("<< <$(EX_LT)s> <$(EX_LT)p> <$(EX_LT)o> >>", result)
+        @test occursin("<<( <$(EX_LT)s> <$(EX_LT)p> <$(EX_LT)o> )>>", result)
         g2 = parse_rdf(result, TurtleFormat())
-        @test Triple(tt, URIRef(EX_LT * "certainty"), Literal("0.9")) in g2
+        @test Triple(URIRef(EX_LT * "a"), URIRef(EX_LT * "b"), tt) in g2
     end
 end

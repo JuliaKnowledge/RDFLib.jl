@@ -265,4 +265,33 @@ using RDFLib
             @test t in g2
         end
     end
+
+    @testset "RDF 1.2 version directive and reifier ids" begin
+        reifies = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+        EXV = Namespace("http://example/")
+        # version directives (SPARQL-style and Turtle-style) are accepted/ignored
+        for v in ("PREFIX : <http://example/>\nVERSION \"1.2\"\n:s :p :o .",
+                  "PREFIX : <http://example/>\n@version \"1.2\" .\n:s :p :o .",
+                  "PREFIX : <http://example/>\nversion '1.2-basic'\n:s :p :o .")
+            g = RDFLib.parse_turtle(v)
+            @test Triple(EXV("s"), EXV("p"), EXV("o")) in g
+        end
+        # bad version values are rejected
+        @test_throws ArgumentError RDFLib.parse_turtle("VERSION 1.2\n")
+        @test_throws ArgumentError RDFLib.parse_turtle("@version \"\"\"1.2\"\"\" .\n")
+
+        # explicit reifier id binds the reifier resource
+        g = RDFLib.parse_turtle("PREFIX : <http://example/>\n<< :s :p :o ~ :i >> :q :z .")
+        @test Triple(EXV("i"), reifies, TripleTerm(EXV("s"), EXV("p"), EXV("o"))) in g
+        @test Triple(EXV("i"), EXV("q"), EXV("z")) in g
+
+        # annotation with explicit reifier id
+        g2 = RDFLib.parse_turtle("PREFIX : <http://example/>\n:s :p :o ~ :i {| :r :z |} .")
+        @test Triple(EXV("s"), EXV("p"), EXV("o")) in g2
+        @test Triple(EXV("i"), reifies, TripleTerm(EXV("s"), EXV("p"), EXV("o"))) in g2
+        @test Triple(EXV("i"), EXV("r"), EXV("z")) in g2
+
+        # triple term as statement subject is rejected
+        @test_throws ArgumentError RDFLib.parse_turtle("PREFIX : <http://example/>\n<<( :s :p :o )>> :q :z .")
+    end
 end

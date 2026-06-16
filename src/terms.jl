@@ -415,7 +415,7 @@ function Base.hash(a::TripleTerm, h::UInt)
     hash(a.object, hash(a.predicate, hash(a.subject, hash(:TripleTerm, h))))
 end
 
-n3(tt::TripleTerm) = string("<< ", n3(tt.subject), " ", n3(tt.predicate), " ", n3(tt.object), " >>")
+n3(tt::TripleTerm) = string("<<( ", n3(tt.subject), " ", n3(tt.predicate), " ", n3(tt.object), " )>>")
 
 # ─── Triple ─────────────────────────────────────────────────────────
 

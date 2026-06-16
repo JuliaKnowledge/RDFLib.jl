@@ -3,10 +3,14 @@
 
 const _RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 const _XML_NS = "http://www.w3.org/XML/1998/namespace"
+# Internationalization Tag Set (ITS) namespace — RDF/XML 1.2 uses its:dir
+# (and its:version) to carry base-direction information.
+const _ITS_NS = "http://www.w3.org/2005/11/its"
 
-# RDF/XML syntax term sets (RDF 1.1 Syntax §6.1.2-6.1.4).
+# RDF/XML syntax term sets (RDF 1.1 Syntax §6.1.2-6.1.4, plus RDF 1.2 terms).
 const _RDFXML_CORE_SYNTAX_TERMS = Set(["RDF", "ID", "about", "parseType",
-                                       "resource", "nodeID", "datatype"])
+                                       "resource", "nodeID", "datatype",
+                                       "version", "annotation", "annotationNodeID"])
 const _RDFXML_OLD_TERMS = Set(["aboutEach", "aboutEachPrefix", "bagID"])
 
 struct RDFXMLError <: Exception
@@ -81,6 +85,19 @@ function serialize_rdfxml(io::IO, g::RDFGraph)
         t.object isa URIRef && _rdfxml_discover_ns!(ns_map, nsm, t.object)
     end
 
+    # RDF 1.2 features present? (directional literals or triple terms)
+    needs_v12 = false
+    needs_its = false
+    for t in g
+        o = t.object
+        if o isa Literal && !isnothing(o.direction)
+            needs_v12 = true; needs_its = true
+        elseif o isa TripleTerm
+            needs_v12 = true
+        end
+    end
+    needs_its && (ns_map["its"] = _ITS_NS)
+
     # Set xmlns attributes on root
     for (prefix, uri) in sort(collect(ns_map), by=first)
         if prefix == ""
@@ -89,6 +106,7 @@ function serialize_rdfxml(io::IO, g::RDFGraph)
             EzXML.link!(rdf_root, EzXML.AttributeNode("xmlns:$prefix", uri))
         end
     end
+    needs_v12 && EzXML.link!(rdf_root, EzXML.AttributeNode("rdf:version", "1.2"))
 
     # Group triples by subject
     subject_triples = Dict{Node, Vector{Triple}}()
@@ -190,10 +208,33 @@ end
 function _rdfxml_set_object!(elem, obj::Literal)
     if !isnothing(obj.language)
         EzXML.link!(elem, EzXML.AttributeNode("xml:lang", obj.language))
+        if !isnothing(obj.direction)
+            EzXML.link!(elem, EzXML.AttributeNode("its:dir", obj.direction))
+        end
     elseif !isnothing(obj.datatype) && obj.datatype.value != "http://www.w3.org/2001/XMLSchema#string"
         EzXML.link!(elem, EzXML.AttributeNode("rdf:datatype", obj.datatype.value))
     end
     EzXML.link!(elem, EzXML.TextNode(obj.lexical))
+end
+
+# RDF 1.2 triple term object → rdf:parseType="Triple" with a single nested
+# rdf:Description carrying the one inner statement.
+function _rdfxml_set_object!(elem, tt::TripleTerm)
+    EzXML.link!(elem, EzXML.AttributeNode("rdf:parseType", "Triple"))
+    inner = EzXML.ElementNode("rdf:Description")
+    s = tt.subject
+    if s isa URIRef
+        EzXML.link!(inner, EzXML.AttributeNode("rdf:about", s.value))
+    elseif s isa BNode
+        EzXML.link!(inner, EzXML.AttributeNode("rdf:nodeID", s.id))
+    end
+    # Emit the inner predicate element with a synthetic namespace declaration.
+    pns, pln = _rdfxml_split_uri(tt.predicate.value)
+    pelem = EzXML.ElementNode("p:" * pln)
+    EzXML.link!(pelem, EzXML.AttributeNode("xmlns:p", pns))
+    _rdfxml_set_object!(pelem, tt.object)
+    EzXML.link!(inner, pelem)
+    EzXML.link!(elem, inner)
 end
 
 function _rdfxml_pretty_print(doc::EzXML.Document)
@@ -260,8 +301,9 @@ becomes `#x`).
 # Mutable parser state shared across the recursive descent.
 mutable struct _RDFXMLState
     seen_ids::Set{String}   # resolved rdf:ID IRIs, for duplicate detection
+    version12::Bool         # rdf:version="1.2" declared → RDF 1.2 features on
 end
-_RDFXMLState() = _RDFXMLState(Set{String}())
+_RDFXMLState() = _RDFXMLState(Set{String}(), false)
 
 function parse_rdfxml!(g::RDFGraph, input::AbstractString; base::Union{AbstractString,Nothing}=nothing)
     doc = EzXML.parsexml(input)
@@ -269,17 +311,23 @@ function parse_rdfxml!(g::RDFGraph, input::AbstractString; base::Union{AbstractS
     base0 = isnothing(base) ? nothing : String(base)
     st = _RDFXMLState()
 
+    # RDF 1.2 features (parseType="Triple") are enabled when rdf:version="1.2"
+    # is declared anywhere in the document.
+    st.version12 = _rdfxml_scan_version12(root)
+
     # Check for rdf:RDF root or direct descriptions
     rootname = EzXML.nodename(root)
     rootns = _rdfxml_element_ns(root)
     if rootname == "RDF" && rootns == _RDF_NS
         rbase = _rdfxml_update_base(root, base0)
         rlang = _rdfxml_update_lang(root, nothing)
+        # Base direction (its:dir) is only honored under RDF 1.2.
+        rdir = st.version12 ? _rdfxml_update_dir(root, nothing) : nothing
         for child in EzXML.eachelement(root)
-            _parse_rdfxml_node_element!(g, st, child, root, rbase, rlang)
+            _parse_rdfxml_node_element!(g, st, child, root, rbase, rlang, rdir)
         end
     else
-        _parse_rdfxml_node_element!(g, st, root, root, base0, nothing)
+        _parse_rdfxml_node_element!(g, st, root, root, base0, nothing, nothing)
     end
 
     g
@@ -349,6 +397,49 @@ function _rdfxml_update_lang(elem::EzXML.Node, lang::Union{String,Nothing})
     lang
 end
 
+# its:dir handling (RDF/XML 1.2): the base direction ("ltr"/"rtl") inherits
+# like xml:lang; an empty value cancels it.
+function _rdfxml_update_dir(elem::EzXML.Node, dir::Union{String,Nothing})
+    for attr in EzXML.eachattribute(elem)
+        if EzXML.nodename(attr) == "dir" && _rdfxml_attr_ns(attr) == _ITS_NS
+            v = EzXML.nodecontent(attr)
+            return isempty(v) ? nothing : String(v)
+        end
+    end
+    dir
+end
+
+# Build a literal honoring an optional language tag and base direction. A base
+# direction is only meaningful together with a language tag.
+function _rdfxml_text_literal(text::AbstractString,
+                              lang::Union{String,Nothing},
+                              dir::Union{String,Nothing})
+    if isnothing(lang)
+        return Literal(String(text))
+    elseif isnothing(dir)
+        return Literal(String(text), lang=lang)
+    else
+        return Literal(String(text), lang=lang, direction=dir)
+    end
+end
+
+# True if `rdf:version` appears anywhere in the subtree rooted at `elem`.
+function _rdfxml_scan_version12(elem::EzXML.Node)
+    for attr in EzXML.eachattribute(elem)
+        if EzXML.nodename(attr) == "version" && _rdfxml_attr_ns(attr) == _RDF_NS
+            return true
+        end
+    end
+    for child in EzXML.eachelement(elem)
+        _rdfxml_scan_version12(child) && return true
+    end
+    false
+end
+
+# True when `attr` is an ITS-namespace attribute (its:dir / its:version) —
+# these are not RDF property attributes.
+_rdfxml_is_its_attr(attr::EzXML.Node) = _rdfxml_attr_ns(attr) == _ITS_NS
+
 # Resolve an IRI against the in-scope base. Without a base, absolute IRIs
 # are kept and relative IRIs are left as-is (documented behavior).
 function _rdfxml_resolve(base::Union{String,Nothing}, iri::AbstractString)
@@ -402,9 +493,11 @@ end
 
 function _parse_rdfxml_node_element!(g::RDFGraph, st::_RDFXMLState, elem::EzXML.Node, root::EzXML.Node,
                                      base::Union{String,Nothing}=nothing,
-                                     lang::Union{String,Nothing}=nothing)
+                                     lang::Union{String,Nothing}=nothing,
+                                     dir::Union{String,Nothing}=nothing)
     base = _rdfxml_update_base(elem, base)
     lang = _rdfxml_update_lang(elem, lang)
+    st.version12 && (dir = _rdfxml_update_dir(elem, dir))
 
     localname = EzXML.nodename(elem)
     ns = _rdfxml_element_ns(elem)
@@ -422,13 +515,13 @@ function _parse_rdfxml_node_element!(g::RDFGraph, st::_RDFXMLState, elem::EzXML.
 
     # Process attribute properties (non-control attributes become triples)
     for attr in EzXML.eachattribute(elem)
-        _rdfxml_handle_attribute!(g, subject, attr, base, lang)
+        _rdfxml_handle_attribute!(g, subject, attr, base, lang, dir)
     end
 
     # Process child property elements (rdf:li counter is per node element)
     li_counter = Ref(0)
     for child in EzXML.eachelement(elem)
-        _parse_rdfxml_property_element!(g, st, subject, child, root, base, lang, li_counter)
+        _parse_rdfxml_property_element!(g, st, subject, child, root, base, lang, li_counter, dir)
     end
 
     subject
@@ -480,7 +573,7 @@ end
 # not xml:*, and not an RDF/XML control/syntax term.
 function _rdfxml_is_property_attr(attr::EzXML.Node)
     ns = _rdfxml_attr_ns(attr)
-    (ns == _XML_NS || isempty(ns)) && return false
+    (ns == _XML_NS || ns == _ITS_NS || isempty(ns)) && return false
     localname = EzXML.nodename(attr)
     if ns == _RDF_NS
         (localname in _RDFXML_CORE_SYNTAX_TERMS) && return false
@@ -490,11 +583,12 @@ function _rdfxml_is_property_attr(attr::EzXML.Node)
 end
 
 function _rdfxml_handle_attribute!(g::RDFGraph, subject::Node, attr::EzXML.Node,
-                                   base::Union{String,Nothing}, lang::Union{String,Nothing})
+                                   base::Union{String,Nothing}, lang::Union{String,Nothing},
+                                   dir::Union{String,Nothing}=nothing)
     ns = _rdfxml_attr_ns(attr)
     localname = EzXML.nodename(attr)
-    # xml:* and un-namespaced (xmlns, plain) attributes are not properties.
-    (ns == _XML_NS || isempty(ns)) && return
+    # xml:*, its:* and un-namespaced (xmlns, plain) attributes are not properties.
+    (ns == _XML_NS || ns == _ITS_NS || isempty(ns)) && return
     if ns == _RDF_NS
         # Control / subject attributes are consumed elsewhere.
         (localname in _RDFXML_CORE_SYNTAX_TERMS) && return
@@ -510,7 +604,7 @@ function _rdfxml_handle_attribute!(g::RDFGraph, subject::Node, attr::EzXML.Node,
 
     pred_uri = URIRef(ns * localname)
     aval = EzXML.nodecontent(attr)
-    lit = isnothing(lang) ? Literal(aval) : Literal(aval, lang=lang)
+    lit = _rdfxml_text_literal(aval, lang, dir)
     add!(g, Triple(subject, pred_uri, lit))
 end
 
@@ -599,9 +693,11 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
                                          root::EzXML.Node,
                                          base::Union{String,Nothing}=nothing,
                                          lang::Union{String,Nothing}=nothing,
-                                         li_counter::Base.RefValue{Int}=Ref(0))
+                                         li_counter::Base.RefValue{Int}=Ref(0),
+                                         dir::Union{String,Nothing}=nothing)
     base = _rdfxml_update_base(elem, base)
     lang = _rdfxml_update_lang(elem, lang)
+    st.version12 && (dir = _rdfxml_update_dir(elem, dir))
 
     # Determine predicate from element name; rdf:li expands to rdf:_N
     ns = _rdfxml_element_ns(elem)
@@ -620,6 +716,7 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
     parse_type = nothing
     dt_val = nothing
     reify_id = nothing
+    annotation_id = nothing      # RDF 1.2 reifier resource (rdf:annotation* )
     has_prop_attr = false   # any non-control property attribute present?
     for attr in EzXML.eachattribute(elem)
         if _rdfxml_is_rdf_attr(attr, "resource")
@@ -635,12 +732,33 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
             # rdf:ID on a property element reifies the statement
             reify_id = EzXML.nodecontent(attr)
             _rdfxml_check_id(reify_id)
+        elseif _rdfxml_is_rdf_attr(attr, "annotation")
+            # RDF 1.2 annotation: reifier resource is an IRI.
+            annotation_id = URIRef(_rdfxml_resolve(base, EzXML.nodecontent(attr)))
+        elseif _rdfxml_is_rdf_attr(attr, "annotationNodeID")
+            nid = EzXML.nodecontent(attr)
+            _rdfxml_check_id(nid)
+            annotation_id = BNode(nid)
         elseif _rdfxml_is_rdf_attr(attr, "bagID") || _rdfxml_is_rdf_attr(attr, "aboutEach") ||
                _rdfxml_is_rdf_attr(attr, "aboutEachPrefix")
             throw(RDFXMLError("$(EzXML.nodename(attr)) is not a permitted RDF/XML attribute"))
         elseif _rdfxml_is_property_attr(attr)
             has_prop_attr = true
         end
+    end
+
+    # rdf:parseType="Triple" (RDF 1.2): the object is a triple term built from
+    # the single nested node element. Only honored when rdf:version="1.2" is
+    # declared; otherwise the property (and its subtree) is ignored.
+    if parse_type == "Triple"
+        st.version12 || return nothing
+        tt = _rdfxml_parse_triple_term!(g, st, elem, root, base, lang, dir)
+        add!(g, Triple(subject, predicate, tt))
+        if !isnothing(annotation_id)
+            add!(g, Triple(annotation_id, URIRef(_RDF_NS * "reifies"),
+                           TripleTerm(subject, predicate, tt)))
+        end
+        return tt
     end
 
     # A property element may carry at most one node-identity / value selector.
@@ -666,7 +784,7 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
         end
         for attr in EzXML.eachattribute(elem)
             _rdfxml_is_property_attr(attr) || continue
-            _rdfxml_handle_attribute!(g, obj, attr, base, lang)
+            _rdfxml_handle_attribute!(g, obj, attr, base, lang, dir)
         end
         obj
     elseif !isnothing(resource_val)
@@ -677,11 +795,11 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
         bnode = BNode()
         inner_li = Ref(0)
         for child in EzXML.eachelement(elem)
-            _parse_rdfxml_property_element!(g, st, bnode, child, root, base, lang, inner_li)
+            _parse_rdfxml_property_element!(g, st, bnode, child, root, base, lang, inner_li, dir)
         end
         bnode
     elseif parse_type == "Collection"
-        _parse_rdfxml_collection!(g, st, elem, root, base, lang)
+        _parse_rdfxml_collection!(g, st, elem, root, base, lang, dir)
     elseif parse_type == "Literal"
         # Canonicalize the inner XML into an rdf:XMLLiteral.
         buf = IOBuffer()
@@ -693,16 +811,14 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
         children = collect(EzXML.eachelement(elem))
         if !isempty(children)
             # Nested node element: its subject IS the object of this triple
-            _parse_rdfxml_node_element!(g, st, children[1], root, base, lang)
+            _parse_rdfxml_node_element!(g, st, children[1], root, base, lang, dir)
         else
             # Text content → Literal (content preserved verbatim)
             text = EzXML.nodecontent(elem)
             if !isnothing(dt_val)
                 Literal(text, datatype=dt_val)
-            elseif !isnothing(lang)
-                Literal(text, lang=lang)
             else
-                Literal(text)
+                _rdfxml_text_literal(text, lang, dir)
             end
         end
     end
@@ -718,7 +834,88 @@ function _parse_rdfxml_property_element!(g::RDFGraph, st::_RDFXMLState, subject:
         add!(g, Triple(stmt, URIRef(_RDF_NS * "object"), object))
     end
 
+    # RDF 1.2 annotation: rdf:annotation / rdf:annotationNodeID denotes a
+    # reifier of the asserted triple.
+    if !isnothing(annotation_id)
+        add!(g, Triple(annotation_id, URIRef(_RDF_NS * "reifies"),
+                       TripleTerm(subject, predicate, object)))
+    end
+
     object
+end
+
+# Parse an rdf:parseType="Triple" property element into a TripleTerm. The
+# property element must contain exactly one nested node element which in turn
+# must have exactly one property element (the predicate/object of the triple
+# term). The nested triple is NOT asserted — only the abstract triple term is
+# produced.
+function _rdfxml_parse_triple_term!(g::RDFGraph, st::_RDFXMLState, elem::EzXML.Node,
+                                    root::EzXML.Node,
+                                    base::Union{String,Nothing},
+                                    lang::Union{String,Nothing},
+                                    dir::Union{String,Nothing})
+    nodes = collect(EzXML.eachelement(elem))
+    length(nodes) == 1 ||
+        throw(RDFXMLError("rdf:parseType=\"Triple\" requires exactly one nested node element"))
+    inner = nodes[1]
+    ibase = _rdfxml_update_base(inner, base)
+    ilang = _rdfxml_update_lang(inner, lang)
+    idir = _rdfxml_update_dir(inner, dir)
+
+    iname = EzXML.nodename(inner)
+    ins = _rdfxml_element_ns(inner)
+    _rdfxml_check_node_name(ins, iname)
+    subj = _rdfxml_get_subject(g, st, inner, ibase)
+    # An rdf:type / property *attribute* would assert a triple — not allowed in
+    # a triple term's single-statement node.
+    nprop_attrs = 0
+    for attr in EzXML.eachattribute(inner)
+        if _rdfxml_is_rdf_attr(attr, "type") || _rdfxml_is_property_attr(attr)
+            nprop_attrs += 1
+        end
+    end
+    props = collect(EzXML.eachelement(inner))
+    (length(props) + nprop_attrs) == 1 ||
+        throw(RDFXMLError("rdf:parseType=\"Triple\" requires the nested node element to have exactly one property"))
+
+    if length(props) == 1
+        # Build the predicate/object from the single nested property element
+        # WITHOUT asserting it: collect into a scratch graph and extract.
+        scratch = RDFGraph()
+        li = Ref(0)
+        _parse_rdfxml_property_element!(scratch, st, subj, props[1], root, ibase, ilang, li, idir)
+        # The asserted triple in `scratch` with subject `subj` gives (p, o).
+        local pp, oo
+        found = false
+        for t in scratch
+            if t.subject == subj
+                pp, oo = t.predicate, t.object
+                found = true
+            end
+        end
+        # Copy over any auxiliary triples (e.g. nested structures) that were
+        # produced as a side effect (collections, blank-node descriptions).
+        for t in scratch
+            (t.subject == subj && t.predicate == pp && t.object == oo) && continue
+            add!(g, t)
+        end
+        found || throw(RDFXMLError("rdf:parseType=\"Triple\" nested property produced no triple"))
+        return TripleTerm(subj, pp, oo)
+    else
+        # The single property is a property attribute (rdf:type or foreign).
+        for attr in EzXML.eachattribute(inner)
+            if _rdfxml_is_rdf_attr(attr, "type")
+                return TripleTerm(subj, URIRef(_RDF_NS * "type"),
+                                  URIRef(_rdfxml_resolve(ibase, EzXML.nodecontent(attr))))
+            elseif _rdfxml_is_property_attr(attr)
+                pns = _rdfxml_attr_ns(attr)
+                pln = EzXML.nodename(attr)
+                return TripleTerm(subj, URIRef(pns * pln),
+                                  _rdfxml_text_literal(EzXML.nodecontent(attr), ilang, idir))
+            end
+        end
+        throw(RDFXMLError("rdf:parseType=\"Triple\" malformed nested property"))
+    end
 end
 
 # Parses the children of a parseType="Collection" property element and
@@ -726,7 +923,8 @@ end
 # The caller adds the linking triple.
 function _parse_rdfxml_collection!(g::RDFGraph, st::_RDFXMLState, elem::EzXML.Node, root::EzXML.Node,
                                    base::Union{String,Nothing}=nothing,
-                                   lang::Union{String,Nothing}=nothing)
+                                   lang::Union{String,Nothing}=nothing,
+                                   dir::Union{String,Nothing}=nothing)
     rdf_first = URIRef(_RDF_NS * "first")
     rdf_rest = URIRef(_RDF_NS * "rest")
     rdf_nil = URIRef(_RDF_NS * "nil")
@@ -739,7 +937,7 @@ function _parse_rdfxml_collection!(g::RDFGraph, st::_RDFXMLState, elem::EzXML.No
 
     for (i, child) in enumerate(children)
         # The item is the subject used by the nested node element (shared)
-        item = _parse_rdfxml_node_element!(g, st, child, root, base, lang)
+        item = _parse_rdfxml_node_element!(g, st, child, root, base, lang, dir)
         add!(g, Triple(current, rdf_first, item))
 
         if i < length(children)

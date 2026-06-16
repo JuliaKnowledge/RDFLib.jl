@@ -537,4 +537,58 @@ line2</ex:multi>
         @test t.object.lexical ==
             "<br xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:eg=\"http://example.org/\"></br>"
     end
+
+    @testset "RDF 1.2 directional literals, triple terms and annotations" begin
+        reifies = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+        # its:dir + xml:lang under rdf:version=1.2 → directional literal
+        xml = """<?xml version="1.0"?>
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:ex="http://example.org/"
+                 xmlns:its="http://www.w3.org/2005/11/its"
+                 its:dir="ltr" xml:lang="en" rdf:version="1.2">
+          <rdf:Description rdf:about="http://example.org/joe" ex:name="bar"/>
+        </rdf:RDF>"""
+        g = parse_rdf(xml, RDFXMLFormat())
+        @test Triple(URIRef("http://example.org/joe"), URIRef("http://example.org/name"),
+                     Literal("bar", lang="en", direction="ltr")) in g
+
+        # without rdf:version, its:dir is ignored (plain language tag)
+        xml2 = replace(xml, " rdf:version=\"1.2\"" => "")
+        g2 = parse_rdf(xml2, RDFXMLFormat())
+        @test Triple(URIRef("http://example.org/joe"), URIRef("http://example.org/name"),
+                     Literal("bar", lang="en")) in g2
+
+        # rdf:parseType="Triple" → triple term object
+        xmltt = """<?xml version="1.0"?>
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:ex="http://example.org/" rdf:version="1.2">
+          <rdf:Description rdf:about="http://example.org/a">
+            <ex:prop rdf:parseType="Triple">
+              <rdf:Description rdf:about="http://example.org/s">
+                <ex:p rdf:resource="http://example.org/o"/>
+              </rdf:Description>
+            </ex:prop>
+          </rdf:Description>
+        </rdf:RDF>"""
+        g3 = parse_rdf(xmltt, RDFXMLFormat())
+        @test Triple(URIRef("http://example.org/a"), URIRef("http://example.org/prop"),
+                     TripleTerm(URIRef("http://example.org/s"),
+                                URIRef("http://example.org/p"),
+                                URIRef("http://example.org/o"))) in g3
+
+        # rdf:annotation → reifier of the asserted triple
+        xmlan = """<?xml version="1.0"?>
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:ex="http://example.org/">
+          <rdf:Description rdf:about="http://example.org/s">
+            <ex:p rdf:annotation="http://example.org/r">blah</ex:p>
+          </rdf:Description>
+        </rdf:RDF>"""
+        g4 = parse_rdf(xmlan, RDFXMLFormat())
+        @test Triple(URIRef("http://example.org/s"), URIRef("http://example.org/p"),
+                     Literal("blah")) in g4
+        @test Triple(URIRef("http://example.org/r"), reifies,
+                     TripleTerm(URIRef("http://example.org/s"), URIRef("http://example.org/p"),
+                                Literal("blah"))) in g4
+    end
 end

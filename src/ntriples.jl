@@ -41,8 +41,8 @@ function _nt_term(l::Literal)
 end
 
 function _nt_term(tt::TripleTerm)
-    string("<< ", _nt_term(tt.subject), " ", _nt_term(tt.predicate), " ",
-           _nt_term(tt.object), " >>")
+    string("<<( ", _nt_term(tt.subject), " ", _nt_term(tt.predicate), " ",
+           _nt_term(tt.object), " )>>")
 end
 
 # Characters that may not appear raw inside an IRIREF per the N-Triples
@@ -341,6 +341,10 @@ function _nt_parse_literal!(c::_NTCursor)
         _nt_next!(c)
         (_nt_peek(c) == '<') || _nt_error(c, "expected IRI after '^^'")
         dt = _nt_parse_iriref!(c)
+        # rdf:langString / rdf:dirLangString may not be used as an explicit
+        # datatype — they only arise implicitly from a language tag.
+        (dt == _RDF_LANGSTRING_DT || dt == _RDF_DIRLANGSTRING_DT) &&
+            _nt_error(c, "datatype <$(dt.value)> may not be used explicitly; it is implied by a language tag")
         return Literal(lexical, datatype=dt)
     else
         return Literal(lexical)
@@ -359,9 +363,13 @@ function _nt_parse_langtag!(c::_NTCursor)
 
     !_nt_eof(c) && isletter_ascii(_nt_peek(c)) ||
         _nt_error(c, "invalid language tag (must start with a letter)")
+    primary_len = 0
     while !_nt_eof(c) && isletter_ascii(_nt_peek(c))
         write(buf, _nt_next!(c))
+        primary_len += 1
     end
+    primary_len <= 8 ||
+        _nt_error(c, "invalid language tag (primary subtag exceeds 8 characters)")
     # Subtags: '-' followed by alphanumerics. A '--' starts the direction.
     while _nt_peek(c) == '-'
         p2 = nextind(c.s, c.pos)
@@ -370,9 +378,13 @@ function _nt_parse_langtag!(c::_NTCursor)
         (!_nt_eof(c) && isalnum_ascii(_nt_peek(c))) ||
             _nt_error(c, "invalid language tag subtag")
         write(buf, '-')
+        sub_len = 0
         while !_nt_eof(c) && isalnum_ascii(_nt_peek(c))
             write(buf, _nt_next!(c))
+            sub_len += 1
         end
+        sub_len <= 8 ||
+            _nt_error(c, "invalid language tag (subtag exceeds 8 characters)")
     end
     dir = nothing
     if _nt_peek(c) == '-'  # must be '--' (checked above)
@@ -389,28 +401,27 @@ function _nt_parse_langtag!(c::_NTCursor)
     (String(take!(buf)), dir)
 end
 
-"Parse an RDF-star triple term; the cursor is positioned at the first `<` of `<<`."
+"""
+Parse an RDF 1.2 triple term; the cursor is positioned at the first `<` of
+`<<(`. Only the parenthesised form `<<( S P O )>>` is valid N-Triples 1.2.
+The subject must be an IRI/blank node/triple term (not a literal), the
+predicate must be an IRI, and the object any term.
+"""
 function _nt_parse_tripleterm!(c::_NTCursor)
     _nt_next!(c)  # '<'
     _nt_next!(c)  # '<'
-    # Accept both the classic '<< s p o >>' form and the RDF 1.2
-    # tripleTerm form '<<( s p o )>>'.
-    paren = false
-    if _nt_peek(c) == '('
-        paren = true
-        _nt_next!(c)
-    end
+    (_nt_peek(c) == '(') ||
+        _nt_error(c, "expected '<<(' to open triple term (reifier syntax '<< ... >>' is not allowed in N-Triples)")
+    _nt_next!(c)  # '('
     _nt_skip_ws!(c)
-    subj = _nt_parse_subject!(c)
+    subj = _nt_parse_subject!(c; allow_tripleterm=false)
     _nt_skip_ws!(c)
     pred = _nt_parse_predicate!(c)
     _nt_skip_ws!(c)
     obj = _nt_parse_object!(c)
     _nt_skip_ws!(c)
-    if paren
-        (_nt_peek(c) == ')') || _nt_error(c, "expected ')>>' to close triple term")
-        _nt_next!(c)
-    end
+    (_nt_peek(c) == ')') || _nt_error(c, "expected ')>>' to close triple term")
+    _nt_next!(c)
     (_nt_peek(c) == '>') || _nt_error(c, "expected '>>' to close triple term")
     _nt_next!(c)
     (_nt_peek(c) == '>') || _nt_error(c, "expected '>>' to close triple term")
@@ -418,13 +429,37 @@ function _nt_parse_tripleterm!(c::_NTCursor)
     TripleTerm(subj, pred, obj)
 end
 
-_nt_at_tripleterm(c::_NTCursor) =
-    _nt_peek(c) == '<' && (p2 = nextind(c.s, c.pos); p2 <= lastindex(c.s) && c.s[p2] == '<')
+# A triple term begins with '<<(' (RDF 1.2). A plain '<<' (reifier) is not
+# valid N-Triples and is rejected at the point of use.
+function _nt_at_tripleterm(c::_NTCursor)
+    _nt_peek(c) == '<' || return false
+    p2 = nextind(c.s, c.pos)
+    (p2 <= lastindex(c.s) && c.s[p2] == '<') || return false
+    p3 = nextind(c.s, p2)
+    p3 <= lastindex(c.s) && c.s[p3] == '('
+end
 
-function _nt_parse_subject!(c::_NTCursor)
+# True if the cursor is at a '<<' that is NOT a valid triple term start (i.e.
+# a reifier `<< ... >>`, which is illegal in N-Triples).
+function _nt_at_reifier(c::_NTCursor)
+    _nt_peek(c) == '<' || return false
+    p2 = nextind(c.s, c.pos)
+    (p2 <= lastindex(c.s) && c.s[p2] == '<') || return false
+    p3 = nextind(c.s, p2)
+    !(p3 <= lastindex(c.s) && c.s[p3] == '(')
+end
+
+function _nt_parse_subject!(c::_NTCursor; allow_tripleterm::Bool=true)
     ch = _nt_peek(c)
     if ch == '<'
-        return _nt_at_tripleterm(c) ? _nt_parse_tripleterm!(c) : _nt_parse_iriref!(c)
+        if _nt_at_tripleterm(c)
+            allow_tripleterm ||
+                _nt_error(c, "a triple term '<<( ... )>>' may only appear in object position")
+            return _nt_parse_tripleterm!(c)
+        elseif _nt_at_reifier(c)
+            _nt_error(c, "reifier '<< ... >>' is not allowed in N-Triples")
+        end
+        return _nt_parse_iriref!(c)
     elseif ch == '_'
         return _nt_parse_bnode!(c)
     end
@@ -432,7 +467,7 @@ function _nt_parse_subject!(c::_NTCursor)
 end
 
 function _nt_parse_predicate!(c::_NTCursor)
-    (_nt_peek(c) == '<' && !_nt_at_tripleterm(c)) ||
+    (_nt_peek(c) == '<' && !_nt_at_tripleterm(c) && !_nt_at_reifier(c)) ||
         _nt_error(c, "expected predicate IRI")
     _nt_parse_iriref!(c)
 end
@@ -442,7 +477,12 @@ function _nt_parse_object!(c::_NTCursor)
     if ch == '"'
         return _nt_parse_literal!(c)
     elseif ch == '<'
-        return _nt_at_tripleterm(c) ? _nt_parse_tripleterm!(c) : _nt_parse_iriref!(c)
+        if _nt_at_tripleterm(c)
+            return _nt_parse_tripleterm!(c)
+        elseif _nt_at_reifier(c)
+            _nt_error(c, "reifier '<< ... >>' is not allowed in N-Triples")
+        end
+        return _nt_parse_iriref!(c)
     elseif ch == '_'
         return _nt_parse_bnode!(c)
     end
@@ -460,7 +500,7 @@ function _nt_parse_statement(line::AbstractString, lineno::Int, fmt::String;
     _nt_skip_ws!(c)
     (_nt_eof(c) || _nt_peek(c) == '#') && return nothing
 
-    subj = _nt_parse_subject!(c)
+    subj = _nt_parse_subject!(c; allow_tripleterm=false)
     _nt_skip_ws!(c)
     pred = _nt_parse_predicate!(c)
     _nt_skip_ws!(c)

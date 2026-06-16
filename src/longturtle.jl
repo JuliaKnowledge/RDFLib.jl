@@ -24,9 +24,9 @@ _longturtle_term(u::URIRef) = "<" * u.value * ">"
 _longturtle_term(b::BNode) = "_:" * b.id
 
 function _longturtle_term(tt::TripleTerm)
-    string("<< ", _longturtle_term(tt.subject), " ",
+    string("<<( ", _longturtle_term(tt.subject), " ",
            _longturtle_term(tt.predicate), " ",
-           _longturtle_term(tt.object), " >>")
+           _longturtle_term(tt.object), " )>>")
 end
 
 function _longturtle_term(lit::Literal)

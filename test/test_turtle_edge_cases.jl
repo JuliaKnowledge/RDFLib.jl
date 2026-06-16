@@ -719,50 +719,62 @@ end
         @test Triple(EX("s"), EX("p"), Literal("x", lang="en-GB")) in g4
     end
 
-    @testset "Turtle-star quoted triples" begin
+    @testset "RDF 1.2 triple terms and reifiers" begin
         rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        reifies = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+
+        # A reifier `<< s p o >>` denotes a fresh reifier blank node that
+        # rdf:reifies the triple term `<<( s p o )>>`. It does NOT assert s p o.
         g = RDFLib.parse_turtle("""
             @prefix ex: <http://example.org/> .
             << ex:s ex:p ex:o >> ex:certainty 0.9 .
-            ex:a ex:b << ex:c a ex:D >> .
         """)
         @test length(g) == 2
         tt1 = TripleTerm(EX("s"), EX("p"), EX("o"))
-        tt2 = TripleTerm(EX("c"), rdf_type, EX("D"))
         xsd_decimal = URIRef("http://www.w3.org/2001/XMLSchema#decimal")
-        @test Triple(tt1, EX("certainty"), Literal("0.9", datatype=xsd_decimal)) in g
-        @test Triple(EX("a"), EX("b"), tt2) in g
+        # one rdf:reifies triple and one certainty triple, sharing a bnode subject
+        reif = [t for t in g if t.predicate == reifies]
+        @test length(reif) == 1
+        @test reif[1].object == tt1
+        rid = reif[1].subject
+        @test rid isa BNode
+        @test Triple(rid, EX("certainty"), Literal("0.9", datatype=xsd_decimal)) in g
 
-        # nested quoted triple
+        # A triple term `<<( s p o )>>` is a term and may appear as object.
         g2 = RDFLib.parse_turtle("""
             @prefix ex: <http://example.org/> .
-            << << ex:s ex:p ex:o >> ex:q ex:r >> ex:meta ex:m .
+            ex:a ex:b <<( ex:c a ex:D )>> .
         """)
-        @test Triple(TripleTerm(tt1, EX("q"), EX("r")), EX("meta"), EX("m")) in g2
+        @test length(g2) == 1
+        @test Triple(EX("a"), EX("b"), TripleTerm(EX("c"), rdf_type, EX("D"))) in g2
 
-        # serialization round-trip
-        bind!(g, "ex", EX)
-        ttl = serialize(g, TurtleFormat())
+        # serialization round-trip of a triple term
+        bind!(g2, "ex", EX)
+        ttl = serialize(g2, TurtleFormat())
         g3 = parse_rdf(ttl, TurtleFormat())
-        @test length(g3) == 2
-        for t in g
+        @test length(g3) == 1
+        for t in g2
             @test t in g3
         end
     end
 
-    @testset "Turtle-star annotation syntax" begin
+    @testset "RDF 1.2 annotation syntax" begin
+        reifies = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
         g = RDFLib.parse_turtle("""
             @prefix ex: <http://example.org/> .
             ex:s ex:p ex:o {| ex:certainty 0.9 ; ex:source ex:doc |} .
         """)
         tt = TripleTerm(EX("s"), EX("p"), EX("o"))
         xsd_decimal = URIRef("http://www.w3.org/2001/XMLSchema#decimal")
-        @test length(g) == 3
-        # base triple is asserted
+        # base triple + reifies + 2 annotation triples
+        @test length(g) == 4
         @test Triple(EX("s"), EX("p"), EX("o")) in g
-        # annotations attach to the quoted triple term
-        @test Triple(tt, EX("certainty"), Literal("0.9", datatype=xsd_decimal)) in g
-        @test Triple(tt, EX("source"), EX("doc")) in g
+        reif = [t for t in g if t.predicate == reifies]
+        @test length(reif) == 1
+        @test reif[1].object == tt
+        rid = reif[1].subject
+        @test Triple(rid, EX("certainty"), Literal("0.9", datatype=xsd_decimal)) in g
+        @test Triple(rid, EX("source"), EX("doc")) in g
     end
 
     # ── W3C strictness regressions ────────────────────────────────────

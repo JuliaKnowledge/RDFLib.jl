@@ -2,6 +2,9 @@
 # Human-readable RDF serialization with prefix declarations,
 # subject clustering, and compact blank node syntax.
 
+# RDF 1.2 reification predicate.
+const _RDF_REIFIES = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+
 # ─── Serialization ──────────────────────────────────────────────────
 
 """
@@ -327,9 +330,9 @@ function _turtle_format_node(ctx::_TurtleSerContext, u::URIRef)
 end
 
 function _turtle_format_node(ctx::_TurtleSerContext, tt::TripleTerm)
-    string("<< ", _turtle_format_node(ctx, tt.subject), " ",
+    string("<<( ", _turtle_format_node(ctx, tt.subject), " ",
            _turtle_format_node(ctx, tt.predicate), " ",
-           _turtle_format_node(ctx, tt.object), " >>")
+           _turtle_format_node(ctx, tt.object), " )>>")
 end
 
 function _turtle_format_node(ctx::_TurtleSerContext, b::BNode)
@@ -475,10 +478,14 @@ function _turtle_parse_document!(p::_TurtleParser)
             _parse_prefix_directive!(p)
         elseif _at_base_directive(p)
             _parse_base_directive!(p)
+        elseif _at_version_directive(p)
+            _parse_version_directive!(p)
         elseif _at_sparql_prefix(p)
             _parse_sparql_prefix!(p)
         elseif _at_sparql_base(p)
             _parse_sparql_base!(p)
+        elseif _at_sparql_version(p)
+            _parse_sparql_version!(p)
         else
             _parse_triples!(p)
         end
@@ -563,6 +570,53 @@ function _at_sparql_prefix(p::_TurtleParser)
 end
 function _at_sparql_base(p::_TurtleParser)
     _at_string_ci(p, "BASE") && !_at_string_ci(p, "BASE:")
+end
+
+# `@version "…" .`  (Turtle-style version directive)
+_at_version_directive(p::_TurtleParser) = _at_string(p, "@version")
+
+# `VERSION "…"` / `version "…"`  (SPARQL-style keyword, case-insensitive,
+# no leading '@', no trailing '.'). Must be at a token boundary so that a
+# prefixed name like `version:x` is not mistaken for the keyword.
+function _at_sparql_version(p::_TurtleParser)
+    _at_string_ci(p, "VERSION") || return false
+    endpos = p.pos
+    for _ in 1:7
+        endpos = nextind(p.input, endpos)
+    end
+    endpos > lastindex(p.input) && return true
+    c = p.input[endpos]
+    !(_is_pn_chars(c) || c == ':')
+end
+
+# Read a single-line quoted version string ('"…"' or '\'…\''). Long
+# (triple-quoted) strings and unquoted tokens are rejected.
+function _parse_version_string!(p::_TurtleParser)
+    c = _peek(p)
+    (c == '"' || c == '\'') ||
+        throw(ArgumentError("VERSION directive requires a quoted string at position $(p.pos)"))
+    # Reject triple-quoted (long) strings.
+    if _at_string(p, string(c, c, c))
+        throw(ArgumentError("VERSION directive does not accept a long (triple-quoted) string at position $(p.pos)"))
+    end
+    lit = _parse_literal!(p)
+    (lit isa Literal && lit.datatype === nothing && lit.language === nothing) ||
+        throw(ArgumentError("invalid VERSION string at position $(p.pos)"))
+    lit.lexical
+end
+
+function _parse_version_directive!(p::_TurtleParser)
+    _consume_str!(p, "@version")
+    _skip_ws_and_comments!(p)
+    _parse_version_string!(p)
+    _skip_ws_and_comments!(p)
+    _consume!(p, '.')
+end
+
+function _parse_sparql_version!(p::_TurtleParser)
+    for _ in 1:7; p.pos = nextind(p.input, p.pos); end
+    _skip_ws_and_comments!(p)
+    _parse_version_string!(p)
 end
 
 function _parse_prefix_directive!(p::_TurtleParser)
@@ -700,9 +754,12 @@ function _parse_triples!(p::_TurtleParser)
     c === nothing && return
 
     # A blankNodePropertyList ('[...]') subject may stand alone (its nested
-    # predicateObjectList already produced triples); every other subject form
-    # requires a non-empty predicateObjectList.
+    # predicateObjectList already produced triples). A reifier subject
+    # (`<< … >>`) may also stand alone (it already emitted its rdf:reifies
+    # triple). Every other subject form requires a non-empty
+    # predicateObjectList.
     subject_is_bnpl = c == '['
+    subject_is_reifier = c == '<' && _at_string(p, "<<") && !_at_string(p, "<<(")
 
     # Parse subject
     subject = _parse_subject!(p)
@@ -710,7 +767,7 @@ function _parse_triples!(p::_TurtleParser)
 
     # Parse predicate-object list
     n = _parse_predicate_object_list!(p, subject)
-    (n == 0 && !subject_is_bnpl) &&
+    (n == 0 && !subject_is_bnpl && !subject_is_reifier) &&
         throw(ArgumentError("Subject has no predicate-object list at position $(p.pos)"))
 
     _skip_ws_and_comments!(p)
@@ -720,7 +777,11 @@ end
 function _parse_subject!(p::_TurtleParser)
     c = _peek(p)
     if c == '<'
-        _at_string(p, "<<") && return _parse_quoted_triple!(p)
+        if _at_string(p, "<<(")
+            throw(ArgumentError("a triple term '<<( … )>>' may only appear in object position at position $(p.pos)"))
+        elseif _at_string(p, "<<")
+            return _parse_reifier!(p)
+        end
         return URIRef(_parse_iriref!(p))
     elseif c == '_'
         return _parse_blank_node_label!(p)
@@ -738,7 +799,7 @@ function _parse_predicate_object_list!(p::_TurtleParser, subject::Node)
     while true
         _skip_ws_and_comments!(p)
         c = _peek(p)
-        (c === nothing || c == '.' || c == ']' || c == ')') && break
+        (c === nothing || c == '.' || c == ']' || c == ')' || c == '|') && break
 
         predicate = _parse_verb!(p)
         _skip_ws_and_comments!(p)
@@ -754,9 +815,9 @@ function _parse_predicate_object_list!(p::_TurtleParser, subject::Node)
                 p.pos = nextind(p.input, p.pos)
                 _skip_ws_and_comments!(p)
             end
-            # Check for trailing semicolon before . or ]
+            # Check for trailing semicolon before . or ] or |}
             c2 = _peek(p)
-            (c2 === nothing || c2 == '.' || c2 == ']') && break
+            (c2 === nothing || c2 == '.' || c2 == ']' || c2 == '|') && break
         else
             break
         end
@@ -786,17 +847,7 @@ function _parse_object_list!(p::_TurtleParser, subject::Node, predicate::URIRef)
         add!(p.graph, Triple(subject, predicate, object))
 
         _skip_ws_and_comments!(p)
-        # Turtle-star annotation block: `:s :p :o {| :a :b |}` asserts the
-        # base triple and annotates the corresponding quoted triple term.
-        if _at_string(p, "{|")
-            _consume_str!(p, "{|")
-            _skip_ws_and_comments!(p)
-            tt = TripleTerm(subject, predicate, object)
-            _parse_predicate_object_list!(p, tt)
-            _skip_ws_and_comments!(p)
-            _consume_str!(p, "|}")
-            _skip_ws_and_comments!(p)
-        end
+        _parse_annotations!(p, subject, predicate, object)
         c = _peek(p)
         if c == ','
             p.pos = nextind(p.input, p.pos)
@@ -804,6 +855,64 @@ function _parse_object_list!(p::_TurtleParser, subject::Node, predicate::URIRef)
             break
         end
     end
+end
+
+# Parse the RDF 1.2 annotation/reifier sequence that may follow an object:
+#   ( '~' reifierId | '{|' predicateObjectList '|}' )*
+#
+# Each `~ id` and each `{| … |}` introduces a reifier for the triple
+# `(subject, predicate, object)`. A `~ id` sets a pending explicit reifier
+# id for the next annotation block; if the block is omitted (another `~`
+# or end of sequence) the pending id is still emitted as a bare reifier.
+# A `{| … |}` block uses the pending id (or a fresh blank node) as the
+# reifier subject and attaches its predicate-object list to it.
+function _parse_annotations!(p::_TurtleParser, subject::Node, predicate::URIRef, object::Identifier)
+    pending = nothing            # explicit reifier id awaiting a block
+    have_pending = false
+    while true
+        _skip_ws_and_comments!(p)
+        if _peek(p) == '~'
+            # Flush any unconsumed pending reifier id as a bare reifier.
+            if have_pending
+                _emit_reifier!(p, pending, subject, predicate, object)
+            end
+            p.pos = nextind(p.input, p.pos)
+            _skip_ws_and_comments!(p)
+            # The reifier id is optional: a bare `~` uses a fresh blank node.
+            c2 = _peek(p)
+            if c2 === nothing || c2 == '.' || c2 == ';' || c2 == ',' ||
+               c2 == ']' || c2 == ')' || _at_string(p, "{|") || c2 == '~' ||
+               c2 == '|'
+                pending = _new_bnode!(p)
+            else
+                pending = _parse_reifier_id!(p)
+            end
+            have_pending = true
+            _skip_ws_and_comments!(p)
+        elseif _at_string(p, "{|")
+            _consume_str!(p, "{|")
+            _skip_ws_and_comments!(p)
+            rid = have_pending ? pending : _new_bnode!(p)
+            _emit_reifier!(p, rid, subject, predicate, object)
+            have_pending = false
+            pending = nothing
+            # An empty annotation block `{| |}` is not allowed.
+            np = _parse_predicate_object_list!(p, rid)
+            np == 0 && throw(ArgumentError("empty annotation block at position $(p.pos)"))
+            _skip_ws_and_comments!(p)
+            _consume_str!(p, "|}")
+            _skip_ws_and_comments!(p)
+        else
+            break
+        end
+    end
+    if have_pending
+        _emit_reifier!(p, pending, subject, predicate, object)
+    end
+end
+
+function _emit_reifier!(p::_TurtleParser, rid::Node, subject::Node, predicate::URIRef, object::Identifier)
+    add!(p.graph, Triple(rid, _RDF_REIFIES, TripleTerm(subject, predicate, object)))
 end
 
 function _parse_object!(p::_TurtleParser)
@@ -817,7 +926,8 @@ function _parse_node!(p::_TurtleParser)::Identifier
     c === nothing && throw(ArgumentError("Unexpected end of input"))
 
     if c == '<'
-        _at_string(p, "<<") && return _parse_quoted_triple!(p)
+        _at_string(p, "<<(") && return _parse_triple_term!(p)
+        _at_string(p, "<<") && return _parse_reifier!(p)
         return URIRef(_parse_iriref!(p))
     elseif c == '_'
         return _parse_blank_node_label!(p)
@@ -860,21 +970,134 @@ function _at_keyword(p::_TurtleParser, word::AbstractString)
     !(_is_pn_chars(c) || c == ':')
 end
 
-# ─── Quoted triple parsing (Turtle-star / RDF 1.2) ─────────────────
+# ─── Reifier / triple term parsing (RDF 1.2) ───────────────────────
+#
+# RDF 1.2 distinguishes two `<<…>>` forms:
+#   * triple term:  `<<( s p o )>>`  — a term (the rdf triple term), may
+#     appear in object position only. Maps directly to a `TripleTerm`.
+#   * reifier:      `<< s p o >>` or `<< s p o ~ reifierId >>` — denotes a
+#     reifier resource (the given id, or a fresh blank node) and emits
+#     `reifier rdf:reifies <<( s p o )>>`. The reifier resource is returned
+#     and used in subject/object position. It does NOT assert `s p o`.
 
-function _parse_quoted_triple!(p::_TurtleParser)
-    _consume_str!(p, "<<")
+# Parse a triple term `<<( s p o )>>`; cursor positioned at `<<(`.
+function _parse_triple_term!(p::_TurtleParser)
+    _consume_str!(p, "<<(")
     _skip_ws_and_comments!(p)
-    s = _parse_node!(p)
-    s isa Node ||
-        throw(ArgumentError("Quoted triple subject must be an IRI, blank node, or quoted triple"))
+    s = _parse_reified_subject!(p; allow_reifier=false)
     _skip_ws_and_comments!(p)
     pred = _parse_verb!(p)
     _skip_ws_and_comments!(p)
-    o = _parse_node!(p)
+    o = _parse_reified_object!(p; allow_reifier=false)
     _skip_ws_and_comments!(p)
-    _consume_str!(p, ">>")
+    _consume_str!(p, ")>>")
     TripleTerm(s, pred, o)
+end
+
+# Parse an empty anonymous blank node `[]`. A blank-node property list with
+# content (`[ … ]`) is not allowed in a reified-triple position.
+function _parse_anon_bnode!(p::_TurtleParser)
+    _consume!(p, '[')
+    _skip_ws_and_comments!(p)
+    _peek(p) == ']' ||
+        throw(ArgumentError("a blank-node property list with content is not permitted as a reified-triple term at position $(p.pos)"))
+    _consume!(p, ']')
+    _new_bnode!(p)
+end
+
+# Subject of a reified/triple-term triple. `allow_reifier` controls whether a
+# nested reifier `<< … >>` is permitted (true inside reifiers, false inside
+# triple terms). Collections, literals and non-empty blank-node property
+# lists are not permitted.
+function _parse_reified_subject!(p::_TurtleParser; allow_reifier::Bool=true)
+    c = _peek(p)
+    if c == '<'
+        _at_string(p, "<<(") && return _parse_triple_term!(p)
+        if _at_string(p, "<<")
+            allow_reifier ||
+                throw(ArgumentError("a reifier '<< … >>' may not appear inside a triple term at position $(p.pos)"))
+            return _parse_reifier!(p)
+        end
+        return URIRef(_parse_iriref!(p))
+    elseif c == '_'
+        return _parse_blank_node_label!(p)
+    elseif c == '['
+        return _parse_anon_bnode!(p)
+    elseif c == '('
+        throw(ArgumentError("collection not permitted as reified-triple subject at position $(p.pos)"))
+    elseif c == '"' || c == '\'' || c == '+' || c == '-' || (c !== nothing && isdigit(c)) ||
+           (c == '.' && _next_char_is_digit(p.input, p.pos))
+        throw(ArgumentError("reified-triple subject may not be a literal at position $(p.pos)"))
+    else
+        return _parse_prefixed_name!(p)
+    end
+end
+
+# Object of a reified/triple-term triple: like the subject but literals are
+# allowed. Collections and non-empty blank-node property lists are not.
+function _parse_reified_object!(p::_TurtleParser; allow_reifier::Bool=true)
+    c = _peek(p)
+    if c == '['
+        return _parse_anon_bnode!(p)
+    elseif c == '('
+        throw(ArgumentError("collection not permitted as reified-triple object at position $(p.pos)"))
+    elseif c == '<'
+        if _at_string(p, "<<(")
+            return _parse_triple_term!(p)
+        elseif _at_string(p, "<<")
+            allow_reifier ||
+                throw(ArgumentError("a reifier '<< … >>' may not appear inside a triple term at position $(p.pos)"))
+            return _parse_reifier!(p)
+        end
+    end
+    return _parse_node!(p)
+end
+
+# Parse a reifier `<< s p o (~ reifierId)? >>`; cursor positioned at `<<`
+# (not `<<(`). Returns the reifier resource (Node) and emits the
+# `reifier rdf:reifies <<( s p o )>>` triple.
+function _parse_reifier!(p::_TurtleParser)
+    _consume_str!(p, "<<")
+    _skip_ws_and_comments!(p)
+    s = _parse_reified_subject!(p)
+    _skip_ws_and_comments!(p)
+    pred = _parse_verb!(p)
+    _skip_ws_and_comments!(p)
+    o = _parse_reified_object!(p)
+    _skip_ws_and_comments!(p)
+    reifier = nothing
+    if _peek(p) == '~'
+        p.pos = nextind(p.input, p.pos)
+        _skip_ws_and_comments!(p)
+        # The id is optional: `<< s p o ~ >>` uses a fresh blank node.
+        _at_string(p, ">>") || (reifier = _parse_reifier_id!(p))
+        _skip_ws_and_comments!(p)
+    end
+    _consume_str!(p, ">>")
+    rid = reifier === nothing ? _new_bnode!(p) : reifier
+    tt = TripleTerm(s, pred, o)
+    add!(p.graph, Triple(rid, _RDF_REIFIES, tt))
+    rid
+end
+
+# A reifier id is an IRI or blank node (label or anonymous []).
+function _parse_reifier_id!(p::_TurtleParser)
+    c = _peek(p)
+    if c == '<'
+        return URIRef(_parse_iriref!(p))
+    elseif c == '_'
+        return _parse_blank_node_label!(p)
+    elseif c == '['
+        return _parse_anon_bnode!(p)
+    else
+        return _parse_prefixed_name!(p)
+    end
+end
+
+# Dispatch on a `<<` token: triple term (`<<(`) vs reifier (`<<`).
+function _parse_quoted_triple!(p::_TurtleParser)
+    _at_string(p, "<<(") && return _parse_triple_term!(p)
+    return _parse_reifier!(p)
 end
 
 # ─── Blank node parsing ────────────────────────────────────────────

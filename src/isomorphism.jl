@@ -9,7 +9,36 @@ import Graphs: SimpleDiGraph, add_edge!
 
 # ─── Helpers ────────────────────────────────────────────────────────
 
-_has_bnode(t::Triple) = t.subject isa BNode || t.object isa BNode
+# A term contains a blank node directly, or (for triple terms) nested inside
+# its components.
+_term_has_bnode(x::BNode) = true
+_term_has_bnode(tt::TripleTerm) =
+    _term_has_bnode(tt.subject) || _term_has_bnode(tt.predicate) || _term_has_bnode(tt.object)
+_term_has_bnode(::Identifier) = false
+
+_has_bnode(t::Triple) = _term_has_bnode(t.subject) || _term_has_bnode(t.object)
+
+# Collect blank nodes from a term, recursing into triple terms.
+function _collect_term_bnodes!(set::Set{BNode}, x::Identifier)
+    if x isa BNode
+        push!(set, x)
+    elseif x isa TripleTerm
+        _collect_term_bnodes!(set, x.subject)
+        _collect_term_bnodes!(set, x.predicate)
+        _collect_term_bnodes!(set, x.object)
+    end
+    set
+end
+
+# Does triple `t` reference blank node `b` anywhere (including inside a
+# triple term)?
+function _triple_references(t::Triple, b::BNode)
+    _term_references(t.subject, b) || _term_references(t.object, b)
+end
+_term_references(x::BNode, b::BNode) = x == b
+_term_references(tt::TripleTerm, b::BNode) =
+    _term_references(tt.subject, b) || _term_references(tt.predicate, b) || _term_references(tt.object, b)
+_term_references(::Identifier, ::BNode) = false
 
 """Split triples into ground (no blank nodes) and non-ground."""
 function _partition_triples(triples::Vector{Triple})
@@ -25,8 +54,8 @@ end
 function _collect_bnodes(triples::Vector{Triple})
     bnodes = Set{BNode}()
     for t in triples
-        t.subject isa BNode && push!(bnodes, t.subject)
-        t.object  isa BNode && push!(bnodes, t.object)
+        _collect_term_bnodes!(bnodes, t.subject)
+        _collect_term_bnodes!(bnodes, t.object)
     end
     collect(bnodes)
 end
@@ -42,17 +71,30 @@ end
 # under the mapping, so hash collisions can never produce a false
 # positive.
 
-"""Signature of a term: refined color for blank nodes, plain hash otherwise."""
-_term_sig(term::Identifier, colors::Dict{BNode,UInt}) =
-    term isa BNode ? hash((:bnode, colors[term])) : hash(term)
+"""Signature of a term: refined color for blank nodes, recursive signature
+for triple terms, plain hash otherwise."""
+function _term_sig(term::Identifier, colors::Dict{BNode,UInt})
+    if term isa BNode
+        return hash((:bnode, colors[term]))
+    elseif term isa TripleTerm
+        return hash((:tripleterm,
+                     _term_sig(term.subject, colors),
+                     _term_sig(term.predicate, colors),
+                     _term_sig(term.object, colors)))
+    else
+        return hash(term)
+    end
+end
 
 """Build incidence map: bnode → triples it appears in (each triple once)."""
 function _build_incidence(triples::Vector{Triple}, bnodes::Vector{BNode})
     incidence = Dict{BNode, Vector{Triple}}(b => Triple[] for b in bnodes)
     for t in triples
-        t.subject isa BNode && push!(incidence[t.subject], t)
-        if t.object isa BNode && t.object != t.subject
-            push!(incidence[t.object], t)
+        local_bn = Set{BNode}()
+        _collect_term_bnodes!(local_bn, t.subject)
+        _collect_term_bnodes!(local_bn, t.object)
+        for b in local_bn
+            push!(incidence[b], t)
         end
     end
     incidence
@@ -74,8 +116,8 @@ function _refine_round(bnodes::Vector{BNode},
             tsig = hash((_term_sig(t.subject, colors),
                          hash(t.predicate),
                          _term_sig(t.object, colors)))
-            t.subject == b && push!(sigs, hash((tsig, 0x01)))
-            t.object  == b && push!(sigs, hash((tsig, 0x02)))
+            _term_references(t.subject, b) && push!(sigs, hash((tsig, 0x01)))
+            _term_references(t.object, b)  && push!(sigs, hash((tsig, 0x02)))
         end
         sort!(sigs)
         new_colors[b] = hash((colors[b], sigs))
@@ -240,11 +282,23 @@ function _check_bnode_isomorphism(bnode_triples1::Vector{Triple},
     _iso_backtrack(bnode_triples1, Set(bnode_triples2), bn1, inc1, bn2, inc2, c1, c2, 0)
 end
 
+"""Remap blank nodes in a term according to a BNode→BNode mapping,
+recursing into triple terms."""
+function _remap_term(x::Identifier, mapping::Dict{BNode,BNode})
+    if x isa BNode
+        return get(mapping, x, x)
+    elseif x isa TripleTerm
+        return TripleTerm(_remap_term(x.subject, mapping),
+                          x.predicate,
+                          _remap_term(x.object, mapping))
+    else
+        return x
+    end
+end
+
 """Remap blank nodes in a triple according to a BNode→BNode mapping."""
 function _remap_triple(t::Triple, mapping::Dict{BNode,BNode})
-    s = t.subject isa BNode ? get(mapping, t.subject, t.subject) : t.subject
-    o = t.object  isa BNode ? get(mapping, t.object, t.object)  : t.object
-    Triple(s, t.predicate, o)
+    Triple(_remap_term(t.subject, mapping), t.predicate, _remap_term(t.object, mapping))
 end
 
 # ─── Public API ─────────────────────────────────────────────────────

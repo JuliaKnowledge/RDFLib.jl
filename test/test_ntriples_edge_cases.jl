@@ -588,51 +588,46 @@ using RDFLib
         end
     end
 
-    # ── 17. RDF-star triple terms ──────────────────────────────────────
+    # ── 17. RDF 1.2 triple terms ───────────────────────────────────────
     @testset "triple terms" begin
         inner = TripleTerm(EX("s"), EX("p"), EX("o"))
 
-        @testset "parse triple term in subject position" begin
-            nt = "<< <http://example.org/s> <http://example.org/p> <http://example.org/o> >> <http://example.org/q> \"v\" ."
-            g = parse_rdf(nt, NTriplesFormat())
-            t = first(g)
-            @test t.subject == inner
-            @test t.object == Literal("v")
-        end
-
-        @testset "parse triple term in object position" begin
-            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/s> <http://example.org/p> <http://example.org/o> >> ."
-            g = parse_rdf(nt, NTriplesFormat())
-            @test first(g).object == inner
-        end
-
-        @testset "parse RDF 1.2 '<<( )>>' triple term form" begin
+        @testset "parse RDF 1.2 '<<( )>>' triple term in object position" begin
             nt = "<http://example.org/x> <http://example.org/q> <<( <http://example.org/s> <http://example.org/p> <http://example.org/o> )>> ."
             g = parse_rdf(nt, NTriplesFormat())
             @test first(g).object == inner
         end
 
-        @testset "nested triple terms" begin
-            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/a> <http://example.org/b> << <http://example.org/s> <http://example.org/p> <http://example.org/o> >> >> ."
+        @testset "nested triple terms (object position only)" begin
+            nt = "<http://example.org/x> <http://example.org/q> <<( <http://example.org/a> <http://example.org/b> <<( <http://example.org/s> <http://example.org/p> <http://example.org/o> )>> )>> ."
             g = parse_rdf(nt, NTriplesFormat())
             @test first(g).object == TripleTerm(EX("a"), EX("b"), inner)
+        end
+
+        @testset "reifier '<< >>' form rejected in N-Triples 1.2" begin
+            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/s> <http://example.org/p> <http://example.org/o> >> ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
+        end
+
+        @testset "triple term as subject rejected" begin
+            nt = "<<( <http://example.org/s> <http://example.org/p> <http://example.org/o> )>> <http://example.org/q> <http://example.org/z> ."
+            @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
         end
 
         @testset "triple term serialization roundtrip" begin
             g = RDFGraph()
             add!(g, EX("x"), EX("q"), inner)
-            add!(g, inner, EX("q"), Literal("said", lang="en"))
             nt = serialize(g, NTriplesFormat())
-            @test contains(nt, "<< <http://example.org/s> <http://example.org/p> <http://example.org/o> >>")
+            @test contains(nt, "<<( <http://example.org/s> <http://example.org/p> <http://example.org/o> )>>")
             g2 = parse_rdf(nt, NTriplesFormat())
-            @test length(g2) == 2
+            @test length(g2) == 1
             for t in g
                 @test t in g2
             end
         end
 
         @testset "unterminated triple term throws" begin
-            nt = "<http://example.org/x> <http://example.org/q> << <http://example.org/s> <http://example.org/p> <http://example.org/o> ."
+            nt = "<http://example.org/x> <http://example.org/q> <<( <http://example.org/s> <http://example.org/p> <http://example.org/o> ."
             @test_throws ArgumentError parse_rdf(nt, NTriplesFormat())
         end
     end
