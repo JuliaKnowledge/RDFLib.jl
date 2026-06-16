@@ -1032,4 +1032,142 @@ end
     @test q3.prefixes[""] == "http://example.org/ns/vocab#"
 end
 
+# ─── W3C conformance regressions ──────────────────────────────────
+
+@testset "Regression: PN_LOCAL dots / colons / escapes / percent" begin
+    sp = RDFLib.sparql_parse
+    pref = "PREFIX : <http://example/>\n"
+
+    # Internal colons in the local part: `:c:d`
+    q = sp(pref * "SELECT * { :a :b :c:d . }")
+    o = first(p for p in q.patterns if p isa RDFLib.PatTriple).object
+    @test o == URIRef("http://example/c:d")
+
+    # PN_LOCAL_ESC backslash escapes are removed (`\~`, `\.`)
+    q = sp(pref * "SELECT * { :a :b :c\\~z\\. . }")
+    @test first(p for p in q.patterns if p isa RDFLib.PatTriple).object ==
+          URIRef("http://example/c~z.")
+
+    # PERCENT (%HH) is kept verbatim
+    q = sp("PREFIX og: <http://ogp.me/ns#>\nSELECT * { ?p og:audio%3Atitle ?t }")
+    @test first(p for p in q.patterns if p isa RDFLib.PatTriple).predicate ==
+          URIRef("http://ogp.me/ns#audio%3Atitle")
+
+    # Internal dots and a leading-digit local part: `:123`, `:12.3`
+    q = sp(pref * "SELECT * { :a :123 :12.3 . }")
+    t = first(p for p in q.patterns if p isa RDFLib.PatTriple)
+    @test t.predicate == URIRef("http://example/123")
+    @test t.object == URIRef("http://example/12.3")
+
+    # Negatives: `:a:b:c` is a single term ⇒ incomplete triple ⇒ rejected
+    @test_throws Exception sp(pref * "SELECT * { :a:b:c . }")
+    # Bad PREFIX declarations (PNAME_NS must be `PN_PREFIX? ':'`)
+    @test_throws Exception sp("PREFIX ex:ex: <http://example/>\nASK {}")
+    @test_throws Exception sp("PREFIX :: <http://example/>\nASK {}")
+end
+
+@testset "Regression: IRI UCHAR escapes and unusual IRIs" begin
+    sp = RDFLib.sparql_parse
+    # \u escapes inside an IRIREF are unescaped (U+0078 = 'x')
+    q = sp("SELECT * WHERE { <\\u0078> <p> \"y\" }")
+    @test first(p for p in q.patterns if p isa RDFLib.PatTriple).subject ==
+          URIRef("x")
+    # `<?z>` is a legal IRI, not a less-than/variable
+    q = sp("SELECT * WHERE { <a> <b> <?z> }")
+    @test first(p for p in q.patterns if p isa RDFLib.PatTriple).object ==
+          URIRef("?z")
+end
+
+@testset "Regression: optional DOT after GraphPatternNotTriples" begin
+    sp = RDFLib.sparql_parse
+    @test sp("SELECT * WHERE { FILTER (?o > 5) . }") isa RDFLib.SparqlSelect
+    @test sp("PREFIX : <http://e/>\nSELECT * { :p :q :r . OPTIONAL { :a :b :c } . }") isa RDFLib.SparqlSelect
+    @test sp("PREFIX : <http://e/>\nSELECT * { OPTIONAL { :a :b :c } . ?x ?y ?z }") isa RDFLib.SparqlSelect
+    @test sp("PREFIX : <http://e/>\nSELECT * { :p :q :r ; OPTIONAL { :a :b :c } }") isa RDFLib.SparqlSelect
+    # Missing dot between two triples is rejected
+    @test_throws Exception sp("PREFIX : <http://e/>\nSELECT * { :s1 :p1 :o1 :s2 :p2 :o2 . }")
+    # Bare / doubled dots are rejected
+    @test_throws Exception sp("SELECT * WHERE { . }")
+    @test_throws Exception sp("SELECT * WHERE { ?s ?p ?o . . }")
+end
+
+@testset "Regression: FILTER constraint and bnode-in-expression" begin
+    sp = RDFLib.sparql_parse
+    @test_throws Exception sp("SELECT * { ?s ?p ?o FILTER ?x }")
+    @test_throws Exception sp("SELECT * WHERE { <a> <b> _:x FILTER(_:x) }")
+end
+
+@testset "Regression: long string with escaped quote" begin
+    q = RDFLib.sparql_parse(
+        "BASE <http://e/> PREFIX : <#>\nSELECT * WHERE { :x :p \"\"\"Long\\\"\"\"Literal\"\"\" }")
+    @test q isa RDFLib.SparqlSelect
+end
+
+@testset "Regression: VALUES width and SELECT alias uniqueness" begin
+    sp = RDFLib.sparql_parse
+    @test_throws Exception sp("SELECT * WHERE { VALUES (?a ?b) { (1 2 3) } }")
+    @test_throws Exception sp("SELECT * WHERE { VALUES (?a ?b) { (1) } }")
+    @test_throws Exception sp("SELECT (1 AS ?X) (1 AS ?X) {}")
+    @test sp("SELECT * WHERE { VALUES (?a ?b) { (1 2) (3 4) } }") isa RDFLib.SparqlSelect
+end
+
+@testset "Regression: HAVING with multiple conditions" begin
+    q = RDFLib.sparql_parse(
+        "SELECT ?s (COUNT(?o) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?s " *
+        "HAVING (COUNT(?o) > 1) (COUNT(?o) < 10)")
+    @test q isa RDFLib.SparqlSelect
+    @test q.having isa RDFLib.ExprBinaryOp
+    @test q.having.op == :&&
+end
+
+@testset "Regression: multibyte prefixes/locals (kanji)" begin
+    q = RDFLib.sparql_parse(
+        "PREFIX 食: <http://ex/kanji#>\nSELECT ?f WHERE { [ 食:食べる ?f ] . }")
+    @test q isa RDFLib.SparqlSelect
+end
+
+@testset "Regression: GRAPH in UPDATE templates/data" begin
+    pu = RDFLib.sparql_parse_update
+    # INSERT DATA with GRAPH ⇒ quad-aware UpdateInsertData
+    r = pu("INSERT DATA { GRAPH <http://g/> { <s> <p> 'o1', 'o2' } }")
+    @test r isa RDFLib.UpdateInsertData
+    @test length(r.quads) == 2
+    @test all(q -> q[4] == URIRef("http://g/"), r.quads)
+
+    # Plain INSERT DATA (no GRAPH) keeps the legacy 3-tuple struct
+    r = pu("INSERT DATA { <s> <p> <o> }")
+    @test r isa RDFLib._SPARQLInsertData
+
+    # DELETE/INSERT WHERE with GRAPH templates ⇒ quad-aware UpdateModify
+    r = pu("DELETE { GRAPH <http://g/> { ?s <p> ?o } } WHERE { ?s <p> ?o }")
+    @test r isa RDFLib.UpdateModify
+    @test r.delete_template[1][4] == URIRef("http://g/")
+
+    # DATA forbids variables / blank nodes
+    @test_throws Exception pu("INSERT DATA { ?s <p> <o> }")
+    @test_throws Exception pu("DELETE DATA { _:a <p> <o> }")
+    @test_throws Exception pu("DELETE WHERE { _:a <p> <o> }")
+end
+
+@testset "Regression: multi-operation UPDATE requests" begin
+    pu = RDFLib.sparql_parse_update
+    r = pu("CREATE GRAPH <http://g/> ; LOAD <http://x/> INTO GRAPH <http://g/>")
+    @test r isa RDFLib.UpdateRequest
+    @test length(r.operations) == 2
+    @test r.operations[1] isa RDFLib.UpdateGraphOp
+
+    # ';'-separated INSERT DATA sequence
+    r = pu("INSERT DATA { <a> <b> <c> } ; INSERT DATA { <d> <e> <f> }")
+    @test r isa RDFLib.UpdateRequest
+    @test length(r.operations) == 2
+
+    # Empty request (prologue only) ⇒ empty UpdateRequest
+    r = pu("PREFIX : <http://example/>")
+    @test r isa RDFLib.UpdateRequest
+    @test isempty(r.operations)
+
+    # Single operation is still returned bare (backwards compatible)
+    @test pu("INSERT DATA { <a> <b> <c> }") isa RDFLib._SPARQLInsertData
+end
+
 end # outer testset

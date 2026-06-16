@@ -279,22 +279,47 @@ end
 const SparqlQuery = Union{SparqlSelect, SparqlAsk, SparqlConstruct, SparqlDescribe}
 
 # ─── UPDATE AST ───────────────────────────────────────────────────
+#
+# Quad-aware UPDATE AST nodes. A "quad" is a 4-tuple `(s, p, o, graph)`:
+#   * `s`/`p`/`o` are terms (URIRef, Literal, BNode) or variable-name `String`s
+#   * `graph` is `nothing` (default graph), a `URIRef` (`GRAPH <iri> { … }`),
+#     or a variable-name `String` (`GRAPH ?g { … }`, only in modify templates)
+#
+# These supersede the 3-tuple `_SPARQL*` update structs in `sparql.jl` for any
+# operation that uses a `GRAPH` block. The parser still emits the legacy
+# 3-tuple `_SPARQL*` structs for plain (no-GRAPH) operations, preserving the
+# existing evaluator contract; it emits the quad structs below only when a
+# `GRAPH` block is present. Multi-operation requests are wrapped in
+# `UpdateRequest` (a `;`-separated sequence executed in order).
 
+const QuadTuple = Tuple{Any, Any, Any, Any}   # (s, p, o, graph)
+
+"""INSERT DATA with one or more GRAPH blocks."""
 struct UpdateInsertData
-    triples::Vector{PatTriple}
+    quads::Vector{QuadTuple}
     prefixes::Dict{String, String}
 end
 
+"""DELETE DATA with one or more GRAPH blocks."""
 struct UpdateDeleteData
-    triples::Vector{PatTriple}
+    quads::Vector{QuadTuple}
     prefixes::Dict{String, String}
 end
 
+"""DELETE/INSERT … WHERE whose templates reference named graphs."""
 struct UpdateModify
-    delete_template::Vector{PatTriple}
-    insert_template::Vector{PatTriple}
+    delete_template::Vector{QuadTuple}
+    insert_template::Vector{QuadTuple}
     patterns::Vector{SparqlPattern}
     prefixes::Dict{String, String}
+    with_graph::Union{URIRef, Nothing}
+end
+
+UpdateModify(del, ins, pats, prefixes) = UpdateModify(del, ins, pats, prefixes, nothing)
+
+"""A `;`-separated sequence of update operations, executed in order."""
+struct UpdateRequest
+    operations::Vector{Any}
 end
 
 struct UpdateClear
@@ -324,4 +349,4 @@ struct UpdateGraphOp
 end
 
 const SparqlUpdate = Union{UpdateInsertData, UpdateDeleteData, UpdateModify,
-                           UpdateClear, UpdateLoad, UpdateGraphOp}
+                           UpdateClear, UpdateLoad, UpdateGraphOp, UpdateRequest}

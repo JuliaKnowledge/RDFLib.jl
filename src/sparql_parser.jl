@@ -98,6 +98,134 @@ const _SPARQL_KEYWORDS = Set([
     "SAMEVALUE",
 ])
 
+# ─── Prefixed-name scanning (shared with Turtle PN_LOCAL grammar) ───
+#
+# PN_PREFIX ::= PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
+# PN_LOCAL  ::= (PN_CHARS_U | ':' | [0-9] | PLX)
+#               ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+# PLX       ::= PERCENT | PN_LOCAL_ESC
+#
+# These scanners return the *raw* lexical text (escapes/percent kept verbatim).
+# Resolution to a URIRef unescapes PN_LOCAL_ESC and keeps PERCENT verbatim.
+
+# Scan the local part starting at `pos` (just after the ':'). Returns the
+# end index (exclusive) of the local part, with trailing '.' (not part of a
+# valid token-final char) backed off. Mirrors Turtle `_parse_pn_local!`.
+function _scan_pn_local(input::AbstractString, pos::Int, len::Int)
+    is_first = true
+    pending_dots = 0  # count of trailing '.' to back off if no valid char follows
+    while pos <= len
+        c = input[pos]
+        if c == '%'
+            h1 = nextind(input, pos)
+            h2 = h1 <= len ? nextind(input, h1) : h1
+            (h1 > len || h2 > len || !_is_hex_digit(input[h1]) || !_is_hex_digit(input[h2])) && break
+            pending_dots = 0
+            pos = nextind(input, h2)
+        elseif c == '\\'
+            esc = nextind(input, pos)
+            (esc > len || !(input[esc] in _PN_LOCAL_ESC_CHARS)) && break
+            pending_dots = 0
+            pos = nextind(input, esc)
+        elseif c == ':' || _is_pn_chars(c)
+            if is_first && !(_is_pn_chars_u(c) || isdigit(c) || c == ':')
+                break
+            end
+            pending_dots = 0
+            pos = nextind(input, pos)
+        elseif c == '.' && !is_first
+            pending_dots += 1
+            pos = nextind(input, pos)
+        else
+            break
+        end
+        is_first = false
+    end
+    # '.' is single-byte ASCII; rewind unconsumed trailing dots
+    pos - pending_dots
+end
+
+# Unescape a raw PN_LOCAL lexical form: drop PN_LOCAL_ESC backslashes,
+# keep PERCENT (%HH) verbatim.
+function _unescape_pn_local(s::AbstractString)
+    occursin('\\', s) || return String(s)
+    io = IOBuffer()
+    i = firstindex(s)
+    last_i = lastindex(s)
+    while i <= last_i
+        c = s[i]
+        if c == '\\' && i < last_i
+            nxt = nextind(s, i)
+            ec = s[nxt]
+            if ec in _PN_LOCAL_ESC_CHARS
+                write(io, ec)
+                i = nextind(s, nxt)
+                continue
+            end
+        end
+        write(io, c)
+        i = nextind(s, i)
+    end
+    String(take!(io))
+end
+
+# Validate IRIREF inner content: every char must be > U+0020 and not one of
+# the excluded chars; a '\' is permitted only when it begins a UCHAR
+# (\uHHHH or \UHHHHHHHH).
+function _is_valid_iriref_content(content::AbstractString)
+    i = firstindex(content)
+    last_i = lastindex(content)
+    while i <= last_i
+        ch = content[i]
+        if ch == '\\'
+            i < last_i || return false
+            j = nextind(content, i)
+            e = content[j]
+            n = e == 'u' ? 4 : e == 'U' ? 8 : return false
+            k = nextind(content, j)
+            for _ in 1:n
+                k <= last_i && _is_hex_digit(content[k]) || return false
+                k = nextind(content, k)
+            end
+            i = k
+        elseif ch <= ' ' || ch in ('<', '>', '"', '{', '}', '|', '^', '`')
+            return false
+        else
+            i = nextind(content, i)
+        end
+    end
+    true
+end
+
+# Unescape UCHAR (\uHHHH / \UHHHHHHHH) escapes in an IRIREF.
+function _unescape_iri_uchar(s::AbstractString)
+    occursin('\\', s) || return String(s)
+    io = IOBuffer()
+    i = firstindex(s)
+    last_i = lastindex(s)
+    while i <= last_i
+        c = s[i]
+        if c == '\\' && i < last_i
+            j = nextind(s, i)
+            e = s[j]
+            if e == 'u' || e == 'U'
+                n = e == 'u' ? 4 : 8
+                k = nextind(s, j)
+                hex = IOBuffer()
+                for _ in 1:n
+                    write(hex, s[k]); k = nextind(s, k)
+                end
+                write(io, Char(parse(UInt32, String(take!(hex)), base=16)))
+                i = k
+                continue
+            end
+        end
+        write(io, c)
+        i = nextind(s, i)
+    end
+    String(take!(io))
+end
+
 function _sparql_tokenize_all(input::AbstractString)
     tokens = _SparqlToken[]
     pos = 1
@@ -128,18 +256,17 @@ function _sparql_tokenize_all(input::AbstractString)
                 continue
             end
             # Disambiguate IRIREF vs less-than operator: treat <...> as an IRI
-            # only when the bracketed content is plausible IRI content — it must
-            # not start with ?/$ (variables), must contain no whitespace/control
-            # chars or chars excluded from IRIREF (<, ", {, }, |, ^, `, \), and
-            # must not contain the boolean operators &&/||.
-            end_pos = findnext('>', input, pos + 1)
+            # only when the bracketed content is plausible IRIREF content — no
+            # whitespace/control chars or chars excluded from IRIREF
+            # (<, ", {, }, |, ^, `), and no boolean operators &&/||. A backslash
+            # is allowed only as part of a UCHAR escape (\uXXXX / \UXXXXXXXX).
+            end_pos = findnext('>', input, nextind(input, pos))
             if !isnothing(end_pos)
                 content = SubString(input, nextind(input, pos), prevind(input, end_pos))
-                if !startswith(content, '?') && !startswith(content, '$') &&
-                   !occursin("&&", content) && !occursin("||", content) &&
-                   all(ch -> ch > ' ' && !(ch in ('<', '"', '{', '}', '|', '^', '`', '\\')), content)
-                    push!(tokens, _SparqlToken(TOK_IRI, String(content), pos))
-                    pos = end_pos + 1
+                if !occursin("&&", content) && !occursin("||", content) &&
+                   _is_valid_iriref_content(content)
+                    push!(tokens, _SparqlToken(TOK_IRI, _unescape_iri_uchar(content), pos))
+                    pos = nextind(input, end_pos)
                     continue
                 end
             end
@@ -363,20 +490,13 @@ function _sparql_tokenize_all(input::AbstractString)
             while pos > start && input[prevind(input, pos)] == '.'
                 pos = prevind(input, pos)
             end
-            word = input[start:pos-1]
+            word = input[start:prevind(input, pos)]
 
             # Check for prefixed name (word followed by :)
             if pos <= len && input[pos] == ':'
-                pos = nextind(input, pos)
-                local_start = pos
-                # Read local part
-                while pos <= len && (isletter(input[pos]) || isdigit(input[pos]) || input[pos] in ('_', '.', '-'))
-                    pos = nextind(input, pos)
-                end
-                while pos > local_start && input[prevind(input, pos)] == '.'
-                    pos = prevind(input, pos)
-                end
-                pname = input[start:pos-1]
+                pos = nextind(input, pos)          # consume ':'
+                pos = _scan_pn_local(input, pos, len)  # PN_LOCAL grammar
+                pname = input[start:prevind(input, pos)]
                 push!(tokens, _SparqlToken(TOK_PNAME, pname, start))
                 continue
             end
@@ -401,17 +521,16 @@ function _sparql_tokenize_all(input::AbstractString)
         # Bare colon (empty prefix)
         if c == ':'
             start = pos
-            pos = nextind(input, pos)
-            local_start = pos
-            while pos <= len && (isletter(input[pos]) || isdigit(input[pos]) || input[pos] in ('_', '.', '-'))
-                pos = nextind(input, pos)
-            end
-            # Trailing dot terminates the statement; back off
-            while pos > local_start && input[prevind(input, pos)] == '.'
-                pos = prevind(input, pos)
-            end
-            push!(tokens, _SparqlToken(TOK_PNAME, input[start:pos-1], start))
+            pos = nextind(input, pos)          # consume ':'
+            pos = _scan_pn_local(input, pos, len)  # PN_LOCAL grammar
+            push!(tokens, _SparqlToken(TOK_PNAME, input[start:prevind(input, pos)], start))
             continue
+        end
+
+        # A stray backslash outside a string/IRI is illegal (e.g. a UCHAR
+        # escape used as a bare term: `?s ?p A`).
+        if c == '\\'
+            error("Unexpected '\\' at position $pos")
         end
 
         # Unknown character — skip
@@ -426,10 +545,25 @@ function _tokenize_string(input::AbstractString, pos::Int)
     q = input[pos]
     # Check for long string (triple quotes)
     if pos + 2 <= lastindex(input) && input[pos+1] == q && input[pos+2] == q
-        end_pat = string(q, q, q)
-        end_pos = findnext(end_pat, input, pos + 3)
-        isnothing(end_pos) && error("Unterminated long string at position $pos")
-        return (input[pos:end_pos[end]], end_pos[end] + 1)
+        # Scan char-by-char honouring '\' escapes, so an escaped quote
+        # (e.g. \" inside """...""") does not prematurely close the literal.
+        i = pos + 3
+        last_i = lastindex(input)
+        while i <= last_i
+            c = input[i]
+            if c == '\\'
+                i = nextind(input, nextind(input, i))  # skip escaped char
+            elseif c == q && i + 2 <= last_i + 1 &&
+                   nextind(input, i) <= last_i && input[nextind(input, i)] == q &&
+                   nextind(input, nextind(input, i)) <= last_i &&
+                   input[nextind(input, nextind(input, i))] == q
+                close_end = nextind(input, nextind(input, i))
+                return (input[pos:close_end], nextind(input, close_end))
+            else
+                i = nextind(input, i)
+            end
+        end
+        error("Unterminated long string at position $pos")
     end
     # Short string
     i = pos + 1
@@ -655,10 +789,10 @@ function _parse_primary_expr(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         return ExprURI(_make_uri(tok.value, prefixes))
     end
 
-    # BNode
+    # BNode — blank nodes are not allowed in expressions (not in the
+    # PrimaryExpression grammar), e.g. `FILTER(_:x)` is a syntax error.
     if tok.kind == TOK_BNODE
-        _advance!(tz)
-        return ExprBNode(BNode(tok.value))
+        error("Blank node '$(tok.value)' is not allowed in an expression at position $(tok.pos)")
     end
 
     # Boolean
@@ -889,8 +1023,8 @@ function _resolve_pname(name::AbstractString, prefixes::Dict{String,String})::UR
     if isnothing(colon_idx)
         return URIRef(name)
     end
-    prefix = name[1:colon_idx-1]
-    local_part = name[colon_idx+1:end]
+    prefix = name[1:prevind(name, colon_idx)]
+    local_part = _unescape_pn_local(name[nextind(name, colon_idx):end])
     if haskey(prefixes, prefix)
         return URIRef(prefixes[prefix] * local_part)
     end
@@ -977,14 +1111,20 @@ function sparql_parse(query::AbstractString)
     q
 end
 
-function _parse_prologue!(tz::_SparqlTokenizer)::Dict{String,String}
-    prefixes = Dict{String,String}()
+function _parse_prologue!(tz::_SparqlTokenizer,
+                          prefixes::Dict{String,String}=Dict{String,String}())::Dict{String,String}
     while true
         if _check_keyword(tz, "PREFIX")
             _advance!(tz)
-            pname_tok = _advance!(tz)  # prefix name with colon
+            pname_tok = _advance!(tz)  # PNAME_NS: PN_PREFIX? ':'
+            # The declared prefix must be a PNAME_NS — exactly one ':', and it
+            # must be the final char (no local part, no extra colons).
+            nm = pname_tok.value
+            c_idx = findfirst(':', nm)
+            (pname_tok.kind == TOK_PNAME && !isnothing(c_idx) && c_idx == lastindex(nm)) ||
+                error("Invalid PREFIX declaration '$(nm)' at position $(pname_tok.pos)")
             iri_tok = _expect!(tz, TOK_IRI)
-            prefix = rstrip(pname_tok.value, ':')
+            prefix = nm[1:prevind(nm, c_idx)]
             # Prefix IRIs are themselves resolved against any earlier BASE
             prefixes[prefix] = _make_uri(iri_tok.value, prefixes).value
         elseif _check_keyword(tz, "BASE")
@@ -1053,12 +1193,16 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
     select_exprs = SelectExpr[]
     aggregates = SelectAggregate[]
 
+    seen = Set{String}()   # projected names must be distinct
     if _check(tz, TOK_STAR)
         _advance!(tz)
     else
         while !_check_keyword(tz, "WHERE") && !_check_keyword(tz, "FROM") && !_check(tz, TOK_LBRACE) && !_check(tz, TOK_EOF)
             if _check(tz, TOK_VAR)
-                push!(variables, _advance!(tz).value[2:end])
+                v = _advance!(tz).value[2:end]
+                v in seen && error("Projected variable ?$v appears more than once in SELECT")
+                push!(seen, v)
+                push!(variables, v)
             elseif _check(tz, TOK_LPAREN)
                 _advance!(tz)  # (
                 expr = _parse_expr(tz, prefixes)
@@ -1066,6 +1210,9 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
                 var = _expect!(tz, TOK_VAR)
                 _expect!(tz, TOK_RPAREN)
                 alias = var.value[2:end]
+                # The AS alias must not already be a projected name in this SELECT.
+                alias in seen && error("SELECT alias ?$alias is already used in this projection")
+                push!(seen, alias)
                 if expr isa ExprAggregate
                     push!(aggregates, SelectAggregate(expr, alias))
                 else
@@ -1196,8 +1343,16 @@ end
 
 function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern}
     patterns = SparqlPattern[]
+    n_elements = 0   # number of group elements parsed (incl. empty `{}`)
+    # Grammar: GroupGraphPatternSub ::= TriplesBlock?
+    #   ( GraphPatternNotTriples '.'? TriplesBlock? )*
+    # An optional '.' separator may follow a GraphPatternNotTriples; it is
+    # consumed at the end of each such branch (`_match!(tz, TOK_DOT)`). A bare
+    # or doubled '.' that does not follow a GraphPatternNotTriples is illegal
+    # and falls through to `_parse_triples_block`, which rejects it.
     while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF)
         tok = _peek(tz)
+        is_not_triples = true  # set false in the TriplesBlock branch
 
         if _check_keyword(tz, "OPTIONAL")
             _advance!(tz)
@@ -1226,14 +1381,19 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
                 pats = _parse_group_graph_pattern(tz, prefixes)
                 push!(patterns, PatFilterExists(pats, true))
             else
-                # SPARQL grammar: FILTER can be BrackettedExpression or BuiltInCall
+                # Grammar: Constraint ::= BrackettedExpression
+                #                       | BuiltInCall | FunctionCall
+                # A bare term (e.g. `FILTER ?x`) is NOT a valid constraint.
                 if _check(tz, TOK_LPAREN)
                     _advance!(tz)
                     expr = _parse_expr(tz, prefixes)
                     _expect!(tz, TOK_RPAREN)
-                else
-                    # Bare function call: FILTER regex(...), FILTER CONTAINS(...)
+                elseif _check(tz, TOK_KEYWORD) || _check(tz, TOK_PNAME) || _check(tz, TOK_IRI)
+                    # Bare builtin/function call: FILTER regex(...), FILTER ex:fn(...)
                     expr = _parse_expr(tz, prefixes)
+                else
+                    t = _peek(tz)
+                    error("FILTER constraint must be a bracketted expression or a function call, got $(t.kind) '$(t.value)' at position $(t.pos)")
                 end
                 push!(patterns, PatFilter(expr))
             end
@@ -1272,9 +1432,16 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             push!(patterns, PatService(ep, pats, silent))
 
         elseif _check_keyword(tz, "SELECT")
-            # Direct subselect: WHERE { SELECT ... } (single braces)
+            # A SubSelect is the *entire* content of a GroupGraphPattern; it may
+            # only appear as the first (and only) element. `{ {} SELECT … }` is
+            # illegal (the empty `{}` already counts as an element).
+            n_elements == 0 ||
+                error("SELECT subquery must be the sole content of a group at position $(_peek(tz).pos)")
             subq = _parse_select(tz, prefixes)
             push!(patterns, PatSubquery(subq))
+            # Nothing may follow a bare SubSelect within the same braces.
+            (_check(tz, TOK_RBRACE) || _check(tz, TOK_EOF)) ||
+                error("Unexpected input after SELECT subquery at position $(_peek(tz).pos)")
 
         elseif _check(tz, TOK_LBRACE)
             # Subquery or nested group or UNION
@@ -1323,18 +1490,25 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             o = _parse_term(tz, prefixes)
             _expect!(tz, TOK_GTGT)
             push!(patterns, PatTripleTerm(s, p, o, nothing))
+            is_not_triples = false  # TriplesBlock-like: consumes its own dot
             _match!(tz, TOK_DOT)
 
         else
             # Triple pattern(s): subject predicate-object-list
+            is_not_triples = false
             triples = _parse_triples_block(tz, prefixes)
-            if isempty(triples)
-                # Skip unexpected token to prevent infinite loop
-                _advance!(tz)
-            else
-                append!(patterns, triples)
+            append!(patterns, triples)
+            # A TriplesBlock consumes all '.'-separated triples; if another
+            # triple subject follows immediately, a '.' separator was missing.
+            if _starts_triples_same_subject(tz)
+                t = _peek(tz)
+                error("Expected '.' between triples, got $(t.kind) '$(t.value)' at position $(t.pos)")
             end
         end
+
+        # Optional '.' separator after a GraphPatternNotTriples.
+        is_not_triples && _match!(tz, TOK_DOT)
+        n_elements += 1
     end
     patterns
 end
@@ -1414,8 +1588,11 @@ function _parse_predicate_object_list!(tz::_SparqlTokenizer, prefixes, subj, acc
         end
         if _check(tz, TOK_SEMICOLON)
             _advance!(tz)
-            # Trailing ; before a terminator
-            if _check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_RBRACKET) || _check(tz, TOK_EOF)
+            # A ';' may be trailing: terminated by '.'/'}'/']'/EOF, or by
+            # whatever follows the triples block (e.g. a GraphPatternNotTriples
+            # keyword like FILTER/OPTIONAL). Continue only if a verb follows.
+            nxt = _peek(tz).kind
+            if !(nxt in (TOK_A, TOK_VAR, TOK_IRI, TOK_PNAME, TOK_CARET, TOK_BANG, TOK_LPAREN))
                 break
             end
         else
@@ -1424,20 +1601,44 @@ function _parse_predicate_object_list!(tz::_SparqlTokenizer, prefixes, subj, acc
     end
 end
 
+# TriplesBlock ::= TriplesSameSubjectPath ( '.' TriplesBlock? )?
+# Consecutive triples MUST be '.'-separated; the final '.' is optional. A
+# missing dot between two triples is a syntax error (caught here).
 function _parse_triples_block(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern}
     patterns = SparqlPattern[]
-    subj = _parse_term_or_node(tz, prefixes, patterns)
+    while true
+        n_before = length(patterns)
+        subj = _parse_term_or_node(tz, prefixes, patterns)
 
-    # A blank node property list / collection may stand alone as a subject
-    # with no following predicate-object list: `[ :p :o ] .`
-    if !isempty(patterns) && (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_EOF))
-        _match!(tz, TOK_DOT)
-        return patterns
+        # A blank node property list / collection may stand alone as a subject
+        # with no following predicate-object list: `[ :p :o ] .`
+        if length(patterns) > n_before && (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE) || _check(tz, TOK_EOF))
+            # standalone subject — fall through to dot handling below
+        else
+            _parse_predicate_object_list!(tz, prefixes, subj, patterns)
+        end
+
+        if _check(tz, TOK_DOT)
+            _advance!(tz)
+            # A '.' may end the block (followed by '}' or a
+            # GraphPatternNotTriples) or separate it from the next triple.
+            if !_starts_triples_same_subject(tz)
+                break
+            end
+        else
+            break  # no dot ⇒ end of this TriplesBlock
+        end
     end
-
-    _parse_predicate_object_list!(tz, prefixes, subj, patterns)
-    _match!(tz, TOK_DOT)  # optional trailing dot
     patterns
+end
+
+# Whether the current token can begin a TriplesSameSubject (a VarOrTerm or
+# TriplesNode subject). Used to decide if a '.' separates more triples.
+function _starts_triples_same_subject(tz::_SparqlTokenizer)::Bool
+    k = _peek(tz).kind
+    k in (TOK_VAR, TOK_IRI, TOK_PNAME, TOK_BNODE, TOK_A, TOK_STRING,
+          TOK_INTEGER, TOK_DECIMAL, TOK_DOUBLE, TOK_TRUE, TOK_FALSE,
+          TOK_LBRACKET, TOK_LPAREN, TOK_LTLT)
 end
 
 function _parse_verb(tz::_SparqlTokenizer, prefixes)
@@ -1650,6 +1851,10 @@ function _parse_iri(tz::_SparqlTokenizer, prefixes)::URIRef
     if tok.kind == TOK_IRI
         return _make_uri(tok.value, prefixes)
     elseif tok.kind == TOK_PNAME
+        # A valid PrefixedName always contains a ':'. A colon-less PNAME token
+        # is a bareword (e.g. a misspelled keyword) and is not an IRI.
+        isnothing(findfirst(':', tok.value)) &&
+            error("Expected IRI, got bare word '$(tok.value)' at position $(tok.pos)")
         return _resolve_pname(tok.value, prefixes)
     elseif tok.kind == TOK_A
         return URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -1688,6 +1893,10 @@ function _parse_values(tz::_SparqlTokenizer, prefixes)::PatValues
                 end
             end
             _expect!(tz, TOK_RPAREN)
+            # Each row in a parenthesized VALUES must have exactly one value
+            # per declared variable.
+            length(row) == length(vars) ||
+                error("VALUES row has $(length(row)) values but $(length(vars)) variables were declared")
             push!(rows, row)
         elseif single_var
             # Single-variable VALUES without parens: VALUES ?x { val1 val2 ... }
@@ -1752,12 +1961,27 @@ function _parse_solution_modifiers(tz::_SparqlTokenizer, prefixes)
         isempty(group_by) && error("Expected group condition after GROUP BY at position $(_peek(tz).pos)")
     end
 
-    # HAVING
+    # HAVING — HavingClause ::= 'HAVING' HavingCondition+
+    # Multiple conditions are conjoined with '&&'.
     if _check_keyword(tz, "HAVING")
         _advance!(tz)
-        _expect!(tz, TOK_LPAREN)
-        having = _parse_expr(tz, prefixes)
-        _expect!(tz, TOK_RPAREN)
+        while true
+            cond = if _check(tz, TOK_LPAREN)
+                _advance!(tz)
+                e = _parse_expr(tz, prefixes)
+                _expect!(tz, TOK_RPAREN)
+                e
+            elseif (_check(tz, TOK_KEYWORD) || _check(tz, TOK_PNAME) || _check(tz, TOK_IRI)) &&
+                   _peek_is_funcall(tz) &&
+                   !(_peek(tz).value in ("ORDER", "LIMIT", "OFFSET", "VALUES", "GROUP"))
+                # Bare BuiltInCall / FunctionCall constraint, e.g. HAVING REGEX(…)
+                _parse_expr(tz, prefixes)
+            else
+                break
+            end
+            having = isnothing(having) ? cond : ExprBinaryOp(:&&, having, cond)
+        end
+        isnothing(having) && error("Expected HAVING condition at position $(_peek(tz).pos)")
     end
 
     # ORDER BY
@@ -1809,15 +2033,30 @@ using the recursive descent tokenizer/parser infrastructure.
 """
 function sparql_parse_update(query::String)
     tz = _sparql_tokenize_all(strip(query))
-    prefixes = _parse_prologue!(tz)
-    op = _parse_update_op(tz, prefixes)
-    _match!(tz, TOK_SEMICOLON)  # optional trailing ;
+    # Grammar: Update ::= Prologue ( Update1 ( ';' Update )? )?
+    # i.e. a ';'-separated sequence of operations, each with its own prologue
+    # contributions. Prefixes/BASE accumulate across the whole request.
+    prefixes = Dict{String,String}()
+    ops = Any[]
+    while true
+        _parse_prologue!(tz, prefixes)
+        _check(tz, TOK_EOF) && break
+        push!(ops, _parse_update_op(tz, prefixes))
+        # Operations are separated by ';'. A trailing ';' is permitted.
+        if _check(tz, TOK_SEMICOLON)
+            _advance!(tz)
+        else
+            break
+        end
+    end
     if !_check(tz, TOK_EOF)
         tok = _peek(tz)
-        error("Unexpected trailing input after update: $(tok.kind) '$(tok.value)' at position $(tok.pos)" *
-              (tok.kind == TOK_KEYWORD ? " (multi-operation updates are not supported)" : ""))
+        error("Unexpected trailing input after update: $(tok.kind) '$(tok.value)' at position $(tok.pos)")
     end
-    op
+    # Backwards-compatible: a single operation is returned bare (the common
+    # case the evaluator already handles); zero or many ops wrap in
+    # UpdateRequest so the evaluator can execute the sequence in order.
+    length(ops) == 1 ? ops[1] : UpdateRequest(ops)
 end
 
 # GraphRef / GraphRefAll: GRAPH <iri> | <iri> | DEFAULT | NAMED | ALL
@@ -1899,89 +2138,182 @@ function _parse_update_op(tz::_SparqlTokenizer, prefixes)
         with_graph = _parse_iri(tz, prefixes)
     end
 
-    # INSERT DATA { triples } / INSERT { template } WHERE { patterns }
+    # INSERT DATA { quaddata } / INSERT { template } WHERE { patterns }
     if _check_keyword(tz, "INSERT")
         _advance!(tz)
         if _check_keyword(tz, "DATA")
             isnothing(with_graph) || error("WITH is not allowed with INSERT DATA")
             _advance!(tz)
-            tpl = _parse_update_template(tz, prefixes)
-            return _SPARQLInsertData(tpl, prefixes)
+            tpl = _parse_update_template(tz, prefixes; data=true, allow_bnode=true)
+            return _has_graph(tpl) ? UpdateInsertData(tpl, prefixes) :
+                                     _SPARQLInsertData(_drop_graph(tpl), prefixes)
         end
         ins = _parse_update_template(tz, prefixes)
         _parse_using_clauses!(tz, prefixes)
         _expect_keyword!(tz, "WHERE")
-        pats = _parse_group_graph_pattern(tz, prefixes)
-        return _SPARQLModify(Tuple{Any,Any,Any}[], ins, SparqlPattern[pats...], prefixes, with_graph)
+        pats = SparqlPattern[_parse_group_graph_pattern(tz, prefixes)...]
+        return _make_modify(_empty_quad_template(), ins, pats, prefixes, with_graph)
     end
 
     # DELETE ...
     if _check_keyword(tz, "DELETE")
         _advance!(tz)
 
-        # DELETE DATA { triples }
+        # DELETE DATA { quaddata } — ground, no variables, no blank nodes
         if _check_keyword(tz, "DATA")
             isnothing(with_graph) || error("WITH is not allowed with DELETE DATA")
             _advance!(tz)
-            tpl = _parse_update_template(tz, prefixes)
-            return _SPARQLDeleteData(tpl, prefixes)
+            tpl = _parse_update_template(tz, prefixes; data=true, allow_bnode=false)
+            return _has_graph(tpl) ? UpdateDeleteData(tpl, prefixes) :
+                                     _SPARQLDeleteData(_drop_graph(tpl), prefixes)
         end
 
-        # DELETE WHERE { patterns } — shorthand
+        # DELETE WHERE { quadpattern } — shorthand (no blank nodes allowed)
         if _check_keyword(tz, "WHERE")
             _advance!(tz)
             pats = _parse_group_graph_pattern(tz, prefixes)
-            # Extract triples from patterns as delete template
             del = _patterns_to_template(pats)
-            return _SPARQLModify(del, Tuple{Any,Any,Any}[], SparqlPattern[pats...], prefixes, with_graph)
+            _reject_bnodes_in_template(del)
+            return _make_modify(del, _empty_quad_template(), SparqlPattern[pats...], prefixes, with_graph)
         end
 
         # DELETE { template } [INSERT { template }] WHERE { patterns }
-        del = _parse_update_template(tz, prefixes)
-        ins = Tuple{Any,Any,Any}[]
+        del = _parse_update_template(tz, prefixes; allow_bnode=false)
+        ins = _empty_quad_template()
         if _check_keyword(tz, "INSERT")
             _advance!(tz)
             ins = _parse_update_template(tz, prefixes)
         end
         _parse_using_clauses!(tz, prefixes)
         _expect_keyword!(tz, "WHERE")
-        pats = _parse_group_graph_pattern(tz, prefixes)
-        return _SPARQLModify(del, ins, SparqlPattern[pats...], prefixes, with_graph)
+        pats = SparqlPattern[_parse_group_graph_pattern(tz, prefixes)...]
+        return _make_modify(del, ins, pats, prefixes, with_graph)
     end
 
     error("Unsupported SPARQL UPDATE operation")
 end
 
+_empty_quad_template() = Tuple{Any,Any,Any,Any}[]
+
+# True if any quad in the template/data targets a named graph.
+_has_graph(quads) = any(q -> q[4] !== nothing, quads)
+
+# Strip the graph slot, yielding the legacy 3-tuple list.
+_drop_graph(quads) = Tuple{Any,Any,Any}[(q[1], q[2], q[3]) for q in quads]
+
+# Choose the legacy 3-tuple `_SPARQLModify` (no named graphs) or the quad-aware
+# `UpdateModify` (when delete/insert templates reference named graphs).
+function _make_modify(del, ins, pats, prefixes, with_graph)
+    if _has_graph(del) || _has_graph(ins)
+        UpdateModify(del, ins, pats, prefixes, with_graph)
+    else
+        _SPARQLModify(_drop_graph(del), _drop_graph(ins), pats, prefixes, with_graph)
+    end
+end
+
+function _reject_bnodes_in_template(tpl)
+    for (s, p, o, _) in tpl
+        (s isa BNode || o isa BNode || _is_anon_var(s) || _is_anon_var(o)) &&
+            error("Blank node not allowed in DELETE template")
+    end
+end
+
 """
-Parse a braced template `{ s p o . ... }` into a Vector{Tuple{Any,Any,Any}}.
+Parse a braced QuadData / QuadPattern block `{ tripleBlock | GRAPH g { ... } ... }`
+into a Vector of 4-tuples `(s, p, o, graph)`, where `graph` is `nothing` for the
+default graph, a `URIRef` for `GRAPH <iri> { … }`, or a variable-name `String`
+for `GRAPH ?g { … }` (only valid in DELETE/INSERT ... WHERE templates).
+
+When `data=true` (INSERT DATA / DELETE DATA) the block is ground: variables are
+rejected. The `allow_bnode` flag controls whether blank nodes are permitted
+(DELETE templates / DELETE DATA forbid them).
 """
-function _parse_update_template(tz::_SparqlTokenizer, prefixes)::Vector{Tuple{Any,Any,Any}}
+function _parse_update_template(tz::_SparqlTokenizer, prefixes;
+                                data::Bool=false, allow_bnode::Bool=true)
     _expect!(tz, TOK_LBRACE)
-    acc = PatTriple[]
+    quads = Tuple{Any,Any,Any,Any}[]
     while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF)
+        if _check_keyword(tz, "GRAPH")
+            _advance!(tz)
+            gterm = if _check(tz, TOK_VAR)
+                data && error("Variable not allowed in GRAPH block of a DATA operation at position $(_peek(tz).pos)")
+                _advance!(tz).value[2:end]   # variable name String
+            else
+                _parse_iri(tz, prefixes)     # URIRef
+            end
+            inner = _parse_quad_triples(tz, prefixes)
+            for (s, p, o) in inner
+                push!(quads, (s, p, o, gterm))
+            end
+        else
+            for (s, p, o) in _parse_quad_triples(tz, prefixes; single=true)
+                push!(quads, (s, p, o, nothing))
+            end
+        end
+        _match!(tz, TOK_DOT)  # '.' separator between GRAPH blocks / trailing dot
+    end
+    _expect!(tz, TOK_RBRACE)
+
+    # Validate per the operation's constraints.
+    for (s, p, o, _) in quads
+        if data && (s isa AbstractString || p isa AbstractString || o isa AbstractString)
+            error("Variable not allowed in DATA update")
+        end
+        if !allow_bnode && (s isa BNode || o isa BNode || _is_anon_var(s) || _is_anon_var(o))
+            error("Blank node not allowed in this update template")
+        end
+    end
+    quads
+end
+
+# A fresh-anon variable produced from `[]` / `[ … ]` (its name starts with "_:").
+_is_anon_var(x) = x isa AbstractString && startswith(x, "_:")
+
+# Parse the triples inside a (Quad)Data/Pattern braced group, up to the closing
+# '}' (when `single=false`) or until a GRAPH keyword / '}' boundary
+# (when `single=true`, i.e. default-graph triples interleaved with GRAPH blocks).
+function _parse_quad_triples(tz::_SparqlTokenizer, prefixes; single::Bool=false)::Vector{Tuple{Any,Any,Any}}
+    if !single
+        _expect!(tz, TOK_LBRACE)
+    end
+    acc = PatTriple[]
+    while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF) &&
+          !(single && _check_keyword(tz, "GRAPH"))
         n_before = length(acc)
         subj = _parse_term_or_node(tz, prefixes, acc; as_var=false)
-        # Standalone property list subject
         if length(acc) > n_before && (_check(tz, TOK_DOT) || _check(tz, TOK_RBRACE))
             _match!(tz, TOK_DOT)
+            single && _check_keyword(tz, "GRAPH") && break
             continue
         end
         _parse_predicate_object_list!(tz, prefixes, subj, acc; as_var=false)
         _match!(tz, TOK_DOT)
+        single && _check_keyword(tz, "GRAPH") && break
     end
-    _expect!(tz, TOK_RBRACE)
+    if !single
+        _expect!(tz, TOK_RBRACE)
+    end
     Tuple{Any,Any,Any}[(t.subject, t.predicate, t.object) for t in acc]
 end
 
 """
-Extract triple templates from parsed SparqlPattern nodes (for DELETE WHERE shorthand).
+Extract (s, p, o, graph) quad templates from parsed SparqlPattern nodes
+(for DELETE WHERE shorthand). Triples inside `GRAPH g { … }` carry their graph.
 """
-function _patterns_to_template(pats::Vector{SparqlPattern})::Vector{Tuple{Any,Any,Any}}
-    result = Tuple{Any,Any,Any}[]
+function _patterns_to_template(pats::Vector{SparqlPattern})::Vector{Tuple{Any,Any,Any,Any}}
+    result = Tuple{Any,Any,Any,Any}[]
+    _collect_quad_template!(result, pats, nothing)
+    result
+end
+
+function _collect_quad_template!(result, pats, graph)
     for p in pats
         if p isa PatTriple
-            push!(result, (p.subject, p.predicate, p.object))
+            push!(result, (p.subject, p.predicate, p.object, graph))
+        elseif p isa PatGraph
+            g = p.graph_term isa ExprURI ? p.graph_term.uri :
+                p.graph_term isa ExprVar ? p.graph_term.name : graph
+            _collect_quad_template!(result, p.patterns, g)
         end
     end
-    result
 end
