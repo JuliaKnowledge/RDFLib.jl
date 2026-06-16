@@ -100,4 +100,5 @@ using RDFLib
     include("test_tabular.jl")
     include("test_encoded_store.jl")
     include("test_evaluator_consistency.jl")
+    include("test_w3c_conformance.jl")  # skips gracefully if test/w3c/suite absent
 end

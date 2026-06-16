@@ -278,9 +278,25 @@ void_graph = generate_void(g, URIRef("http://example.org/dataset"))
 
 ## Conformance notes & limitations
 
-The test suite (6,000+ assertions) includes spec-derived regression tests for RDF 1.1/SPARQL semantics and a cross-evaluator consistency suite that runs the same queries against `MemoryStore`, `EncodedStore`, and `DuckDBStore` and requires identical answers. Known limitations, documented in the relevant docstrings:
+The test suite (6,000+ assertions) includes spec-derived regression tests for RDF 1.1/SPARQL semantics and a cross-evaluator consistency suite that runs the same queries against `MemoryStore`, `EncodedStore`, and `DuckDBStore` and requires identical answers.
 
-- The official W3C test-suite manifests are not wired in; conformance tests are spec-modeled but locally authored.
+### W3C conformance
+
+RDFLib.jl is tested against the **official W3C [rdf-tests](https://github.com/w3c/rdf-tests) manifests** via a manifest-driven harness (`test/w3c/`). The suite is permissively licensed but not vendored; fetch it once with `julia --project=. test/w3c/fetch.jl`, after which `Pkg.test()` runs the conformance gate (it skips automatically when the suite is absent). Current pass rates:
+
+| Suite | Passing |
+|-------|---------|
+| Turtle | 313 / 313 (100%) |
+| N-Triples | 70 / 70 (100%) |
+| N-Quads | 87 / 87 (100%) |
+| RDF/XML | 166 / 166 (100%) |
+| TriG | 343 / 356 (96%) |
+| SPARQL 1.1 Query | 296 / 328 (90%) |
+| SPARQL 1.1 Update | 148 / 157 (94%) |
+| SPARQL 1.0 | 444 / 482 (92%) |
+
+Remaining failures are mostly cross-BGP blank-node scoping, variable-scope analysis in BIND/GROUP BY, `USING`-clause update routing, and a few harness limitations (relative graph IRIs, empty-named-graph representation). Known limitations, documented in the relevant docstrings:
+
 - JSON-LD: `@included`, `@import`, `@protected` enforcement, and framing beyond a basic subset are not implemented.
 - SHACL: `sh:ask` validators, custom SHACL-SPARQL constraint components, SPARQL-based targets, and `owl:imports` are not implemented.
 - SPARQL: `FROM`/`FROM NAMED` on a plain `RDFGraph` (no named graphs) falls back to querying the graph itself; use `Dataset`/`ConjunctiveGraph` for dataset semantics. `USING`/`USING NAMED` is parsed and validated but not applied to UPDATE WHERE evaluation. DuckDB SQL pushdown is limited to COUNT-family aggregate queries; everything else transparently falls back to the generic evaluator.
