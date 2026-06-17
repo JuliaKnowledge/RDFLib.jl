@@ -136,6 +136,24 @@ function _parse_graph(path::String, base::String)
     g
 end
 
+# Load a data file into an existing Dataset, dispatching on format: quad formats
+# (.nq/.trig) contribute their default graph + named graphs; triple formats load
+# into the dataset's default graph (or `gname` when given).
+function _load_into_dataset!(ds::Dataset, path::String, base::String; gname=nothing)
+    fmt = _format_for(path)
+    if fmt isa NQuadsFormat || fmt isa TriGFormat
+        src = _parse_dataset(path, base)
+        for (n, g) in graphs(src), t in g
+            add!(ds, t, n === nothing ? gname : n)
+        end
+    else
+        for t in _parse_graph(path, base)
+            add!(ds, t, gname)
+        end
+    end
+    ds
+end
+
 # Parse possibly-quad data (.nq/.trig) into a Dataset.
 function _parse_dataset(path::String, base::String)
     fmt = _format_for(path)
@@ -696,7 +714,7 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
         ds = Dataset()
         if data_iri !== nothing
             dp = _local_path(manifest_dir, data_iri.value)
-            for t in _parse_graph(dp, _base_iri(assumed_base, manifest_dir, data_iri.value)); add!(ds, t); end
+            _load_into_dataset!(ds, dp, _base_iri(assumed_base, manifest_dir, data_iri.value))
         end
         for gd in gdata
             gp = _local_path(manifest_dir, gd.value)
