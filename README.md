@@ -292,9 +292,10 @@ RDFLib.jl is tested against the **official W3C [rdf-tests](https://github.com/w3
 | RDF semantics / entailment (RDF-MT, RDF 1.2 semantics) | 48/48, 77/77 — **100%** |
 | SPARQL 1.0 / 1.1 Query / 1.1 Update / 1.2 | 482/482, 328/328, 157/157, 269/269 — **100%** |
 | SPARQL results CSV / TSV / JSON | **100%** |
-| SPARQL 1.1 entailment-regime queries | 36 / 70 (RDFS + OWL 2 RL) |
+| SPARQL Protocol / Graph Store / Service Description | 34/34, 12/12, 3/3 — **100%** |
+| SPARQL 1.1 entailment-regime queries | 60 / 70 (RDFS, OWL 2 RL + class-expression query rewriting) |
 
-The RDF syntax/canonicalization/semantics suites and the core SPARQL suites (query, update, 1.0, 1.2) all pass **100%**. The remaining gaps are entire reasoning subsystems outside the scope of an RDF/SPARQL library: the SPARQL entailment-regime suite's remainder needs **OWL Direct (Description Logic)** and **RIF rule** reasoners, and the SPARQL-over-HTTP **Protocol / Graph Store Protocol** suites are driven against the bundled `SparqlServer`. Known limitations, documented in the relevant docstrings:
+The RDF syntax/canonicalization/semantics suites, the core SPARQL suites (query, update, 1.0, 1.2), the results formats, and the SPARQL-over-HTTP Protocol / Graph Store / Service Description suites all pass **100%**. RDFS and OWL 2 RL entailment-regime queries are answered by closure materialization plus OWL class-expression query rewriting (`owl_query.jl`). The only remaining failures (10 of the 70 entailment-regime tests) require reasoning genuinely beyond an RDF/SPARQL library: **OWL Direct (Description Logic)** with anonymous-individual existential and qualified-cardinality inference, and a **RIF rule** engine. Known limitations, documented in the relevant docstrings:
 
 - JSON-LD: `@included`, `@import`, `@protected` enforcement, and framing beyond a basic subset are not implemented.
 - SHACL: `sh:ask` validators, custom SHACL-SPARQL constraint components, SPARQL-based targets, and `owl:imports` are not implemented.

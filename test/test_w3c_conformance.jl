@@ -43,7 +43,7 @@ const _W3C_SUITES = [
     ("SPARQL 1.2",        "sparql/sparql12/manifest.ttl",                    269),
     ("SPARQL CSV/TSV",    "sparql/sparql11/csv-tsv-res/manifest.ttl",        6),
     ("SPARQL JSON",       "sparql/sparql11/json-res/manifest.ttl",           4),
-    ("SPARQL entailment", "sparql/sparql11/entailment/manifest.ttl",         36),
+    ("SPARQL entailment", "sparql/sparql11/entailment/manifest.ttl",         60),
 ]
 
 @testset "W3C conformance" begin
