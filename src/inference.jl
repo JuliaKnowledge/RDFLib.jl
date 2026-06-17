@@ -634,6 +634,12 @@ function _owl2_rule_intersection_of!(g::RDFGraph, new_triples::Vector{Triple})
         list_head isa Node || continue
         classes = _owl2_collect_list(g, list_head)
         isempty(classes) && continue
+        # scm-int: an intersection class is a subclass of each of its conjuncts.
+        for cls in classes
+            cls isa Node || continue
+            cls == c && continue
+            push!(new_triples, Triple(c, RDFS.subClassOf, cls))
+        end
         first_class = classes[1]
         first_class isa Node || continue
         for inst in _collect_triples(g, (nothing, rdf_type, first_class))

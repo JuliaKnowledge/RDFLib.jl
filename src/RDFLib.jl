@@ -164,6 +164,9 @@ include("inference.jl")
 # Entailment regimes (simple / RDF / RDFS / RDFS-Plus / D)
 include("entailment.jl")
 
+# OWL class-expression query answering (query rewriting) + regime materialization
+include("owl_query.jl")
+
 # RDFS/OWL schema DOT visualization
 include("rdfs2dot.jl")
 
@@ -363,6 +366,8 @@ export
     # Inference
     rdfs_closure, rdfs_closure!, owl_closure, owl_closure!,
     owl2_rl_closure, owl2_rl_closure!, infer, entails,
+    materialize_entailment!, rewrite_owl_query, sparql_query_entailment,
+    filter_entailment_results,
     simple_entails, is_inconsistent,
 
     # CLI tools
