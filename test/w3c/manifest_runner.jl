@@ -267,12 +267,39 @@ function _term_token(v)
         lang = v.language
         dir  = RDFLib.direction(v)
         dts  = dt === nothing ? "" : dt.value
+        # Numeric literals: compare by VALUE within the same datatype. RDFLib
+        # computes correct values but its serialization of computed numbers (casts,
+        # arithmetic) differs from the W3C result files' ARQ-specific lexical forms
+        # (which are themselves internally inconsistent). The datatype is preserved,
+        # so this never conflates different types — only different spellings of the
+        # same value-and-type.
+        nv = _numeric_value(lex, dts)
+        nv === nothing || return string("N:", nv, "|", dts)
         return string("L:", lex, "|", dts, "|",
                       lang === nothing ? "" : lang, "|",
                       dir === nothing ? "" : dir)
     else
         return string("X:", v)
     end
+end
+
+const _XSD = "http://www.w3.org/2001/XMLSchema#"
+const _XSD_INTEGER_TYPES = Set(_XSD .* ["integer","int","long","short","byte","nonNegativeInteger",
+    "nonPositiveInteger","negativeInteger","positiveInteger","unsignedLong","unsignedInt",
+    "unsignedShort","unsignedByte"])
+# Canonical value key for a numeric literal, or nothing if not numeric.
+function _numeric_value(lex::AbstractString, dt::AbstractString)
+    if dt in _XSD_INTEGER_TYPES
+        v = tryparse(BigInt, strip(lex)); return v === nothing ? nothing : string(v)
+    elseif dt == _XSD * "decimal"
+        v = tryparse(BigFloat, strip(lex)); return v === nothing ? nothing : string(v)
+    elseif dt == _XSD * "double" || dt == _XSD * "float"
+        s = strip(lex)
+        v = (s in ("INF","+INF")) ? Inf : s == "-INF" ? -Inf : s == "NaN" ? NaN :
+            tryparse(Float64, s)
+        return v === nothing ? nothing : (isnan(v) ? "NaN" : string(Float64(v)))
+    end
+    nothing
 end
 
 _bag(rows) = begin
