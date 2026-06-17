@@ -43,8 +43,16 @@ const _W3C_SUITES = [
     ("SPARQL 1.2",        "sparql/sparql12/manifest.ttl",                    269),
     ("SPARQL CSV/TSV",    "sparql/sparql11/csv-tsv-res/manifest.ttl",        6),
     ("SPARQL JSON",       "sparql/sparql11/json-res/manifest.ttl",           4),
+    # Entailment floor is 66 hermetically; 70 once the (network-fetched) RIF rule
+    # documents are present — see the adaptive bump below.
     ("SPARQL entailment", "sparql/sparql11/entailment/manifest.ttl",         66),
 ]
+
+# The 4 RIF entailment tests need rule documents fetched from the W3C site (see
+# fetch.jl). When present, all 70 entailment tests pass; otherwise the RIF tests
+# skip and the floor stays at 66.
+_rif_docs_present() =
+    isfile(joinpath(_W3C_SUITE, "sparql", "sparql11", "entailment", "rif01.rif"))
 
 @testset "W3C conformance" begin
     if !isdir(_W3C_SUITE) || !isfile(joinpath(_W3C_SUITE, "LICENSE.md"))
@@ -60,7 +68,8 @@ const _W3C_SUITES = [
                 s = Main.W3CHarness.summarize(outs)
                 p = get(s, :pass, 0)
                 @info "W3C $label" pass=p fail=get(s,:fail,0) error=get(s,:error,0) skip=get(s,:skip,0) total=length(outs)
-                @test p >= floor
+                eff_floor = (label == "SPARQL entailment" && _rif_docs_present()) ? 70 : floor
+                @test p >= eff_floor
             end
         end
     end

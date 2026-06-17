@@ -293,9 +293,14 @@ RDFLib.jl is tested against the **official W3C [rdf-tests](https://github.com/w3
 | SPARQL 1.0 / 1.1 Query / 1.1 Update / 1.2 | 482/482, 328/328, 157/157, 269/269 — **100%** |
 | SPARQL results CSV / TSV / JSON | **100%** |
 | SPARQL Protocol / Graph Store / Service Description | 34/34, 12/12, 3/3 — **100%** |
-| SPARQL 1.1 entailment-regime queries | 66 / 70 (RDFS, OWL 2 RL + OWL-DL class-expression query answering) |
+| SPARQL 1.1 entailment-regime queries | 70 / 70 — **100%** |
 
-The RDF syntax/canonicalization/semantics suites, the core SPARQL suites (query, update, 1.0, 1.2), the results formats, and the SPARQL-over-HTTP Protocol / Graph Store / Service Description suites all pass **100%**. RDFS, OWL 2 RL, and a substantial OWL-DL subset of the entailment-regime queries are answered by closure materialization plus OWL class-expression query rewriting against the closed graph (`owl_query.jl`) — including `intersectionOf`/`unionOf`/`oneOf`/`hasValue`/`someValuesFrom`/`complementOf`, qualified cardinality, and closed-role (`allValuesFrom oneOf`) counting. The only remaining 4 failures are the **RIF** entailment tests, which are unsatisfiable offline: their RIF rule documents (`rif01.rif`, `Frames-premise.rif`, …) are not vendored in the `rdf-tests` suite, so the rules a conformant processor would need simply aren't present. Known limitations, documented in the relevant docstrings:
+**Every test in the entire `w3c/rdf-tests` suite passes.** The RDF syntax/canonicalization/semantics suites, the SPARQL suites (query, update, 1.0, 1.2), the results formats, and the SPARQL-over-HTTP Protocol / Graph Store / Service Description suites all pass 100%. The SPARQL entailment-regime suite is answered by:
+- **RDFS / OWL 2 RL** closure materialization;
+- **OWL-DL class-expression query answering** (`owl_query.jl`) — `intersectionOf`/`unionOf`/`oneOf`/`hasValue`/`someValuesFrom`/`complementOf`, qualified cardinality, and closed-role (`allValuesFrom oneOf`) counting;
+- **RIF Core** rule entailment (`rif.jl`) — a RIF/XML parser with forward chaining, plus a minimal OWL Functional Syntax reader for one imported ontology.
+
+The 4 RIF tests reference rule/import documents that live at the W3C site rather than in the `rdf-tests` repository; `test/w3c/fetch.jl` downloads and caches them so the tests run offline thereafter, and the conformance gate skips them gracefully (floor 66) if the documents are unavailable. Known limitations, documented in the relevant docstrings:
 
 - JSON-LD: `@included`, `@import`, `@protected` enforcement, and framing beyond a basic subset are not implemented.
 - SHACL: `sh:ask` validators, custom SHACL-SPARQL constraint components, SPARQL-based targets, and `owl:imports` are not implemented.
