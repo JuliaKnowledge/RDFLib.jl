@@ -97,6 +97,7 @@ using RDFLib
     include("test_iri_langtag.jl")
     include("test_owl2_rl.jl")
     include("test_owl_query.jl")
+    include("test_rif.jl")
     include("test_datalog.jl")
     include("test_problog.jl")
     include("test_tabular.jl")

@@ -167,6 +167,9 @@ include("entailment.jl")
 # OWL class-expression query answering (query rewriting) + regime materialization
 include("owl_query.jl")
 
+# RIF Core entailment (RIF/XML parser + forward-chaining materializer)
+include("rif.jl")
+
 # RDFS/OWL schema DOT visualization
 include("rdfs2dot.jl")
 
@@ -369,6 +372,11 @@ export
     materialize_entailment!, rewrite_owl_query, sparql_query_entailment,
     filter_entailment_results,
     simple_entails, is_inconsistent,
+
+    # RIF Core entailment
+    parse_rif, parse_rif_file, RIFDocument, RIFRule, RIFTriplePattern,
+    rif_forward_chain!, rif_materialize, rif_materialize!,
+    rif_load_imports!, parse_owl_functional!,
 
     # CLI tools
     rdfpipe, csv2rdf,

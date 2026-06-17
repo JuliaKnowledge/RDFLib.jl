@@ -772,6 +772,81 @@ function _materialize_regime!(ds, regimes)
     ds
 end
 
+const RIF_NS = "http://www.w3.org/2007/rif#"
+
+# Find the `<NAME.rif>` referenced by `rif:usedWithProfile` in a data graph and
+# resolve it to a local file under `manifest_dir`. Returns the path or nothing.
+function _rif_ref_path(g, manifest_dir::String)
+    for t in triples(g, (nothing, URIRef(RIF_NS * "usedWithProfile"), nothing))
+        ref = t.subject
+        ref isa URIRef || continue
+        # The subject is a (possibly absolute) IRI ending in NAME.rif; use its
+        # final path segment to locate the file we pre-downloaded into the suite.
+        fname = last(split(ref.value, '/'))
+        p = joinpath(manifest_dir, fname)
+        isfile(p) && return p
+    end
+    nothing
+end
+
+# Run a RIF-regime query test: load the query's data, locate the referenced
+# `.rif` rule document, materialize it (rules + imports) onto the data graph,
+# then evaluate the SPARQL query against the materialized graph. A failed
+# import fetch with no cache → :skip (network required). Returns a TestOutcome.
+function _run_rif_query(g_manifest, name, id, cls, action_node, result, manifest_dir, assumed_base)
+    query_iri = _obj(g_manifest, action_node, URIRef(QT * "query"))
+    data_iri  = _obj(g_manifest, action_node, URIRef(QT * "data"))
+    data_iri === nothing && return TestOutcome(id, name, cls, :skip, "RIF test without qt:data")
+
+    qpath = _local_path(manifest_dir, query_iri.value)
+    query = read(qpath, String)
+    qbase = _base_iri(assumed_base, manifest_dir, query_iri.value)
+    if match(r"(?im)^\s*BASE\b"m, query) === nothing
+        query = "BASE <" * qbase * ">\n" * query
+    end
+
+    dp    = _local_path(manifest_dir, data_iri.value)
+    dbase = _base_iri(assumed_base, manifest_dir, data_iri.value)
+    g = RDFGraph()
+    for t in _fresh_bnodes(_parse_graph(dp, dbase))
+        add!(g, t)
+    end
+
+    rif_path = _rif_ref_path(g, manifest_dir)
+    rif_path === nothing && return TestOutcome(id, name, cls, :skip, "no .rif rule document found")
+
+    cache = joinpath(manifest_dir, "_rif_cache")
+    rep = try
+        _, r = RDFLib.rif_materialize!(g, rif_path; cache_dir = cache, timeout = 30)
+        r
+    catch e
+        return TestOutcome(id, name, cls, :error, "rif materialize failed: $(_short(e))")
+    end
+    # If any import could not be fetched (no network + no cache), skip cleanly.
+    for (url, ok, why) in rep.imports
+        ok || return TestOutcome(id, name, cls, :skip, "RIF import unavailable ($url): $why")
+    end
+
+    actual = sparql_query(g, query)
+
+    rpath = _local_path(manifest_dir, result.value)
+    kind, payload = _parse_expected_result(rpath, _base_iri(assumed_base, manifest_dir, result.value))
+    if kind == :ask
+        ok = (actual === payload) || (actual isa Bool && actual == payload)
+        return ok ? TestOutcome(id, name, cls, :pass, "") :
+                    TestOutcome(id, name, cls, :fail, "ASK $(actual) vs $(payload)")
+    elseif kind == :select
+        actual isa Vector || return TestOutcome(id, name, cls, :error, "expected SELECT rows, got $(typeof(actual))")
+        ordered = occursin("ORDER BY", uppercase(query))
+        ok, why = _compare_select(actual, payload, ordered)
+        return ok ? TestOutcome(id, name, cls, :pass, "") : TestOutcome(id, name, cls, :fail, why)
+    else
+        actual isa RDFGraph || return TestOutcome(id, name, cls, :error, "expected graph, got $(typeof(actual))")
+        return isomorphic(actual, payload) ? TestOutcome(id, name, cls, :pass, "") :
+               TestOutcome(id, name, cls, :fail, "construct graph not isomorphic")
+    end
+end
+
 function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifest_dir, assumed_base)
     query_iri = _obj(g_manifest, action_node, URIRef(QT * "query"))
     data_iri  = _obj(g_manifest, action_node, URIRef(QT * "data"))
@@ -798,6 +873,13 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
     # itself is deferred until AFTER materialization so it can consult the closed
     # graph for structural class matching / closed-role cardinality counting.
     regimes = _entailment_regimes(g_manifest, action_node)
+
+    # RIF Core entailment: the data declares a `<NAME.rif>` rule document via
+    # rif:usedWithProfile. Materialize the rules (and any imported RDF data) onto
+    # the data graph, then query — handled by a dedicated path.
+    if "RIF" in regimes
+        return _run_rif_query(g_manifest, name, id, cls, action_node, result, manifest_dir, assumed_base)
+    end
 
     if data_iri !== nothing || !isempty(gdata) || !isempty(fromq) || !isempty(fromnamedq)
         ds = Dataset()
