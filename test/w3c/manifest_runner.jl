@@ -912,6 +912,24 @@ function _has_entails()
     false
 end
 
+# True iff entails accepts a `recognized_datatypes` keyword.
+function _entails_takes_recognized()
+    for m in methods(RDFLib.entails)
+        :recognized_datatypes in Base.kwarg_decl(m) && return true
+    end
+    false
+end
+
+# mf:recognizedDatatypes is an RDF list of datatype IRIs. Returns `nothing` when
+# the property is ABSENT (use the library default), or a (possibly empty) vector
+# of URIRefs when present — the empty-vs-default distinction is what the
+# datatypes-non-well-formed twin tests turn on.
+function _entail_recognized(g, entry)
+    head = _obj(g, entry, URIRef(MF * "recognizedDatatypes"))
+    head === nothing && return nothing
+    URIRef[d for d in _collection(g, head) if d isa URIRef]
+end
+
 # Merge a set of premise files (per regime, with recognizedDatatypes) into one
 # graph; conclusion is either a graph or the boolean `false`.
 function _run_entailment(g, entry, name, id, cls, manifest_dir, assumed_base; positive::Bool)
@@ -942,8 +960,13 @@ function _run_entailment(g, entry, name, id, cls, manifest_dir, assumed_base; po
         false
     end
 
+    recognized = _entail_recognized(g, entry)
     ent = try
-        RDFLib.entails(premise, conclusion; regime = regime)
+        if recognized !== nothing && _entails_takes_recognized()
+            RDFLib.entails(premise, conclusion; regime = regime, recognized_datatypes = recognized)
+        else
+            RDFLib.entails(premise, conclusion; regime = regime)
+        end
     catch e
         return TestOutcome(id, name, cls, :error, "entails failed: $(_short(e))")
     end

@@ -740,7 +740,7 @@ everything and the result is `true`.
 """
 function entails(premise::RDFGraph, conclusion::RDFGraph;
                  regime::AbstractString = "simple",
-                 recognized_datatypes = String[])
+                 recognized_datatypes = nothing)
     recognized = _normalize_recognized(recognized_datatypes)
     # An inconsistent premise entails everything.
     if is_inconsistent(premise; regime = regime, recognized = recognized)
@@ -762,16 +762,20 @@ conclusion is trivially entailed.
 """
 function entails(premise::RDFGraph, conclusion::Bool;
                  regime::AbstractString = "simple",
-                 recognized_datatypes = String[])
+                 recognized_datatypes = nothing)
     conclusion && return true
     recognized = _normalize_recognized(recognized_datatypes)
     is_inconsistent(premise; regime = regime, recognized = recognized)
 end
 
-# Normalize a user-supplied recognized-datatype list to a Set{String}. An
-# empty list means "use the default recognized set" (because the W3C harness
-# does not forward the per-test list — see `_DEFAULT_RECOGNIZED`).
+# Normalize a user-supplied recognized-datatype list to a Set{String}.
+# `nothing` (the kwarg default — list not supplied) means "use the default
+# recognized set". An explicitly supplied list, even an empty one, is honored
+# verbatim: an empty list means "recognize no datatypes" (so ill-typed literals
+# of any datatype are not detected), which the W3C datatype-knowledge tests rely
+# on to distinguish their positive/negative twins.
 function _normalize_recognized(rec)
+    rec === nothing && return copy(_DEFAULT_RECOGNIZED)
     s = Set{String}()
     for d in rec
         if d isa URIRef
@@ -780,5 +784,5 @@ function _normalize_recognized(rec)
             push!(s, String(d))
         end
     end
-    isempty(s) ? copy(_DEFAULT_RECOGNIZED) : s
+    s
 end
