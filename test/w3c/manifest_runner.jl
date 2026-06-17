@@ -741,6 +741,35 @@ function _query_from_clauses(query::String)
     (from, fromnamed)
 end
 
+const SD = "http://www.w3.org/ns/sparql-service-description#"
+
+# Acceptable entailment regimes declared on a query action node (sd:entailmentRegime
+# is a list of regime IRIs). Returns short names, e.g. ["OWL-Direct","RDFS","D"].
+function _entailment_regimes(g, action_node)
+    head = _obj(g, action_node, URIRef(SD * "entailmentRegime"))
+    head === nothing && return String[]
+    [last(split(r isa URIRef ? r.value : string(r), ('#', '/', ':'))) for r in _collection(g, head)]
+end
+
+# Materialize an entailment closure on the dataset's default graph for the
+# strongest supported regime. OWL regimes → OWL 2 RL closure (which subsumes
+# RDFS and covers intersectionOf/hasValue/someValuesFrom/sameAs/property chains
+# etc.); RDFS/RDF/D → RDFS closure. Full OWL Direct (DL: cardinality, complex
+# class expressions) and RIF rule entailment are beyond these and not covered.
+function _materialize_regime!(ds, regimes)
+    isempty(regimes) && return ds
+    g = get_graph(ds)
+    try
+        if any(r -> startswith(r, "OWL"), regimes)
+            RDFLib.owl2_rl_closure!(g)
+        elseif any(r -> r in ("RDFS", "RDF", "D"), regimes)
+            RDFLib.rdfs_closure!(g)
+        end
+    catch
+    end
+    ds
+end
+
 function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifest_dir, assumed_base)
     query_iri = _obj(g_manifest, action_node, URIRef(QT * "query"))
     data_iri  = _obj(g_manifest, action_node, URIRef(QT * "data"))
@@ -781,6 +810,11 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
                 add!(ds, t, URIRef(iri))
             end
         end
+        # SPARQL entailment regimes (sparql11/entailment): sd:entailmentRegime on
+        # the action node lists acceptable regimes. Materialize the strongest one
+        # RDFLib supports (RDFS/RDF/D via the RDFS closure) on the default graph
+        # before querying. OWL-Direct (Description Logic) is not materialized.
+        _materialize_regime!(ds, _entailment_regimes(g_manifest, action_node))
         # Pass the dataset whenever named graphs are present — from graphData,
         # FROM/FROM NAMED, or a quad-format qt:data that carried named graphs.
         has_named = false
