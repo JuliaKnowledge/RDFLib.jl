@@ -291,13 +291,22 @@ struct SparqlConstruct
     limit::Union{Int, Nothing}
     offset::Int
     order_by::Vector{Tuple{SparqlExpr, Symbol}}
+    from::Vector{URIRef}                    # FROM <iri> dataset clauses
+    from_named::Vector{URIRef}              # FROM NAMED <iri> dataset clauses
 end
+# Backward-compatible constructor (no dataset clauses).
+SparqlConstruct(template, patterns, prefixes, limit, offset, order_by) =
+    SparqlConstruct(template, patterns, prefixes, limit, offset, order_by, URIRef[], URIRef[])
 
 struct SparqlDescribe
     terms::Vector{Any}                      # ExprURI or ExprVar
     patterns::Vector{SparqlPattern}
     prefixes::Dict{String, String}
+    from::Vector{URIRef}                    # FROM <iri> dataset clauses
+    from_named::Vector{URIRef}              # FROM NAMED <iri> dataset clauses
 end
+SparqlDescribe(terms, patterns, prefixes) =
+    SparqlDescribe(terms, patterns, prefixes, URIRef[], URIRef[])
 
 # ─── Union type for query dispatch ────────────────────────────────
 

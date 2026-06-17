@@ -729,12 +729,19 @@ end
     @test q.variables == ["1"]
 end
 
-# Fix 6: < as comparison operator is not mistaken for an IRI
+# Fix 6: < as comparison operator vs IRI disambiguation (SPARQL longest-token).
 @testset "Regression: < operator vs IRI disambiguation" begin
-    q = RDFLib.sparql_parse("SELECT * WHERE { ?a <http://ex.org/p> ?b . ?c <http://ex.org/p> ?d FILTER(?a<?b&&?c>?d) }")
+    # `?a < ?b` with surrounding spaces is unambiguously the `<` operator.
+    q = RDFLib.sparql_parse("SELECT * WHERE { ?a <http://ex.org/p> ?b FILTER(?a < ?b) }")
     f = first(p for p in q.patterns if p isa RDFLib.PatFilter)
     @test f.expr isa RDFLib.ExprBinaryOp
-    @test f.expr.op == :&&
+    @test f.expr.op == :<
+
+    # Per the SPARQL "longest token rule" `<?b&&?c>` lexes as an IRIREF (the `&`
+    # is NOT excluded from IRIREF content), so `?a<?b&&?c>?d` is `?a <iri> ?d` —
+    # a syntax error inside a FILTER. (W3C syn-bad-26.)
+    @test_throws Exception RDFLib.sparql_parse(
+        "SELECT * WHERE { ?a <http://ex.org/p> ?b . ?c <http://ex.org/p> ?d FILTER(?a<?b&&?c>?d) }")
 
     # Real IRIs (absolute and relative) still tokenize as IRIs
     tz = RDFLib._sparql_tokenize_all("<http://ex.org/x> <rel/path>")

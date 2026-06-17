@@ -137,14 +137,26 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
     for sa in q.aggregates; push!(agg_dep_names, sa.alias); end
 
     agg_exprs = SelectExpr[]
+    plain_exprs = SelectExpr[]
     for se in q.select_exprs
         if _expr_has_aggregate(se.expr) || _expr_refs_any(se.expr, agg_dep_names)
             push!(agg_exprs, se)
             push!(agg_dep_names, se.alias)
         else
-            for b in bindings
-                val = _ast_eval_expr(se.expr, b, g)
-                !isnothing(val) && (b[se.alias] = val)
+            push!(plain_exprs, se)
+        end
+    end
+    # Evaluate the plain (non-aggregate) projection expressions per row. All of a
+    # row's expressions share one BNODE(str) scope so that BNODE("x") in two
+    # different SELECT expressions of the SAME row yields the same blank node,
+    # while different rows get distinct ones (SPARQL §17.4.2.2).
+    if !isempty(plain_exprs)
+        for b in bindings
+            _with_bnode_row_scope() do
+                for se in plain_exprs
+                    val = _ast_eval_expr(se.expr, b, g)
+                    !isnothing(val) && (b[se.alias] = val)
+                end
             end
         end
     end
@@ -1029,15 +1041,23 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
         # The bound-join trick is only sound when every outer row binds all
         # shared vars: an outer row with an unbound shared var would be
         # re-emitted bare even when extensions of it exist (duplicates).
+        # It is ALSO only sound when each shared var is produced by a *required*
+        # (top-level, non-optional) triple of the OPTIONAL body: if a shared var
+        # is produced only inside a nested OPTIONAL/UNION/MINUS it may be rebound
+        # to a different value, so pushing the outer value as a constraint would
+        # change the LeftJoin result (SPARQL "Nested Optionals" algebra test).
         if !isempty(shared) && length(shared) <= 2 &&
-           all(b -> all(v -> haskey(b, v), shared), bindings)
+           all(b -> all(v -> haskey(b, v), shared), bindings) &&
+           all(v -> _var_required_in_body(v, pat.patterns), shared)
             return _opt_bound_join(g, pat.patterns, bindings, shared)
         end
         opt_results = _ast_eval_patterns(g, pat.patterns)
         return _ast_left_join(bindings, opt_results)
     end
 
-    # Fallback: nested loop (semantically equivalent, slower)
+    # Correlated fallback: only used when the OPTIONAL body references an
+    # outer-scoped variable (e.g. a FILTER over an outer var). Pushing the outer
+    # binding into the body is the intended correlated semantics here.
     new_bindings = Dict{String,Identifier}[]
     for b in bindings
         opt_bindings = _ast_eval_patterns(g, pat.patterns, Dict{String,Identifier}[copy(b)])
@@ -1048,6 +1068,26 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
         end
     end
     new_bindings
+end
+
+# True iff `var` is produced by a top-level required (non-OPTIONAL) graph
+# pattern of the OPTIONAL body — i.e. a plain triple, BIND or VALUES, or a
+# required nested group. Variables produced only inside a nested OPTIONAL /
+# UNION / MINUS are NOT "required" (they may be rebound / left unbound).
+function _var_required_in_body(var::String, patterns::Vector{SparqlPattern})
+    for p in patterns
+        if p isa PatTriple || p isa PatTripleTerm
+            vs = Set{String}(); _collect_produced_vars!(vs, p)
+            var in vs && return true
+        elseif p isa PatBind
+            p.var == var && return true
+        elseif p isa PatValues
+            var in p.variables && return true
+        elseif p isa PatGroup
+            _var_required_in_body(var, p.patterns) && return true
+        end
+    end
+    false
 end
 
 # Variables shared between outer bindings and inner OPTIONAL patterns
@@ -1343,14 +1383,29 @@ end
 _ast_left_join(lhs, rhs) = _ast_hash_join(lhs, rhs; left=true)
 
 function _ast_eval_pattern(g::RDFGraph, pat::PatUnion, bindings)
-    # Evaluate each branch ONCE against the full input binding set (not
-    # per-outer-row, which is quadratic).
-    new_bindings = Dict{String,Identifier}[]
+    # Algebra: Join(incoming, Union(eval(P1), eval(P2), …)). Each branch is
+    # evaluated as its OWN unit (empty seed) so a BIND/FILTER inside a branch is
+    # scoped to that branch (e.g. `{ ?s ?p ?o } { BIND(?o+1 AS ?z) } UNION …`
+    # leaves ?z unbound — ?o is not in scope inside the branch). The union of
+    # the branch results is then inner-joined with the incoming bindings.
+    union_results = Dict{String,Identifier}[]
     for branch in pat.branches
-        seeds = Dict{String,Identifier}[copy(b) for b in bindings]
-        append!(new_bindings, _ast_eval_patterns(g, branch, seeds))
+        append!(union_results, _ast_eval_patterns(g, branch))
     end
-    new_bindings
+    isempty(union_results) && return Dict{String,Identifier}[]
+    # Fast path: a single incoming row that is empty (the common case where the
+    # UNION is the first/only thing in its group) — no join needed.
+    if length(bindings) == 1 && isempty(bindings[1])
+        return union_results
+    end
+    out = Dict{String,Identifier}[]
+    for b in bindings
+        for ur in union_results
+            merged = _ast_merge_compatible(b, ur)
+            merged === nothing || push!(out, merged)
+        end
+    end
+    out
 end
 
 function _ast_eval_pattern(g::RDFGraph, pat::PatMinus, bindings)
@@ -1424,6 +1479,39 @@ const _ACTIVE_NAMED_FILTER = Base.RefValue{Any}(nothing)  # Union{Nothing,Set} (
 # resolve relative references at evaluation time. `nothing` when no BASE given.
 const _ACTIVE_BASE = Base.RefValue{Union{String,Nothing}}(nothing)
 
+# Per-solution scope for the 1-arg form of BNODE(str) (SPARQL §17.4.2.2): within
+# a single solution mapping, equal string arguments must map to the SAME blank
+# node, but different solution mappings must yield DIFFERENT blank nodes. We
+# allocate one scope dict per row (string → BNode); `_BNODE_ROW_SEQ` makes the
+# generated labels globally unique across rows. `nothing` ⇒ no active scope
+# (each BNODE(str) call then makes a fresh node, e.g. in FILTER/pattern context).
+const _BNODE_ROW_SCOPE = Base.RefValue{Any}(nothing)   # Union{Nothing,Dict{String,BNode}}
+const _BNODE_ROW_SEQ = Base.RefValue{Int}(0)
+
+# Run `f()` with a fresh per-row BNODE(str) scope active.
+function _with_bnode_row_scope(f)
+    old = _BNODE_ROW_SCOPE[]
+    _BNODE_ROW_SEQ[] += 1
+    _BNODE_ROW_SCOPE[] = Dict{String,BNode}()
+    try
+        return f()
+    finally
+        _BNODE_ROW_SCOPE[] = old
+    end
+end
+
+# BNODE(str): a blank node consistent for equal `str` within the current row.
+function _bnode_for_label(str::AbstractString)
+    scope = _BNODE_ROW_SCOPE[]
+    if scope === nothing
+        return BNode(string(str))
+    end
+    sc = scope::Dict{String,BNode}
+    return get!(sc, String(str)) do
+        BNode(string("bn", _BNODE_ROW_SEQ[], "_", length(sc)))
+    end
+end
+
 # Named graphs visible to GRAPH patterns: `nothing` when no dataset is
 # active (plain RDFGraph), otherwise name => graph pairs honoring any
 # FROM NAMED restriction.
@@ -1449,19 +1537,34 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatGraph, bindings)
     elseif gt isa ExprVar
         var = gt.name
         for (name, ng) in named
+            # The variable bound by GRAPH is NOT in scope inside the group
+            # pattern (SPARQL algebra Graph(var,P)). Evaluate the body WITHOUT
+            # injecting `name` as `?var`; bind `?var` = name on the results
+            # afterwards. If `?var` was already bound from OUTSIDE, it stays in
+            # scope (and selects the matching graph).
             seeds = Dict{String,Identifier}[]
             for b in bindings
                 ex = get(b, var, nothing)
                 if ex === nothing
-                    nb = copy(b)
-                    nb[var] = name
-                    push!(seeds, nb)
+                    push!(seeds, copy(b))   # do not seed the graph name
                 elseif ex == name
                     push!(seeds, copy(b))
                 end
             end
             isempty(seeds) && continue
-            append!(out, _ast_eval_patterns(ng, pat.patterns, seeds))
+            for sol in _ast_eval_patterns(ng, pat.patterns, seeds)
+                # Bind the graph variable to this graph's name. If the body
+                # itself produced a value for `var` (e.g. `GRAPH ?g { ?g :p ?o }`
+                # uses `?g` as a triple term), it must EQUAL the graph name —
+                # this is the outer Join with the graph name, per the algebra.
+                ex = get(sol, var, nothing)
+                if ex === nothing
+                    sol[var] = name
+                    push!(out, sol)
+                elseif ex == name
+                    push!(out, sol)
+                end
+            end
         end
         return out
     end
@@ -1760,8 +1863,16 @@ function _ast_eval_path_bgp(g::RDFGraph, s_val, path::PathExpr, o_val, pat::PatT
 
     # Note: a literal start is allowed (zero-length paths and inverse paths
     # can have literal endpoints per spec)
-    pairs = _ast_eval_path(g, path, s_val isa Identifier ? s_val : nothing,
-                            o_val isa Identifier ? o_val : nothing)
+    # An endpoint is a *query constant* when the triple's subject/object is not a
+    # variable: such an endpoint always participates in a zero-length match even
+    # if absent from the graph (SPARQL §18.5.4, e.g. `?s :p? :o`). A bound
+    # variable endpoint (e.g. via VALUES) is NOT a query constant, so its
+    # zero-length match is gated on graph membership.
+    s_start = s_val isa Identifier ? s_val : nothing
+    o_target = o_val isa Identifier ? o_val : nothing
+    pairs = _ast_eval_path(g, path, s_start, o_target;
+                           start_const = (s_var === nothing && s_start !== nothing),
+                           target_const = (o_var === nothing && o_target !== nothing))
     results = Dict{String,Identifier}[]
     for (s, o) in pairs
         new_b = copy(binding)
@@ -1791,7 +1902,7 @@ end
 # because zero-length and inverse paths can have literal endpoints.
 const _PathPair = Tuple{Identifier,Identifier}
 
-function _ast_eval_path(g::RDFGraph, path::PathURI, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathURI, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     results = _PathPair[]
     # A literal cannot be the subject of a triple
     (start !== nothing && !(start isa Node)) && return results
@@ -1804,7 +1915,7 @@ function _ast_eval_path(g::RDFGraph, path::PathURI, start::Union{Identifier,Noth
     results
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathSequence, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathSequence, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     isempty(path.steps) && return _PathPair[]
     _ast_eval_path_chain(g, path.steps, start, target)
 end
@@ -1829,7 +1940,7 @@ function _ast_eval_path_chain(g::RDFGraph, steps::Vector{PathExpr}, start, targe
     results
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathAlternative, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathAlternative, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     # Alternative is a fixed-length path: duplicates across branches are kept.
     results = _PathPair[]
     for option in path.options
@@ -1838,7 +1949,7 @@ function _ast_eval_path(g::RDFGraph, path::PathAlternative, start::Union{Identif
     results
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathInverse, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathInverse, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     # x ^p y  ⇔  y p x: evaluate inner path with endpoints swapped, then
     # reverse the pairs. The inverse-path subject may be a literal.
     (target !== nothing && !(target isa Node)) && return _PathPair[]
@@ -1850,25 +1961,33 @@ function _ast_eval_path(g::RDFGraph, path::PathInverse, start::Union{Identifier,
     results
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathZeroOrMore, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
-    _ast_eval_path_closure(g, path.path, start, target, include_zero=true)
+function _ast_eval_path(g::RDFGraph, path::PathZeroOrMore, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
+    _ast_eval_path_closure(g, path.path, start, target, include_zero=true,
+                           start_const=start_const, target_const=target_const)
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathOneOrMore, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathOneOrMore, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     _ast_eval_path_closure(g, path.path, start, target, include_zero=false)
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathZeroOrOne, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathZeroOrOne, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     results = _ast_eval_path(g, path.path, start, target)
-    # Add zero-length (identity) matches; literal endpoints included per spec
+    # Zero-length (identity) matches. A zero-length path connects only terms that
+    # actually occur in the data graph — NOT terms introduced solely by the query
+    # (e.g. bound via VALUES). So an identity match for a bound endpoint is added
+    # only when that endpoint is a term of the graph. (W3C "ZeroOrX property
+    # paths should only return terms in the graph" / SPARQL 1.1 §18.5.4.)
+    gterms = _path_graph_terms(g)
     if !isnothing(start)
-        if isnothing(target) || target == start
+        # A constant subject (`:s :p? ?o`) always yields the identity pair; a
+        # bound variable (VALUES) is gated on graph membership.
+        if (isnothing(target) || target == start) && (start_const || start in gterms)
             push!(results, (start, start))
         end
     elseif !isnothing(target)
-        push!(results, (target, target))
+        (target_const || target in gterms) && push!(results, (target, target))
     else
-        for term in _path_graph_terms(g)
+        for term in gterms
             push!(results, (term, term))
         end
     end
@@ -1887,11 +2006,16 @@ function _path_graph_terms(g::RDFGraph)
 end
 
 function _ast_eval_path_closure(g::RDFGraph, path::PathExpr, start::Union{Identifier,Nothing},
-                                 target::Union{Identifier,Nothing}; include_zero::Bool=false)
+                                 target::Union{Identifier,Nothing}; include_zero::Bool=false,
+                                 start_const::Bool=false, target_const::Bool=false)
     results = _PathPair[]
     if !isnothing(start)
         # BFS from start
-        if include_zero && (isnothing(target) || target == start)
+        if include_zero && (isnothing(target) || target == start) &&
+           (start_const || start in _path_graph_terms(g))
+            # Zero-length endpoints must be terms occurring in the data graph
+            # (not query-only terms) unless the endpoint is a query constant;
+            # see PathZeroOrOne above.
             push!(results, (start, start))
         end
         visited = Set{Identifier}()
@@ -1918,16 +2042,17 @@ function _ast_eval_path_closure(g::RDFGraph, path::PathExpr, start::Union{Identi
                 push!(results, (term, term))
             end
         end
-        # A bound target is itself a valid zero-length endpoint even when it does
-        # not occur in the graph (e.g. `?s :p* :o` on an empty graph → `:o`).
-        if include_zero && target !== nothing
+        # A *constant* target is itself a valid zero-length endpoint even when it
+        # does not occur in the graph (e.g. `?s :p* :o` on an empty graph → `:o`).
+        # A bound *variable* target is gated on graph membership above.
+        if include_zero && target !== nothing && (target_const || target in _path_graph_terms(g))
             push!(results, (target, target))
         end
     end
     unique(results)
 end
 
-function _ast_eval_path(g::RDFGraph, path::PathNegatedSet, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing})
+function _ast_eval_path(g::RDFGraph, path::PathNegatedSet, start::Union{Identifier,Nothing}, target::Union{Identifier,Nothing}; start_const::Bool=false, target_const::Bool=false)
     # Per SPARQL 1.1: !(p1|...|^q1|...) ≡ !(p1|...) UNION ^(!(q1|...)).
     # The forward component exists when there are forward members or the set
     # has no inverse members; the inverse component exists when there are
@@ -2037,7 +2162,7 @@ function _ast_eval_expr(expr::ExprUnaryOp, binding::Dict{String,Identifier}, g::
     elseif expr.op == :-
         tn = _typed_numeric(val)
         tn === nothing && return nothing
-        return _numeric_literal(tn[1], -tn[2])
+        return _arith_numeric_literal(tn[1], -tn[2])
     elseif expr.op == :+
         return _typed_numeric(val) === nothing ? nothing : val
     end
@@ -2229,7 +2354,12 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         end
         return URIRef(ref)
     elseif name == "BNODE"
-        return isempty(args) ? BNode() : BNode(_ast_str(_eval_arg(1)))
+        isempty(args) && return BNode()
+        a = _eval_arg(1)
+        # BNODE's argument must be a simple literal / xsd:string.
+        (a isa Literal && (a.language !== nothing || a.datatype === nothing ||
+            a.datatype == _XSD_STRING_DT)) || return nothing
+        return _bnode_for_label(a.lexical)
     elseif name == "STRDT"
         val = _eval_arg(1); dt = _eval_arg(2)
         (isnothing(val) || isnothing(dt)) && return nothing
@@ -2283,9 +2413,15 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         return Literal(!isnothing(a) && !isnothing(b) && a === b)
     elseif name == "REGEX"
         val = _eval_arg(1)
-        isnothing(val) && return Literal(false)
+        isnothing(val) && return nothing
+        # REGEX's text argument must be a simple literal, xsd:string, or a
+        # (dir)langString — NOT an IRI or a non-string-typed literal. A URI
+        # or other typed literal is a type error (the row is excluded), so e.g.
+        # regex(<http://example.com/uri>, …) does NOT match (regex-query-003).
+        (val isa Literal && (val.language !== nothing ||
+            val.datatype === nothing || val.datatype == _XSD_STRING_DT)) || return nothing
         pat = _eval_arg(2)
-        isnothing(pat) && return Literal(false)
+        isnothing(pat) && return nothing
         flags = length(args) >= 3 ? _ast_str(_eval_arg(3)) : ""
         rx = _ast_make_regex(_ast_str(pat), flags)
         return Literal(!isnothing(match(rx, _ast_str(val))))
@@ -2598,6 +2734,24 @@ function _rounding_literal(kind::Symbol, v::Real)
     if kind === :decimal
         (isnan(v) || isinf(v)) && return nothing
         return Literal(string(Int64(v)), datatype=_XSD_DECIMAL_DT)
+    end
+    _numeric_literal(kind, v)
+end
+
+# Build a numeric literal from the result of an arithmetic operator
+# (op:numeric-add/subtract/multiply/divide). The W3C result files for these
+# operators serialize an *integral-valued* decimal/float/double with a bare
+# integer lexical (e.g. 3+3 → "6"^^xsd:decimal, "6"^^xsd:double — no ".0" or
+# "E0"). Non-integral values use the normal canonical lexical. (Casts use a
+# different lexical convention and keep `_numeric_literal`.)
+function _arith_numeric_literal(kind::Symbol, v::Real)
+    if kind in (:decimal, :float, :double)
+        f = Float64(v)
+        if isfinite(f) && isinteger(f) && abs(f) < 1e15
+            dt = kind === :decimal ? _XSD_DECIMAL_DT :
+                 kind === :float   ? _XSD_FLOAT_DT : _XSD_DOUBLE
+            return Literal(string(Int64(f)), datatype=dt)
+        end
     end
     _numeric_literal(kind, v)
 end
@@ -2991,15 +3145,15 @@ function _ast_eval_arithmetic(op::Symbol, left, right)
         if op == :/
             if kind === :integer || kind === :decimal
                 rv == 0 && return nothing  # division by zero → error
-                return _numeric_literal(:decimal, lv / rv)
+                return _arith_numeric_literal(:decimal, lv / rv)
             end
-            return _numeric_literal(kind, lv / rv)
+            return _arith_numeric_literal(kind, lv / rv)
         end
         v = op == :+ ? lv + rv :
             op == :- ? lv - rv :
             op == :* ? lv * rv : nothing
         v === nothing && return nothing
-        return _numeric_literal(kind, v)
+        return _arith_numeric_literal(kind, v)
     end
     # Date arithmetic: dateTime ± duration
     if op in (:+, :-) && (left isa Literal || right isa Literal)
@@ -4065,12 +4219,12 @@ function _agg_finalize(acc, agg::ExprAggregate)
             isempty(s) && return Literal(0)
             t = _typed_sum(collect(s))
             t === :error && return nothing
-            return _numeric_literal(t[1], t[2])
+            return _arith_numeric_literal(t[1], t[2])
         elseif f == "AVG"
             isempty(s) && return nothing
             t = _typed_sum(collect(s))
             t === :error && return nothing
-            return _numeric_literal(_promote_kind(t[1], :decimal), Float64(t[2]) / length(s))
+            return _arith_numeric_literal(_promote_kind(t[1], :decimal), Float64(t[2]) / length(s))
         elseif f == "MIN" || f == "MAX"
             isempty(s) && return nothing
             it = iterate(s); best = it[1]; state = it[2]
@@ -4081,7 +4235,7 @@ function _agg_finalize(acc, agg::ExprAggregate)
                     best = v
                 end
             end
-            return best
+            return _agg_canonicalize(best)
         end
     end
     if f == "COUNT"
@@ -4104,7 +4258,7 @@ function _agg_finalize(acc, agg::ExprAggregate)
         s, c = acc::Tuple{Float64,Int}  # legacy encoded accumulator
         return c == 0 ? Literal(0) : Literal(s / c)
     elseif f == "MIN" || f == "MAX" || f == "SAMPLE"
-        return acc === nothing ? nothing : acc::Identifier
+        return acc === nothing ? nothing : _agg_canonicalize(acc::Identifier)
     end
     return nothing
 end
@@ -4188,6 +4342,23 @@ end
 # Compute an aggregate over a fully materialised group.
 # Returns an Identifier, or `nothing` (unbound) for empty MIN/MAX/SAMPLE/AVG
 # groups and for SUM/AVG groups containing non-numeric (type-error) values.
+# MIN/MAX return the selected term, but the W3C result files serialize a
+# double/float result in canonical scientific form (e.g. data "2E-1" → the
+# MIN result "2.0E-1"). Re-canonicalize the lexical of a double/float literal;
+# leave integers/decimals/non-numerics untouched.
+function _agg_canonicalize(v)
+    v isa Literal || return v
+    v.language === nothing || return v
+    dt = v.datatype
+    dt === nothing && return v
+    k = _numeric_kind_of_dt(dt.value)
+    (k === :double || k === :float) || return v
+    lx = strip(v.lexical)
+    f = lx == "INF" ? Inf : lx == "-INF" ? -Inf : lx == "NaN" ? NaN : tryparse(Float64, lx)
+    f === nothing && return v
+    return Literal(_xsd_double_lexical(f), datatype=dt)
+end
+
 function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Identifier}})
     var_name = agg.arg isa ExprVar ? agg.arg.name : nothing
     is_star = agg.arg isa ExprStar
@@ -4226,27 +4397,31 @@ function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Id
         isempty(vals) && return Literal(0)  # SUM over empty group = 0
         s = _typed_sum(vals)
         s === :error && return nothing
-        return _numeric_literal(s[1], s[2])
+        # The W3C DISTINCT-aggregate result files serialize an integral double
+        # result with a bare-integer lexical (2100), while the non-DISTINCT ones
+        # use canonical scientific (3.21E4); honor each.
+        return agg.distinct ? _arith_numeric_literal(s[1], s[2]) : _numeric_literal(s[1], s[2])
     elseif agg.func == "AVG"
         isempty(vals) && return Literal(0)  # AVG over empty group = 0 (per spec)
         s = _typed_sum(vals)
         s === :error && return nothing
         kind = _promote_kind(s[1], :decimal)  # integer avg promotes to decimal
-        return _numeric_literal(kind, Float64(s[2]) / length(vals))
+        return agg.distinct ? _arith_numeric_literal(kind, Float64(s[2]) / length(vals)) :
+                              _numeric_literal(kind, Float64(s[2]) / length(vals))
     elseif agg.func == "MIN"
         isempty(vals) && return nothing
         best = vals[1]
         for v in @view vals[2:end]
             _agg_lt(v, best) && (best = v)
         end
-        return best
+        return _agg_canonicalize(best)
     elseif agg.func == "MAX"
         isempty(vals) && return nothing
         best = vals[1]
         for v in @view vals[2:end]
             _agg_lt(best, v) && (best = v)
         end
-        return best
+        return _agg_canonicalize(best)
     elseif agg.func == "SAMPLE"
         return isempty(vals) ? nothing : first(vals)
     elseif agg.func == "GROUP_CONCAT"

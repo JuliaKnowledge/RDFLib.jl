@@ -113,8 +113,10 @@ function sparql_query(x, query::AbstractString)
 end
 
 function _sparql_eval_on_dataset(ds::Dataset, ast; union_default::Bool=false)
-    from = ast isa SparqlSelect ? ast.from : URIRef[]
-    from_named = ast isa SparqlSelect ? ast.from_named : URIRef[]
+    from = (ast isa SparqlSelect || ast isa SparqlConstruct || ast isa SparqlDescribe) ?
+        ast.from : URIRef[]
+    from_named = (ast isa SparqlSelect || ast isa SparqlConstruct || ast isa SparqlDescribe) ?
+        ast.from_named : URIRef[]
 
     default_g, named_filter = if isempty(from) && isempty(from_named)
         if union_default
@@ -388,6 +390,7 @@ end
 # INSERT DATA with GRAPH routing.
 function _sparql_exec_update(ds::Dataset, op::UpdateInsertData)
     for (s, p, o, gr) in op.quads
+        s = _materialize_data_term(s); o = _materialize_data_term(o)
         g = _quad_target_graph!(ds, gr)
         s isa Node && p isa URIRef && o isa Identifier && add!(g, Triple(s, p, o))
     end
@@ -397,6 +400,7 @@ end
 # DELETE DATA with GRAPH routing.
 function _sparql_exec_update(ds::Dataset, op::UpdateDeleteData)
     for (s, p, o, gr) in op.quads
+        s = _materialize_data_term(s); o = _materialize_data_term(o)
         g = isnothing(gr) ? ds.default_graph : get(ds.named_graphs, gr, nothing)
         isnothing(g) && continue
         s isa Node && p isa URIRef && o isa Identifier && remove!(g, Triple(s, p, o))
@@ -540,14 +544,24 @@ function _sparql_exec_update(ds::Dataset, op::UpdateGraphOp)
     nothing
 end
 
+# Materialize a ground DATA-template term: a TripleTermPattern (from SPARQL 1.2
+# reification syntax, e.g. `s p o {| … |}` → `r rdf:reifies <<( s p o )>>`)
+# becomes a concrete TripleTerm. Other terms pass through unchanged.
+_materialize_data_term(t) =
+    t isa TripleTermPattern ? _ast_resolve_term(t, _EMPTY_BINDING) : t
+
+const _EMPTY_BINDING = Dict{String,Identifier}()
+
 function _sparql_exec_update(g::RDFGraph, op::_SPARQLInsertData)
     for (s, p, o) in op.triples
+        s = _materialize_data_term(s); o = _materialize_data_term(o)
         s isa Node && p isa URIRef && o isa Identifier && add!(g, Triple(s, p, o))
     end
 end
 
 function _sparql_exec_update(g::RDFGraph, op::_SPARQLDeleteData)
     for (s, p, o) in op.triples
+        s = _materialize_data_term(s); o = _materialize_data_term(o)
         s isa Node && p isa URIRef && o isa Identifier && remove!(g, Triple(s, p, o))
     end
 end

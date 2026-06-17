@@ -269,16 +269,19 @@ function _sparql_tokenize_all(input::AbstractString)
                 pos += 2
                 continue
             end
-            # Disambiguate IRIREF vs less-than operator: treat <...> as an IRI
-            # only when the bracketed content is plausible IRIREF content — no
-            # whitespace/control chars or chars excluded from IRIREF
-            # (<, ", {, }, |, ^, `), and no boolean operators &&/||. A backslash
-            # is allowed only as part of a UCHAR escape (\uXXXX / \UXXXXXXXX).
+            # Disambiguate IRIREF vs less-than operator under the SPARQL
+            # "longest token rule": treat <...> as an IRI whenever the bracketed
+            # content is valid IRIREF content — i.e. every char is > U+0020 and
+            # none of <, >, ", {, }, |, ^, ` (a backslash is allowed only in a
+            # UCHAR escape). The IRIREF production does NOT exclude `&` or `|`,
+            # so e.g. `<?a&&?b>` lexes as an IRIREF (and a FILTER like
+            # `(?x<?a&&?b>?y)` is then a syntax error — syn-bad-26). Only when
+            # the content is not valid IRIREF do we fall back to the `<`/`<=`
+            # operator.
             end_pos = findnext('>', input, nextind(input, pos))
             if !isnothing(end_pos)
                 content = SubString(input, nextind(input, pos), prevind(input, end_pos))
-                if !occursin("&&", content) && !occursin("||", content) &&
-                   _is_valid_iriref_content(content)
+                if _is_valid_iriref_content(content)
                     push!(tokens, _SparqlToken(TOK_IRI, _unescape_iri_uchar(content), pos))
                     pos = nextind(input, end_pos)
                     continue
@@ -1394,7 +1397,7 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
     _expect_keyword!(tz, "CONSTRUCT")
     # CONSTRUCT WHERE { ... } shorthand — WHERE pattern is also the template
     if _check_keyword(tz, "WHERE") || _check_keyword(tz, "FROM")
-        _skip_from_clauses!(tz, prefixes)
+        from, from_named = _skip_from_clauses!(tz, prefixes)
         _match_keyword!(tz, "WHERE")
         patterns = _parse_group_graph_pattern(tz, prefixes)
         # CONSTRUCT WHERE shorthand permits only a TriplesTemplate — no FILTER,
@@ -1409,17 +1412,17 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
         if _check_keyword(tz, "VALUES")
             push!(patterns, _parse_values(tz, prefixes))
         end
-        return SparqlConstruct(template, patterns, prefixes, limit, offset, order_by)
+        return SparqlConstruct(template, patterns, prefixes, limit, offset, order_by, from, from_named)
     end
     template = _parse_construct_template(tz, prefixes)
-    _skip_from_clauses!(tz, prefixes)
+    from, from_named = _skip_from_clauses!(tz, prefixes)
     _match_keyword!(tz, "WHERE")
     patterns = _parse_group_graph_pattern(tz, prefixes)
     group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
     if _check_keyword(tz, "VALUES")
         push!(patterns, _parse_values(tz, prefixes))
     end
-    SparqlConstruct(template, patterns, prefixes, limit, offset, order_by)
+    SparqlConstruct(template, patterns, prefixes, limit, offset, order_by, from, from_named)
 end
 
 function _parse_construct_template(tz::_SparqlTokenizer, prefixes)
@@ -1483,7 +1486,18 @@ end
 # variables bound only outside its group). A bare BGP group is join-equivalent
 # to the surrounding group and need not be wrapped.
 function _group_needs_scope(pats::Vector{SparqlPattern})
-    any(p -> p isa PatFilter || p isa PatFilterExists, pats)
+    # A nested group must retain its own algebra boundary (be kept as a PatGroup
+    # rather than flattened into the surrounding group) whenever flattening would
+    # change the algebra. FILTER scope aside, an OPTIONAL/MINUS inside the group
+    # is translated as LeftJoin/Minus whose *left* operand is the group's own
+    # preceding patterns; flattening would wrongly extend that left operand to the
+    # surrounding group's earlier patterns (SPARQL algebra "Join scope" test).
+    # A BIND likewise needs its own scope: an expression in a nested group's
+    # BIND only sees variables bound *within that group* (SPARQL "BIND scope" —
+    # e.g. `{ ?s ?p ?o } { BIND(?o+1 AS ?z) }` leaves ?z unbound because ?o is
+    # not in scope inside the second group). Flattening would wrongly expose ?o.
+    any(p -> p isa PatFilter || p isa PatFilterExists ||
+             p isa PatOptional || p isa PatMinus || p isa PatBind, pats)
 end
 
 # Collect variable names referenced in an expression OUTSIDE of any aggregate
@@ -1595,18 +1609,28 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
     while !_check(tz, TOK_RBRACE) && !_check(tz, TOK_EOF)
         tok = _peek(tz)
         is_not_triples = true  # set false in the TriplesBlock branch
+        # Whether this group element starts a *new* Basic Graph Pattern region
+        # for blank-node-label scoping (SPARQL 1.1 §19.6). FILTER, BIND and
+        # VALUES do NOT split a BGP — adjacent triples blocks separated only by
+        # such constructs form one BGP, so a blank-node label may be shared.
+        # Genuine splitters: OPTIONAL/MINUS/LATERAL/GRAPH/SERVICE/UNION/group/
+        # subquery (these set `splits_bgp = true` below).
+        splits_bgp = false
 
         if _check_keyword(tz, "OPTIONAL")
+            splits_bgp = true
             _advance!(tz)
             pats = _parse_group_graph_pattern(tz, prefixes)
             push!(patterns, PatOptional(pats))
 
         elseif _check_keyword(tz, "MINUS")
+            splits_bgp = true
             _advance!(tz)
             pats = _parse_group_graph_pattern(tz, prefixes)
             push!(patterns, PatMinus(pats))
 
         elseif _check_keyword(tz, "LATERAL")
+            splits_bgp = true
             _advance!(tz)
             pats = _parse_group_graph_pattern(tz, prefixes)
             push!(patterns, PatLateral(pats))
@@ -1660,6 +1684,7 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             push!(patterns, _parse_values(tz, prefixes))
 
         elseif _check_keyword(tz, "GRAPH")
+            splits_bgp = true
             _advance!(tz)
             gt = if _check(tz, TOK_VAR)
                 ExprVar(_advance!(tz).value[2:end])
@@ -1670,6 +1695,7 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             push!(patterns, PatGraph(gt, pats))
 
         elseif _check_keyword(tz, "SERVICE")
+            splits_bgp = true
             _advance!(tz)
             silent = !isnothing(_match_keyword!(tz, "SILENT"))
             ep = if _check(tz, TOK_VAR)
@@ -1684,6 +1710,7 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             # A SubSelect is the *entire* content of a GroupGraphPattern; it may
             # only appear as the first (and only) element. `{ {} SELECT … }` is
             # illegal (the empty `{}` already counts as an element).
+            splits_bgp = true
             n_elements == 0 ||
                 error("SELECT subquery must be the sole content of a group at position $(_peek(tz).pos)")
             subq = _parse_select(tz, prefixes)
@@ -1694,6 +1721,7 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
 
         elseif _check(tz, TOK_LBRACE)
             # Subquery or nested group or UNION
+            splits_bgp = true
             saved_idx = tz.idx
             _advance!(tz)
             if _check_keyword(tz, "SELECT")
@@ -1760,9 +1788,11 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             end
         end
 
-        if is_not_triples
-            # A GraphPatternNotTriples is its own BGP region. Its blank-node
-            # labels must not appear in the surrounding group's other regions.
+        if splits_bgp
+            # A BGP-splitting GraphPatternNotTriples is its own BGP region. Its
+            # blank-node labels must not appear in the surrounding group's other
+            # regions. (FILTER/BIND/VALUES do NOT split a BGP, so they leave the
+            # current triples-block region open — see `splits_bgp` above.)
             elem_labels = Set{String}()
             for k in region_start:length(patterns)
                 _collect_bnode_labels!(elem_labels, patterns[k])

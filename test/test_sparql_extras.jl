@@ -1604,3 +1604,138 @@ end
         @test r[1]["c"].lexical == "1"
     end
 end
+
+# Regression tests for W3C SPARQL conformance fixes (algebra scoping, property
+# paths, reification, lexical canonicalization, FROM in CONSTRUCT, etc.).
+@testset "W3C conformance regressions" begin
+    EX = Namespace("http://example/")
+    XSD = "http://www.w3.org/2001/XMLSchema#"
+
+    @testset "Blank-node label across FILTER is one BGP (syn-11)" begin
+        # A FILTER does not split a BGP, so a bnode label may be shared across it.
+        @test RDFLib.sparql_parse(
+            "SELECT * WHERE { _:a ?p ?v . FILTER(true) . [] ?q _:a }") !== nothing
+        @test RDFLib.sparql_parse(
+            "ASK { _:w <http://x/h> ?h FILTER(true) _:w <http://x/s> ?s }") !== nothing
+        # But OPTIONAL/GRAPH/UNION DO split a BGP — reuse is rejected.
+        @test_throws Exception RDFLib.sparql_parse(
+            "SELECT * WHERE { _:a ?p ?v OPTIONAL { [] ?q _:a } }")
+        @test_throws Exception RDFLib.sparql_parse(
+            "SELECT * WHERE { { _:a ?p ?v } UNION { [] ?q _:a } }")
+    end
+
+    @testset "Arithmetic on integral mixed datatypes → bare lexical" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("p"), Literal("3", datatype=URIRef(XSD*"double"))))
+        add!(g, Triple(EX("b"), EX("p"), Literal("3", datatype=URIRef(XSD*"integer"))))
+        r = sparql_query(g, "PREFIX : <http://example/> SELECT (?x+?y AS ?z) WHERE { ?a :p ?x . ?b :p ?y }")
+        # Every combination is integral; double/decimal results drop the .0/E0.
+        for row in r
+            z = row["z"]
+            @test !occursin("E", z.lexical) && !occursin(".", z.lexical)
+        end
+    end
+
+    @testset "MIN/MAX recanonicalize double lexical" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("2E-1", datatype=URIRef(XSD*"double"))))
+        r = sparql_query(g, "PREFIX : <http://example/> SELECT (MIN(?o) AS ?m) WHERE { ?s :p ?o }")
+        @test r[1]["m"].lexical == "2.0E-1"
+    end
+
+    @testset "DISTINCT SUM integral double → bare lexical" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal("1.0E2", datatype=URIRef(XSD*"double"))))
+        add!(g, Triple(EX("s"), EX("p"), Literal("2.0E3", datatype=URIRef(XSD*"double"))))
+        r = sparql_query(g, "PREFIX : <http://example/> SELECT (SUM(DISTINCT ?o) AS ?s) WHERE { ?x :p ?o }")
+        @test r[1]["s"].lexical == "2100"
+    end
+
+    @testset "Join scope: OPTIONAL left operand is the nested group" begin
+        # ?X :name paul { ?Y :name george OPTIONAL { ?X :email ?Z } } → empty,
+        # because the OPTIONAL's left operand is only `?Y :name george`.
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("name"), Literal("paul")))
+        add!(g, Triple(EX("b"), EX("name"), Literal("george")))
+        add!(g, Triple(EX("c"), EX("email"), EX("c@x")))
+        r = sparql_query(g, """PREFIX : <http://example/>
+            SELECT * { ?X :name "paul" { ?Y :name "george" . OPTIONAL { ?X :email ?Z } } }""")
+        @test isempty(r)
+    end
+
+    @testset "BIND scope inside a nested group / UNION branch" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("s"), EX("p"), Literal(1)))
+        r = sparql_query(g, """PREFIX : <http://example/>
+            SELECT ?o ?z { ?s :p ?o { BIND(?o+1 AS ?z) } UNION { BIND(?o+2 AS ?z) } }""")
+        @test length(r) == 2
+        @test all(!haskey(row, "z") for row in r)  # ?o not in scope → ?z unbound
+    end
+
+    @testset "GRAPH variable not in scope inside the group" begin
+        ds = Dataset()
+        add!(ds, Triple(EX("s"), EX("p"), EX("o")), EX("g"))
+        r = sparql_query(ds, "PREFIX : <http://example/> SELECT * { GRAPH ?g { FILTER(BOUND(?g)) } }")
+        @test isempty(r)
+        # But GRAPH ?g { ?g :p ?o } joins the in-body ?g with the graph name.
+        ds2 = Dataset()
+        add!(ds2, Triple(EX("g"), EX("p"), EX("o")), EX("g"))
+        add!(ds2, Triple(EX("x"), EX("p"), EX("o")), EX("g"))
+        r2 = sparql_query(ds2, "PREFIX : <http://example/> SELECT ?g { GRAPH ?g { ?g :p ?o } }")
+        @test length(r2) == 1 && r2[1]["g"] == EX("g")
+    end
+
+    @testset "REGEX on a non-string is a type error" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("foo"), EX("v"), EX("uri")))           # IRI value
+        add!(g, Triple(EX("foo"), EX("v"), Literal("a-uri")))   # string value
+        r = sparql_query(g, """PREFIX : <http://example/>
+            SELECT ?v { :foo :v ?v FILTER regex(?v, "uri") }""")
+        @test length(r) == 1 && r[1]["v"] == Literal("a-uri")
+    end
+
+    @testset "ZeroOrOne path: zero-length only for graph/constant terms" begin
+        # `?v :p? ?v` with ?v bound to a non-graph term (VALUES) → no zero-length.
+        g = RDFGraph()  # empty
+        r = sparql_query(g, "PREFIX : <http://example/> SELECT * { VALUES ?v { 1 } ?v :p? ?v }")
+        @test isempty(r)
+        # `?s :p? :o` on empty data: :o is a query constant → binds ?s = :o.
+        r2 = sparql_query(g, "PREFIX : <http://example/> SELECT ?s { ?s :p? :o }")
+        @test length(r2) == 1 && r2[1]["s"] == EX("o")
+    end
+
+    @testset "BNODE(str) is per-solution scoped" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("a"), EX("v"), Literal("x")))
+        add!(g, Triple(EX("b"), EX("v"), Literal("x")))
+        r = sparql_query(g, """PREFIX : <http://example/>
+            SELECT (BNODE(?s) AS ?b1) (BNODE(?s) AS ?b2) { ?a :v ?s }""")
+        # Within each row the two BNODE(?s) calls agree; across rows they differ.
+        @test length(r) == 2
+        @test r[1]["b1"] == r[1]["b2"]
+        @test r[1]["b1"] != r[2]["b1"]
+    end
+
+    @testset "CONSTRUCT honors FROM" begin
+        # Without a real file we just confirm FROM is captured on the AST.
+        q = RDFLib.sparql_parse("CONSTRUCT FROM <http://x/d> WHERE { ?s ?p ?o }")
+        @test q.from == [URIRef("http://x/d")]
+    end
+
+    @testset "INSERT DATA materializes reification annotation" begin
+        ds = Dataset()
+        RDFLib.sparql_update(ds, """PREFIX : <http://example/>
+            INSERT DATA { :s :p :o {| :source :faraway |} } ; DELETE DATA { :s :p :o }""")
+        ts = collect(get_graph(ds))
+        # base deleted; reifies + source annotation remain.
+        @test length(ts) == 2
+        @test any(t -> t.predicate == URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies") &&
+                       t.object isa TripleTerm, ts)
+        @test any(t -> t.predicate == EX("source") && t.object == EX("faraway"), ts)
+    end
+
+    @testset "Tokenizer: <?a&&?b> lexes as IRIREF (longest token)" begin
+        @test_throws Exception RDFLib.sparql_parse(
+            "SELECT * WHERE { ?a <http://x/p> ?b . ?c <http://x/p> ?d FILTER(?a<?b&&?c>?d) }")
+    end
+end
