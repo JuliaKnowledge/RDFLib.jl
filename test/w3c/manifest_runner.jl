@@ -794,11 +794,10 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
     # SPARQL entailment regimes (sparql11/entailment): when a regime is declared we
     # (a) materialize the regime closure on the data and (b) rewrite anonymous OWL
     # class-expression patterns in the query to equivalent BGPs. Rewriting is gated
-    # on a regime being present so ordinary query tests are untouched.
+    # on a regime being present so ordinary query tests are untouched. The rewrite
+    # itself is deferred until AFTER materialization so it can consult the closed
+    # graph for structural class matching / closed-role cardinality counting.
     regimes = _entailment_regimes(g_manifest, action_node)
-    if !isempty(regimes)
-        query = RDFLib.rewrite_owl_query(query)
-    end
 
     if data_iri !== nothing || !isempty(gdata) || !isempty(fromq) || !isempty(fromnamedq)
         ds = Dataset()
@@ -826,6 +825,11 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
         # RDFLib supports (RDFS/RDF/D via the RDFS closure) on the default graph
         # before querying. OWL-Direct (Description Logic) is not materialized.
         _materialize_regime!(ds, regimes)
+        # Rewrite anonymous OWL class-expression patterns now that the closure is
+        # materialized, consulting the closed default graph.
+        if !isempty(regimes)
+            query = RDFLib.rewrite_owl_query(query, get_graph(ds))
+        end
         # Pass the dataset whenever named graphs are present — from graphData,
         # FROM/FROM NAMED, or a quad-format qt:data that carried named graphs.
         has_named = false

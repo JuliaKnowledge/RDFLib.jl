@@ -165,12 +165,18 @@ end
 
 # ─── class-expression query rewriting ───────────────────────────────
 
-# A fresh-variable counter shared across one rewrite.
+# A fresh-variable counter shared across one rewrite, plus the (optionally
+# supplied, already entailment-closed) data graph and the query's prefix map so
+# the rewriter can resolve class-expression terms to graph nodes and perform
+# structural class matching / closed-role cardinality counting.
 mutable struct _RWState
     n::Int
     union_emitted::Bool
+    g::Union{Nothing,RDFGraph}
+    prefixes::Dict{String,String}
 end
-_RWState(n::Int) = _RWState(n, false)
+_RWState(n::Int) = _RWState(n, false, nothing, Dict{String,String}())
+_RWState(n::Int, g, prefixes) = _RWState(n, false, g, prefixes)
 _fresh(st::_RWState) = (st.n += 1; "?__owlx$(st.n)")
 
 # Recursive-descent parse of the class-expression text starting at `i` in `s`,
@@ -287,6 +293,24 @@ end
 # that constrains `subj` (a SPARQL term string like "?x" or ":a") to be an
 # instance of the parsed class-expression node `props`.
 function _emit_classexpr(subj::AbstractString, props, st::_RWState)
+    # When the closed graph is available, first try to find an equivalent class
+    # node already materialized in the data and query its members directly. This
+    # captures memberships entailed via equivalentClass / restrictions that a
+    # syntactic BGP rewrite would miss (e.g. someValuesFrom owl:Thing).
+    if st.g !== nothing
+        node = _find_class_node(st.g, props, st.prefixes)
+        if node !== nothing
+            # Collect the materialized rdf:type members of the matched class node.
+            # A bnode class node can't be named in SPARQL, so emit the members as a
+            # VALUES set; a named node could be queried directly but VALUES is
+            # uniform and avoids re-matching.
+            members = _class_members(st.g, node)
+            if members !== nothing
+                isempty(members) && return "$subj a <http://www.w3.org/2002/07/owl#Nothing> ."
+                return "VALUES $subj { " * join(members, " ") * " }"
+            end
+        end
+    end
     # owl:intersectionOf ( C1 … Cn ) → conjunction
     inter = _getprop(props, "intersectionOf")
     if inter !== nothing
@@ -321,6 +345,24 @@ function _emit_classexpr(subj::AbstractString, props, st::_RWState)
         end
         sv = _getprop(props, "someValuesFrom")
         if sv !== nothing
+            # someValuesFrom complementOf C: x satisfies "p some (not C)" if it has
+            # an asserted p-filler not provably in C, OR (existentially) it is a
+            # member of a graph restriction [p some D] with D ⊑ (not C) — which
+            # holds when D is disjoint with C. Emit a UNION of both witnesses.
+            if !(sv isa AbstractString)
+                comp = _getprop(sv, "complementOf")
+                if comp !== nothing && st.g !== nothing
+                    members = _complement_some_nodes(st.g, st.prefixes, p, comp)
+                    y = _fresh(st)
+                    inner = _emit_member(y, sv, st)
+                    asserted = "{ $subj $p $y . $inner }"
+                    if members !== nothing && !isempty(members)
+                        st.union_emitted = true
+                        return asserted * " UNION { VALUES $subj { " * join(members, " ") * " } }"
+                    end
+                    return "$subj $p $y . $inner"
+                end
+            end
             y = _fresh(st)
             inner = _emit_member(y, sv, st)
             return "$subj $p $y . $inner"
@@ -333,6 +375,39 @@ function _emit_classexpr(subj::AbstractString, props, st::_RWState)
             y = _fresh(st); z = _fresh(st)
             inner = _emit_member(z, av, st)
             return "$subj $p $y . FILTER NOT EXISTS { $subj $p $z . FILTER NOT EXISTS { $inner } }"
+        end
+        onc = _getprop(props, "onClass")
+        # owl:minCardinality n (n≥1) on p  ≡  p some owl:Thing.
+        mincard = _card_value(_getprop(props, "minCardinality"))
+        if mincard !== nothing && mincard >= 1
+            y = _fresh(st)
+            return "$subj $p $y ."
+        end
+        # owl:minQualifiedCardinality n (n≥1) onClass C  ≡  p some C.
+        minq = _card_value(_getprop(props, "minQualifiedCardinality"))
+        if minq !== nothing && minq >= 1
+            if onc !== nothing
+                y = _fresh(st)
+                inner = _emit_member(y, onc, st)
+                return "$subj $p $y . $inner"
+            else
+                y = _fresh(st)
+                return "$subj $p $y ."
+            end
+        end
+        # owl:max/exactlyQualifiedCardinality n onClass C: a max/exact ≤/=n bound
+        # can only be PROVEN for an individual whose p-fillers are CLOSED in the
+        # data (e.g. an allValuesFrom-of-oneOf on the same property bounds them).
+        # Compute the qualifying individuals from the closed graph by counting.
+        maxq = _card_value(_getprop(props, "maxQualifiedCardinality"))
+        exq  = _card_value(_getprop(props, "qualifiedCardinality"))
+        if (maxq !== nothing || exq !== nothing) && onc !== nothing && st.g !== nothing
+            inds = _closed_qualified_cardinality(st.g, st.prefixes, p, onc,
+                       maxq !== nothing ? maxq : exq, exq !== nothing)
+            if inds !== nothing
+                isempty(inds) && return "$subj a <http://www.w3.org/2002/07/owl#Nothing> ."
+                return "VALUES $subj { " * join(inds, " ") * " }"
+            end
         end
     end
     # Fallback: just require the subject to be typed something (no constraint we
@@ -347,6 +422,212 @@ function _emit_member(subj::AbstractString, c, st::_RWState)
     else  # nested class-expression node (Vector of Pairs)
         return _emit_classexpr(subj, c, st)
     end
+end
+
+# ─── graph-aware helpers (structural class match, closed cardinality) ───
+
+# Parse the integer value of a cardinality object term (e.g. a typed literal
+# `"1"^^xsd:nonNegativeInteger`, or a bare `1`). Returns nothing if not numeric.
+function _card_value(term)
+    term isa AbstractString || return nothing
+    s = strip(term)
+    m = match(r"^\"?(-?\d+)\"?", s)   # strip optional quotes / ^^datatype tail
+    m === nothing && return nothing
+    tryparse(Int, m.captures[1])
+end
+
+# Extract the PREFIX declarations of a query into a localname-prefix → IRI map,
+# also recording the empty prefix (`:`) and `base`.
+function _query_prefixes(query::AbstractString)
+    pre = Dict{String,String}()
+    for m in eachmatch(r"(?i)\bPREFIX\s+([A-Za-z0-9_.-]*):\s*<([^>]*)>", query)
+        pre[m.captures[1]] = m.captures[2]
+    end
+    pre
+end
+
+# Resolve a class-expression term string (`owl:Thing`, `:Female`, `<...>`, `a`)
+# to a URIRef using the query's prefixes. Returns nothing when it is not a simple
+# IRI/prefixed name (e.g. a literal).
+function _resolve_term(term::AbstractString, prefixes)
+    t = strip(term)
+    (isempty(t) || t == "a") && return nothing
+    if startswith(t, "<") && endswith(t, ">")
+        return URIRef(t[2:end-1])
+    end
+    startswith(t, "\"") && return nothing
+    idx = findfirst(==(':'), t)
+    idx === nothing && return nothing
+    pfx = t[1:idx-1]; local_ = t[idx+1:end]
+    ns = get(prefixes, pfx, nothing)
+    ns === nothing && return nothing
+    URIRef(ns * local_)
+end
+
+# Render a graph node as a SPARQL term string (IRIs only; bnodes can't be named
+# safely in a query, so structural matches on a bnode class node are emitted via
+# its IRI — when the matched class node is a bnode we return nothing so the caller
+# falls back to a BGP rewrite).
+_node_term(n) = n isa URIRef ? "<$(n.value)>" : nothing
+
+# Named (URIRef) rdf:type members of a class node in the closed graph, as SPARQL
+# term strings. Returns nothing if the class node has no named members at all (so
+# the caller can decide whether to fall back); otherwise the (deduplicated) set.
+function _class_members(g::RDFGraph, node)
+    rdf_type = URIRef(_RDF_NS * "type")
+    out = String[]
+    seen = Set{URIRef}()
+    for t in triples(g, (nothing, rdf_type, node))
+        s = t.subject
+        s isa URIRef || continue
+        s in seen && continue
+        push!(seen, s); push!(out, "<$(s.value)>")
+    end
+    out
+end
+
+# Find a class node in the (closed) graph `g` whose definition structurally
+# matches the parsed class expression `props`. Used to query the materialized
+# membership of an equivalent named/anonymous class rather than re-deriving it.
+# Currently matches owl:Restriction expressions (onProperty + someValuesFrom /
+# allValuesFrom / hasValue). Returns a Node (URIRef preferred) or nothing.
+function _find_class_node(g::RDFGraph, props, prefixes)
+    onp = _getprop(props, "onProperty")
+    onp isa AbstractString || return nothing
+    prop = _resolve_term(onp, prefixes)
+    prop isa URIRef || return nothing
+    # Determine the someValuesFrom filler this restriction is equivalent to.
+    # minCardinality n≥1 ≡ someValuesFrom owl:Thing; minQualifiedCardinality n≥1
+    # onClass C ≡ someValuesFrom C. These let cardinality restrictions reuse the
+    # materialized membership of an equivalent someValuesFrom class.
+    sv = _getprop(props, "someValuesFrom")
+    filler = nothing
+    if sv isa AbstractString
+        filler = _resolve_term(sv, prefixes)
+    else
+        mincard = _card_value(_getprop(props, "minCardinality"))
+        minq    = _card_value(_getprop(props, "minQualifiedCardinality"))
+        if mincard !== nothing && mincard >= 1
+            filler = URIRef(_OWL * "Thing")
+        elseif minq !== nothing && minq >= 1
+            onc = _getprop(props, "onClass")
+            filler = onc isa AbstractString ? _resolve_term(onc, prefixes) : URIRef(_OWL * "Thing")
+        end
+    end
+    filler isa URIRef || return nothing
+
+    onProperty = URIRef(_OWL * "onProperty")
+    someValuesFrom = URIRef(_OWL * "someValuesFrom")
+    best = nothing
+    for t in triples(g, (nothing, someValuesFrom, filler))
+        node = t.subject
+        node isa Node || continue
+        # confirm same onProperty
+        any(tt -> tt.object == prop, triples(g, (node, onProperty, nothing))) || continue
+        # Prefer a URIRef node (nameable) over a bnode.
+        if best === nothing || (best isa BNode && node isa URIRef)
+            best = node
+        end
+    end
+    best
+end
+
+# Closed-role qualified-cardinality counting. An individual `x` provably
+# satisfies `max n` / `exactly n` `q onClass C` only if its q-fillers are CLOSED
+# in the data — i.e. x is asserted (directly or via type) to fall under an
+# allValuesFrom restriction on `q` whose filler is an owl:oneOf enumeration, so
+# every q-filler of x is among a known finite set. For such x we count its
+# distinct q-fillers that are (provably) of class C and test the bound. Returns
+# the Vector of qualifying SPARQL term strings, or nothing if the pattern cannot
+# be evaluated (then the caller leaves the restriction unsatisfiable).
+function _closed_qualified_cardinality(g::RDFGraph, prefixes, q_str, onc, bound::Int, exact::Bool)
+    q = _resolve_term(q_str, prefixes)
+    q isa URIRef || return nothing
+    onc isa AbstractString || return nothing
+    cls = _resolve_term(onc, prefixes)
+    cls isa URIRef || return nothing
+
+    rdf_type   = URIRef(_RDF_NS * "type")
+    onProperty = URIRef(_OWL * "onProperty")
+    allValues  = URIRef(_OWL * "allValuesFrom")
+    oneOf      = URIRef(_OWL * "oneOf")
+
+    # Restriction nodes that CLOSE property q via allValuesFrom an oneOf class.
+    closing = Set{Node}()
+    for t in triples(g, (nothing, allValues, nothing))
+        rnode = t.subject; filler = t.object
+        rnode isa Node || continue
+        any(tt -> tt.object == q, triples(g, (rnode, onProperty, nothing))) || continue
+        # filler must be (or be a class with) an owl:oneOf enumeration.
+        filler isa Node || continue
+        any(_ -> true, triples(g, (filler, oneOf, nothing))) || continue
+        push!(closing, rnode)
+    end
+    isempty(closing) && return String[]   # no individual has a closed q-role
+
+    # Individuals whose type includes one of the closing restriction nodes.
+    qualifying = String[]
+    seen = Set{Node}()
+    for rnode in closing
+        for t in triples(g, (nothing, rdf_type, rnode))
+            x = t.subject
+            x isa URIRef || continue
+            x in seen && continue
+            push!(seen, x)
+            # Count distinct q-fillers of x that are provably of class C.
+            fillers = Set{Node}()
+            for ft in triples(g, (x, q, nothing))
+                y = ft.object
+                y isa Node || continue
+                any(_ -> true, triples(g, (y, rdf_type, cls))) && push!(fillers, y)
+            end
+            cnt = length(fillers)
+            ok = exact ? (cnt == bound) : (cnt <= bound)
+            ok && push!(qualifying, "<$(x.value)>")
+        end
+    end
+    qualifying
+end
+
+# For a query restriction `[p some (complementOf C)]`, find graph restriction
+# nodes `[p some D]` whose filler D is disjoint with C (hence D ⊑ not C, so any
+# instance of `[p some D]` is an instance of `[p some (not C)]`). Returns the
+# Vector of SPARQL term strings for the matching (named) restriction nodes, or
+# nothing when C is not a simple class term.
+function _complement_some_nodes(g::RDFGraph, prefixes, p_str, comp)
+    comp isa AbstractString || return nothing
+    C = _resolve_term(comp, prefixes)
+    C isa URIRef || return nothing
+    p = _resolve_term(p_str, prefixes)
+    p isa URIRef || return nothing
+
+    onProperty   = URIRef(_OWL * "onProperty")
+    someValues   = URIRef(_OWL * "someValuesFrom")
+    disjointWith = URIRef(_OWL * "disjointWith")
+
+    # Classes disjoint with C (symmetric).
+    disj = Set{Node}()
+    for t in triples(g, (C, disjointWith, nothing)); t.object isa Node && push!(disj, t.object); end
+    for t in triples(g, (nothing, disjointWith, C)); t.subject isa Node && push!(disj, t.subject); end
+    isempty(disj) && return String[]
+
+    # For each disjoint class D, find restriction nodes [p some D] and collect the
+    # named individuals that are members of those restriction classes. (Restriction
+    # nodes are often blank, so we return members rather than node names.)
+    out = String[]
+    seen = Set{URIRef}()
+    for d in disj
+        for t in triples(g, (nothing, someValues, d))
+            node = t.subject
+            node isa Node || continue
+            any(tt -> tt.object == p, triples(g, (node, onProperty, nothing))) || continue
+            for m in _class_members(g, node)
+                # _class_members returns SPARQL term strings; dedup by string.
+                m in out || push!(out, m)
+            end
+        end
+    end
+    out
 end
 
 # Inline a class expression defined on a labelled node (a query blank node `_:c`
@@ -371,18 +652,48 @@ function _inline_bnode_classes(query::AbstractString)
     q
 end
 
+# Replace a labelled query blank node `_:label` with a fresh SPARQL variable, but
+# ONLY when that blank node is the subject of an inline class expression that we
+# will rewrite (`_:label a [ … ]` / `_:label rdf:type [ … ]`). Our restriction
+# rewrites can bind the subject via a VALUES clause, which requires a variable;
+# a query blank node there is a non-distinguished variable, so this is faithful.
+# Blank nodes used elsewhere (e.g. `?C rdfs:subClassOf _:b . _:b a owl:Restriction`
+# where _:b directly matches a data restriction node) are left untouched.
+function _bnodes_to_vars(query::AbstractString)
+    labels = String[]
+    for m in eachmatch(r"_:([A-Za-z0-9_]+)\s+(?:a|rdf:type)\s*\[", query)
+        push!(labels, m.captures[1])
+    end
+    isempty(labels) && return String(query)
+    unique!(labels)
+    q = String(query)
+    for lab in labels
+        q = replace(q, Regex("_:" * lab * "\\b") => "?__owlbn_" * lab)
+    end
+    q
+end
+
 # Detect and rewrite anonymous class-expression patterns in a query string.
-# Returns the rewritten query (unchanged if no such pattern is present).
-function rewrite_owl_query(query::AbstractString)
+# Returns the rewritten query (unchanged if no such pattern is present). When the
+# (entailment-closed) data graph `g` is supplied, the rewriter additionally
+# performs structural class matching, cardinality normalization, and closed-role
+# cardinality counting against the materialized data.
+function rewrite_owl_query(query::AbstractString, g::Union{Nothing,RDFGraph} = nothing)
     query = _inline_bnode_classes(query)
     # Quick reject: only act when an owl class-expression keyword sits inside a
     # bracket in the query (intersectionOf/unionOf/oneOf/Restriction/onProperty/
-    # complementOf/someValuesFrom/allValuesFrom/hasValue).
-    occursin(r"owl:(intersectionOf|unionOf|oneOf|Restriction|onProperty|complementOf|someValuesFrom|allValuesFrom|hasValue)"i, query) ||
+    # complementOf/someValuesFrom/allValuesFrom/hasValue/cardinalities).
+    occursin(r"owl:(intersectionOf|unionOf|oneOf|Restriction|onProperty|complementOf|someValuesFrom|allValuesFrom|hasValue|[a-zA-Z]*[cC]ardinality|onClass)"i, query) ||
         occursin("Restriction", query) || return String(query)
 
+    # A query blank node (`_:b0`) that roots / is bound around a rewritten class
+    # expression must become a real variable: our restriction rewrites can emit a
+    # VALUES clause on the subject, and VALUES requires a variable. Query blank
+    # nodes are semantically non-distinguished variables, so this is faithful.
+    query = _bnodes_to_vars(query)
+
     out = IOBuffer()
-    st = _RWState(0)
+    st = _RWState(0, g, _query_prefixes(query))
     i = firstindex(query)
     n = lastindex(query)
     changed = false
@@ -416,7 +727,7 @@ function rewrite_owl_query(query::AbstractString)
         m = match(r"(?is)\bSELECT\s+(DISTINCT\s+|REDUCED\s+)?\*", result)
         if m !== nothing
             origvars = unique(String.(m_.match for m_ in eachmatch(r"[?$][A-Za-z_][A-Za-z0-9_]*", query)))
-            filter!(v -> !startswith(v, "?__owlx"), origvars)
+            filter!(v -> !startswith(v, "?__owlx") && !startswith(v, "?__owlbn"), origvars)
             if !isempty(origvars)
                 proj = (m.captures[1] === nothing ? "" : m.captures[1]) * join(origvars, " ")
                 result = replace(result, m.match => "SELECT " * proj; count = 1)

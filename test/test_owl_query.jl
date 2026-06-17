@@ -58,6 +58,96 @@ using RDFLib
     end
 end
 
+@testset "Graph-aware OWL-DL query rewriting" begin
+    # Mirrors the W3C parent.ttl entailment fixture: Parent ≡ (hasChild some Thing);
+    # Alice is an asserted Parent (no hasChild edge); Bob/Dudley have hasChild
+    # edges; Dudley's hasChild role is CLOSED to {Alice} via allValuesFrom oneOf.
+    parent = """
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+    @prefix : <http://example.org/test#> .
+    :hasChild a owl:ObjectProperty .
+    :Female a owl:Class . :Male a owl:Class .
+    :Parent a owl:Class ; owl:equivalentClass
+        [ a owl:Restriction ; owl:onProperty :hasChild ; owl:someValuesFrom owl:Thing ] .
+    :Alice a :Female , :Parent , owl:NamedIndividual .
+    :Bob a :Male , owl:NamedIndividual ; :hasChild :Charlie .
+    :Charlie a owl:NamedIndividual .
+    :Dudley a owl:NamedIndividual ,
+        [ a owl:Restriction ; owl:onProperty :hasChild ;
+          owl:allValuesFrom [ a owl:Class ; owl:oneOf ( :Alice ) ] ] ;
+        :hasChild :Alice .
+    """
+    mkg() = (g = RDFGraph(); RDFLib.parse_turtle!(g, parent; base = "http://example.org/test#");
+             RDFLib.materialize_entailment!(g, ["OWL-Direct"]); g)
+    P = "http://example.org/test#"
+    answer(q) = begin
+        g = mkg()
+        rows = sparql_query(g, RDFLib.rewrite_owl_query(q, g))
+        rows = RDFLib.filter_entailment_results(g, rows)
+        Set(String(r["parent"].value) for r in rows)
+    end
+    pre = "PREFIX owl: <http://www.w3.org/2002/07/owl#> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> PREFIX : <$P> "
+
+    @testset "someValuesFrom owl:Thing matches equivalentClass member (Alice)" begin
+        q = pre * "SELECT * WHERE { ?parent a [ a owl:Restriction ; owl:onProperty :hasChild ; owl:someValuesFrom owl:Thing ] }"
+        @test answer(q) == Set([P*"Alice", P*"Bob", P*"Dudley"])
+    end
+
+    @testset "minCardinality 1 ≡ someValuesFrom owl:Thing" begin
+        q = pre * "SELECT * WHERE { ?parent a [ a owl:Restriction ; owl:onProperty :hasChild ; owl:minCardinality \"1\"^^xsd:nonNegativeInteger ] }"
+        @test answer(q) == Set([P*"Alice", P*"Bob", P*"Dudley"])
+    end
+
+    @testset "minQualifiedCardinality 1 onClass :Female ≡ some :Female" begin
+        q = pre * "SELECT * WHERE { ?parent a [ a owl:Restriction ; owl:onProperty :hasChild ; owl:minQualifiedCardinality \"1\"^^xsd:nonNegativeInteger ; owl:onClass :Female ] }"
+        @test answer(q) == Set([P*"Dudley"])
+    end
+
+    @testset "maxQualifiedCardinality 1 onClass :Female needs closed role (Dudley)" begin
+        q = pre * "SELECT * WHERE { ?parent a [ a owl:Restriction ; owl:onProperty :hasChild ; owl:maxQualifiedCardinality \"1\"^^xsd:nonNegativeInteger ; owl:onClass :Female ] }"
+        @test answer(q) == Set([P*"Dudley"])
+    end
+
+    @testset "qualifiedCardinality 1 onClass :Female (exactly 1) closed role (Dudley)" begin
+        q = pre * "SELECT * WHERE { ?parent a [ a owl:Restriction ; owl:onProperty :hasChild ; owl:qualifiedCardinality \"1\"^^xsd:nonNegativeInteger ; owl:onClass :Female ] }"
+        @test answer(q) == Set([P*"Dudley"])
+    end
+end
+
+@testset "OWL-DL someValuesFrom complementOf via disjointness" begin
+    # John/person1 publish paper1, a ConferencePaper ⊑ (publishedAt some Conference);
+    # Conference disjointWith Workshop, so paper1 ∈ (publishedAt some (not Workshop)).
+    data = """
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix : <http://example.org/> .
+    :hasPublication a owl:ObjectProperty . :publishedAt a owl:ObjectProperty .
+    :Conference a owl:Class ; owl:disjointWith :Workshop .
+    :Workshop a owl:Class .
+    :ConferencePaper a owl:Class ; rdfs:subClassOf
+        [ a owl:Restriction ; owl:onProperty :publishedAt ; owl:someValuesFrom :Conference ] .
+    :John a owl:NamedIndividual ; :hasPublication :paper1 .
+    :person1 a owl:NamedIndividual ; :hasPublication :paper1 .
+    :paper1 a :ConferencePaper , owl:NamedIndividual .
+    """
+    g = RDFGraph(); RDFLib.parse_turtle!(g, data; base = "http://example.org/")
+    RDFLib.materialize_entailment!(g, ["OWL-Direct"])
+    q = """
+    PREFIX ex: <http://example.org/>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?x WHERE {
+      ?x ex:hasPublication _:b0 .
+      _:b0 rdf:type [ owl:onProperty ex:publishedAt ; rdf:type owl:Restriction ;
+        owl:someValuesFrom [ rdf:type owl:Class ; owl:complementOf ex:Workshop ] ] }
+    """
+    rows = sparql_query(g, RDFLib.rewrite_owl_query(q, g))
+    rows = RDFLib.filter_entailment_results(g, rows)
+    got = Set(String(r["x"].value) for r in rows)
+    @test got == Set(["http://example.org/John", "http://example.org/person1"])
+end
+
 @testset "Regime materialization completions" begin
     rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
     rdfProperty = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#Property")
