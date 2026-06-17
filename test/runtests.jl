@@ -103,4 +103,5 @@ using RDFLib
     include("test_evaluator_consistency.jl")
     include("test_canonicalization.jl")
     include("test_w3c_conformance.jl")  # skips gracefully if test/w3c/suite absent
+    include("test_w3c_protocol.jl")     # SPARQL Protocol/GSP/SD over HTTP; skips if suite absent
 end

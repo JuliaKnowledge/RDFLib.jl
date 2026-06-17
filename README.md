@@ -286,16 +286,15 @@ RDFLib.jl is tested against the **official W3C [rdf-tests](https://github.com/w3
 
 | Suite | Passing |
 |-------|---------|
-| Turtle | 313 / 313 (100%) |
-| N-Triples | 70 / 70 (100%) |
-| N-Quads | 87 / 87 (100%) |
-| RDF/XML | 166 / 166 (100%) |
-| TriG | 354 / 356 (99%) |
-| SPARQL 1.1 Query | 296 / 328 (90%) |
-| SPARQL 1.1 Update | 148 / 157 (94%) |
-| SPARQL 1.0 | 444 / 482 (92%) |
+| RDF 1.1 Turtle / N-Triples / N-Quads / TriG / RDF-XML | 313/313, 70/70, 87/87, 356/356, 166/166 — **100%** |
+| RDF 1.2 (RDF-star) Turtle / TriG / N-Triples / N-Quads / RDF-XML | 416/416, 416/416, 140/140, 155/155, 197/197 — **100%** |
+| RDF Canonicalization (RDFC-1.0) N-Triples / N-Quads | 41/41, 41/41 — **100%** |
+| RDF semantics / entailment (RDF-MT, RDF 1.2 semantics) | 48/48, 77/77 — **100%** |
+| SPARQL 1.0 / 1.1 Query / 1.1 Update / 1.2 | 482/482, 328/328, 157/157, 269/269 — **100%** |
+| SPARQL results CSV / TSV / JSON | **100%** |
+| SPARQL 1.1 entailment-regime queries | 36 / 70 (RDFS + OWL 2 RL) |
 
-Remaining failures are mostly cross-BGP blank-node scoping, variable-scope analysis in BIND/GROUP BY, `USING`-clause update routing, and a few harness limitations (relative graph IRIs, empty-named-graph representation). Known limitations, documented in the relevant docstrings:
+The RDF syntax/canonicalization/semantics suites and the core SPARQL suites (query, update, 1.0, 1.2) all pass **100%**. The remaining gaps are entire reasoning subsystems outside the scope of an RDF/SPARQL library: the SPARQL entailment-regime suite's remainder needs **OWL Direct (Description Logic)** and **RIF rule** reasoners, and the SPARQL-over-HTTP **Protocol / Graph Store Protocol** suites are driven against the bundled `SparqlServer`. Known limitations, documented in the relevant docstrings:
 
 - JSON-LD: `@included`, `@import`, `@protected` enforcement, and framing beyond a basic subset are not implemented.
 - SHACL: `sh:ask` validators, custom SHACL-SPARQL constraint components, SPARQL-based targets, and `owl:imports` are not implemented.

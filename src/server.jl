@@ -53,6 +53,10 @@ mutable struct SparqlServer
     started_at::Union{DateTime, Nothing}
     verbose::Bool
     store_factory::Union{Function, Nothing}  # default store factory for new datasets
+    # Optional top-level protocol endpoints (W3C SPARQL Protocol / Graph Store
+    # Protocol conformance). When set, `/sparql` (query+update) and `/gsp`
+    # (graph store) at the server root are served by the named dataset.
+    protocol_dataset::Union{String, Nothing}
 end
 
 function SparqlServer(;
@@ -60,8 +64,9 @@ function SparqlServer(;
     port::Int=3330,
     verbose::Bool=true,
     store_factory::Union{Function, Nothing}=nothing,
+    protocol_dataset::Union{String, Nothing}=nothing,
 )
-    SparqlServer(host, port, Dict{String,DatasetEndpoint}(), ReentrantLock(), nothing, nothing, verbose, store_factory)
+    SparqlServer(host, port, Dict{String,DatasetEndpoint}(), ReentrantLock(), nothing, nothing, verbose, store_factory, protocol_dataset)
 end
 
 # ─── Content Type Constants ───────────────────────────────────────
@@ -301,10 +306,43 @@ function _parse_query_params(uri::String)::Dict{String,String}
     isnothing(idx) && return params
     query = uri[idx+1:end]
     for pair in split(query, '&')
+        isempty(pair) && continue
         kv = split(pair, '=', limit=2)
         key = HTTP.URIs.unescapeuri(kv[1])
         val = length(kv) >= 2 ? HTTP.URIs.unescapeuri(kv[2]) : ""
         params[key] = val
+    end
+    return params
+end
+
+# Parse the query string preserving repeated keys (needed for
+# default-graph-uri / named-graph-uri multiplicity and for detecting
+# duplicate `query=` / `update=` params, which are protocol errors).
+function _parse_query_params_multi(uri::String)::Dict{String,Vector{String}}
+    params = Dict{String,Vector{String}}()
+    idx = findfirst('?', uri)
+    isnothing(idx) && return params
+    query = uri[idx+1:end]
+    for pair in split(query, '&')
+        isempty(pair) && continue
+        kv = split(pair, '=', limit=2)
+        key = HTTP.URIs.unescapeuri(kv[1])
+        val = length(kv) >= 2 ? HTTP.URIs.unescapeuri(kv[2]) : ""
+        push!(get!(() -> String[], params, key), String(val))
+    end
+    return params
+end
+
+function _parse_form_body_multi(body::Vector{UInt8})::Dict{String,Vector{String}}
+    # application/x-www-form-urlencoded: '+' encodes a space.
+    params = Dict{String,Vector{String}}()
+    text = String(copy(body))
+    for pair in split(text, '&')
+        isempty(pair) && continue
+        kv = split(pair, '=', limit=2)
+        key = HTTP.URIs.unescapeuri(replace(kv[1], '+' => ' '))
+        val = length(kv) >= 2 ? HTTP.URIs.unescapeuri(replace(kv[2], '+' => ' ')) : ""
+        push!(get!(() -> String[], params, key), String(val))
     end
     return params
 end
@@ -423,6 +461,402 @@ function _handle_sparql_update(ep::DatasetEndpoint, req::HTTP.Request, params::D
     end
 
     _response(204, "", CT_TEXT)
+end
+
+# ─── W3C SPARQL Protocol conformance ─────────────────────────────
+#
+# The official SPARQL Protocol test suite drives a single `/sparql` endpoint
+# for both query and update, distinguishing them by HTTP method, request
+# media type and parameters. These handlers implement that contract precisely
+# (status codes 200/204/400, content negotiation, protocol-specified dataset).
+
+# Raw Content-Type header value (with parameters like charset preserved).
+function _get_content_type_raw(req::HTTP.Request)::String
+    for (k, v) in req.headers
+        lowercase(k) == "content-type" && return strip(v)
+    end
+    return ""
+end
+
+# Extract the charset parameter (lowercased) from a Content-Type header.
+function _content_type_charset(raw::String)::String
+    for tok in split(raw, ';')[2:end]
+        tok = strip(tok)
+        if startswith(lowercase(tok), "charset=")
+            return lowercase(strip(tok[9:end], ['"', ' ']))
+        end
+    end
+    return ""
+end
+
+# Build a query-time dataset view from the protocol-specified graph params.
+# `default-graph-uri` graphs are merged into the default graph; each
+# `named-graph-uri` becomes a visible named graph. When neither is given the
+# endpoint's own dataset is queried as-is.
+function _protocol_query_dataset(ep::DatasetEndpoint,
+                                 default_uris::Vector{String},
+                                 named_uris::Vector{String})
+    if isempty(default_uris) && isempty(named_uris)
+        return ep.dataset
+    end
+    ds = Dataset()
+    for u in default_uris
+        src = get(ep.dataset.named_graphs, URIRef(u), nothing)
+        isnothing(src) && continue
+        for t in triples(src)
+            add!(ds.default_graph, t)
+        end
+    end
+    for u in named_uris
+        name = URIRef(u)
+        src = get(ep.dataset.named_graphs, name, nothing)
+        g = add_graph(ds, name)
+        if !isnothing(src)
+            for t in triples(src)
+                add!(g, t)
+            end
+        end
+    end
+    return ds
+end
+
+# Unified W3C SPARQL Protocol endpoint: query AND update on one path.
+function _handle_protocol_sparql(ep::DatasetEndpoint, req::HTTP.Request,
+                                 uri::String)
+    method = String(req.method)
+    raw_ct = _get_content_type_raw(req)
+    ct = isempty(raw_ct) ? "" : lowercase(strip(split(raw_ct, ';')[1]))
+    pmulti = _parse_query_params_multi(uri)
+
+    # Decide query vs update vs error, per SPARQL Protocol §2.
+    if method == "GET"
+        haskey(pmulti, "update") && return _error_response(400, "Update must use POST")
+        return _protocol_query(ep, req, pmulti, GET_query_string(pmulti))
+    elseif method != "POST"
+        return _error_response(400, "Method $method not allowed on SPARQL endpoint")
+    end
+
+    # POST: dispatch on media type.
+    if ct == CT_SPARQL_QUERY
+        cs = _content_type_charset(raw_ct)
+        (cs != "" && cs != "utf-8") && return _error_response(400, "Unsupported charset: $cs")
+        q = String(copy(req.body))
+        return _protocol_query(ep, req, pmulti, q)
+    elseif ct == CT_SPARQL_UPDATE
+        cs = _content_type_charset(raw_ct)
+        (cs != "" && cs != "utf-8") && return _error_response(400, "Unsupported charset: $cs")
+        upd = String(copy(req.body))
+        return _protocol_update(ep, req, pmulti, upd)
+    elseif ct == CT_FORM
+        form = _parse_form_body_multi(req.body)
+        has_q = haskey(form, "query")
+        has_u = haskey(form, "update")
+        if has_q && has_u
+            return _error_response(400, "Cannot mix query and update")
+        elseif has_q
+            length(form["query"]) > 1 && return _error_response(400, "Multiple query parameters")
+            # merge protocol graph params from the form
+            for k in ("default-graph-uri", "named-graph-uri")
+                haskey(form, k) && (pmulti[k] = form[k])
+            end
+            return _protocol_query(ep, req, pmulti, form["query"][1])
+        elseif has_u
+            length(form["update"]) > 1 && return _error_response(400, "Multiple update parameters")
+            for k in ("using-graph-uri", "using-named-graph-uri")
+                haskey(form, k) && (pmulti[k] = form[k])
+            end
+            return _protocol_update(ep, req, pmulti, form["update"][1])
+        else
+            return _error_response(400, "Missing query or update parameter")
+        end
+    else
+        return _error_response(400, "Unsupported media type for SPARQL operation: $(isempty(ct) ? "(none)" : ct)")
+    end
+end
+
+# Resolve the single query string for a GET request (duplicate = error).
+function GET_query_string(pmulti::Dict{String,Vector{String}})
+    qs = get(pmulti, "query", String[])
+    length(qs) > 1 && return :multiple
+    isempty(qs) && return ""
+    qs[1]
+end
+
+function _protocol_query(ep::DatasetEndpoint, req::HTTP.Request,
+                         pmulti::Dict{String,Vector{String}}, query)
+    query === :multiple && return _error_response(400, "Multiple query parameters")
+    (query isa AbstractString && isempty(query)) && return _error_response(400, "Missing query")
+
+    default_uris = get(pmulti, "default-graph-uri", String[])
+    named_uris   = get(pmulti, "named-graph-uri", String[])
+
+    results = try
+        lock(ep.lock) do
+            ep.query_count += 1
+            target = _protocol_query_dataset(ep, default_uris, named_uris)
+            sparql_query(target, String(query))
+        end
+    catch e
+        return _error_response(400, "SPARQL query error: $(sprint(showerror, e))")
+    end
+
+    accept = _get_accept(req)
+    body, result_ct = _format_results(results, accept)
+    _response(200, body, result_ct)
+end
+
+function _protocol_update(ep::DatasetEndpoint, req::HTTP.Request,
+                          pmulti::Dict{String,Vector{String}}, update)
+    isempty(update) && return _error_response(400, "Missing update")
+
+    using_g = get(pmulti, "using-graph-uri", String[])
+    using_n = get(pmulti, "using-named-graph-uri", String[])
+
+    # Protocol error: combining using-(named-)graph-uri with USING/WITH/WITH in
+    # the update text (SPARQL Protocol §2.2.3).
+    if (!isempty(using_g) || !isempty(using_n)) &&
+       (occursin(r"\bUSING\b"i, update) || occursin(r"\bWITH\b"i, update))
+        return _error_response(400, "Cannot combine protocol using-graph-uri with USING/WITH clause")
+    end
+
+    ug = URIRef[URIRef(u) for u in using_g]
+    un = URIRef[URIRef(u) for u in using_n]
+    update = _inject_base(String(update), _endpoint_base(req))
+
+    try
+        lock(ep.lock) do
+            ep.update_count += 1
+            _protocol_apply_update(ep.dataset, String(update), ug, un)
+        end
+    catch e
+        return _error_response(400, "SPARQL update error: $(sprint(showerror, e))")
+    end
+    _response(204, "", CT_TEXT)
+end
+
+# Service-defined BASE IRI (may be the service endpoint) used to resolve
+# relative IRIs in protocol query/update text that declares no BASE itself.
+function _endpoint_base(req::HTTP.Request)
+    authority = "localhost"
+    for (k, v) in req.headers
+        lowercase(k) == "host" && (authority = v)
+    end
+    "http://$authority/sparql"
+end
+
+# Prepend `BASE <iri>` to a SPARQL request that has no BASE declaration, so
+# relative IRIs resolve. Detects an existing leading BASE (after optional
+# comments/whitespace) to avoid overriding the request's own base.
+function _inject_base(text::String, base::String)
+    # crude but safe: if a BASE keyword appears before the first '{' or
+    # INSERT/DELETE/SELECT/ASK keyword, assume the request sets its own base.
+    occursin(r"(?i)\bBASE\b\s*<"m, text) && return text
+    "BASE <$base>\n" * text
+end
+
+# Apply an update to a dataset, injecting protocol-specified using-graph-uri /
+# using-named-graph-uri into any DELETE/INSERT...WHERE operation that does not
+# carry its own USING/WITH (SPARQL Protocol §2.1.4 / Update §4.1.2).
+function _protocol_apply_update(ds::Dataset, update::String,
+                                using_graphs::Vector{URIRef},
+                                using_named::Vector{URIRef})
+    if isempty(using_graphs) && isempty(using_named)
+        return sparql_update(ds, update)
+    end
+    parsed = sparql_parse_update(update)
+    _exec_with_using(ds, parsed, using_graphs, using_named)
+    nothing
+end
+
+function _exec_with_using(ds::Dataset, op::UpdateRequest, ug, un)
+    for sub in op.operations
+        _exec_with_using(ds, sub, ug, un)
+    end
+end
+function _exec_with_using(ds::Dataset, op::UpdateModify, ug, un)
+    if op.with_graph === nothing && isempty(op.using_graphs) && isempty(op.using_named)
+        op = UpdateModify(op.delete_template, op.insert_template, op.patterns,
+                          op.prefixes, op.with_graph, ug, un)
+    end
+    _sparql_exec_update(ds, op)
+end
+function _exec_with_using(ds::Dataset, op, ug, un)
+    _sparql_exec_update(ds, op)
+end
+
+# ─── W3C Graph Store Protocol conformance (`/gsp`) ────────────────
+#
+# Supports both indirect (`?graph=<iri>` / `?default`) and direct
+# (`/gsp/person/1.ttl` → graph IRI) identification, plus HEAD, with the
+# status codes the conformance suite expects (200/201/204/404), multipart
+# POST, and Turtle responses carrying `charset=utf-8`.
+
+const CT_TURTLE_UTF8 = "text/turtle; charset=utf-8"
+
+# Parse a (possibly multipart) request body into a Vector{Triple}.
+function _gsp_parse_body(body::Vector{UInt8}, raw_ct::String)
+    ct = lowercase(strip(split(raw_ct, ';')[1]))
+    if ct == "multipart/form-data"
+        boundary = ""
+        for tok in split(raw_ct, ';')
+            tok = strip(tok)
+            if startswith(lowercase(tok), "boundary=")
+                boundary = strip(tok[10:end], ['"'])
+            end
+        end
+        isempty(boundary) && throw(ArgumentError("multipart without boundary"))
+        triples_out = Triple[]
+        text = String(copy(body))
+        delim = "--" * boundary
+        for part in split(text, delim)
+            part = strip(part)
+            (isempty(part) || part == "--") && continue
+            # split headers from content on the blank line
+            sep = findfirst("\r\n\r\n", part)
+            isnothing(sep) && (sep = findfirst("\n\n", part))
+            isnothing(sep) && continue
+            content = part[last(sep)+1:end]
+            pct = CT_TURTLE
+            for hl in split(part[1:first(sep)-1], r"\r?\n")
+                if startswith(lowercase(strip(hl)), "content-type:")
+                    pct = lowercase(strip(split(split(hl, ':', limit=2)[2], ';')[1]))
+                end
+            end
+            g = _parse_rdf_body(Vector{UInt8}(content), pct)
+            append!(triples_out, collect(triples(g)))
+        end
+        return triples_out
+    end
+    g = _parse_rdf_body(body, ct)
+    collect(triples(g))
+end
+
+# Resolve the target graph for a GSP request: returns
+# (:default, nothing) | (:named, URIRef) | (:error, msg).
+function _gsp_target(req::HTTP.Request, uri::String, segments::Vector{String})
+    params = _parse_query_params(uri)
+    # Direct identification: /gsp/<rest...> with a non-empty rest path.
+    if length(segments) >= 2 && segments[1] == "gsp"
+        rest = join(segments[2:end], "/")
+        # reconstruct absolute graph IRI using request authority
+        authority = "www.example"
+        for (k, v) in req.headers
+            lowercase(k) == "host" && (authority = v)
+        end
+        return (:named, URIRef("http://$authority/gsp/$rest"))
+    end
+    haskey(params, "default") && return (:default, nothing)
+    if haskey(params, "graph")
+        g = params["graph"]
+        isempty(g) && return (:error, "Empty graph parameter")
+        return (:named, URIRef(g))
+    end
+    # No identification given: treat as default graph (some clients do this).
+    return (:default, nothing)
+end
+
+function _handle_protocol_gsp(ep::DatasetEndpoint, req::HTTP.Request, uri::String)
+    method = String(req.method)
+    segments = _path_segments(uri)
+    kind, graph_name = _gsp_target(req, uri, segments)
+    kind == :error && return _error_response(400, graph_name)
+
+    getg() = isnothing(graph_name) ? ep.dataset.default_graph :
+             get(ep.dataset.named_graphs, graph_name, nothing)
+
+    if method == "GET" || method == "HEAD"
+        g = lock(ep.lock) do
+            gg = getg()
+            isnothing(gg) ? nothing : begin
+                # snapshot a copy under the lock for serialization
+                snap = RDFGraph(); for t in triples(gg); add!(snap, t); end; snap
+            end
+        end
+        isnothing(g) && return _error_response(404, "Graph not found")
+        accept = _get_accept(req)
+        ct = _negotiate_content_type(accept, RDF_CONTENT_TYPES)
+        data, actual_ct = _serialize_graph(g, ct)
+        out_ct = actual_ct == CT_TURTLE ? CT_TURTLE_UTF8 : actual_ct
+        if method == "HEAD"
+            return _response(200, UInt8[], out_ct)
+        end
+        return _response(200, data, out_ct)
+
+    elseif method == "PUT"
+        raw_ct = _get_content_type_raw(req)
+        isempty(raw_ct) && return _error_response(400, "Content-Type required")
+        parsed = try
+            _gsp_parse_body(req.body, raw_ct)
+        catch e
+            return _error_response(400, "Parse error: $(sprint(showerror, e))")
+        end
+        existed = lock(ep.lock) do
+            if isnothing(graph_name)
+                dg = ep.dataset.default_graph
+                had = length(dg) > 0
+                remove!(dg, (nothing, nothing, nothing))
+                for t in parsed; add!(dg, t); end
+                true   # default graph always "exists"
+            else
+                had = haskey(ep.dataset.named_graphs, graph_name)
+                g = add_graph(ep.dataset, graph_name)
+                remove!(g, (nothing, nothing, nothing))
+                for t in parsed; add!(g, t); end
+                had
+            end
+        end
+        # 201 Created when a new (named) graph was created, else 204.
+        return existed ? _response(204, "", CT_TEXT) :
+                         _response(201, "", CT_TEXT,
+                                   headers=["Location" => (isnothing(graph_name) ? "" : graph_name.value)])
+
+    elseif method == "POST"
+        raw_ct = _get_content_type_raw(req)
+        # POST to the bare endpoint creates a fresh graph (POSTGraphCreation).
+        bare = !occursin('?', uri) && length(segments) == 1 && segments[1] == "gsp"
+        isempty(raw_ct) && return _error_response(400, "Content-Type required")
+        parsed = try
+            _gsp_parse_body(req.body, raw_ct)
+        catch e
+            return _error_response(400, "Parse error: $(sprint(showerror, e))")
+        end
+        if bare
+            authority = "www.example"
+            for (k, v) in req.headers
+                lowercase(k) == "host" && (authority = v)
+            end
+            new_iri = URIRef("http://$authority/gsp/_created/" * string(hash((time_ns(), rand(UInt))), base=16))
+            lock(ep.lock) do
+                g = add_graph(ep.dataset, new_iri)
+                for t in parsed; add!(g, t); end
+            end
+            return _response(201, "", CT_TEXT, headers=["Location" => new_iri.value])
+        end
+        existed = lock(ep.lock) do
+            had = isnothing(graph_name) ? true : haskey(ep.dataset.named_graphs, graph_name)
+            g = isnothing(graph_name) ? ep.dataset.default_graph : add_graph(ep.dataset, graph_name)
+            for t in parsed; add!(g, t); end
+            had
+        end
+        return existed ? _response(204, "", CT_TEXT) : _response(201, "", CT_TEXT)
+
+    elseif method == "DELETE"
+        found = lock(ep.lock) do
+            if isnothing(graph_name)
+                remove!(ep.dataset.default_graph, (nothing, nothing, nothing))
+                true
+            else
+                if haskey(ep.dataset.named_graphs, graph_name)
+                    delete!(ep.dataset.named_graphs, graph_name)
+                    true
+                else
+                    false
+                end
+            end
+        end
+        return found ? _response(204, "", CT_TEXT) : _error_response(404, "Graph not found")
+    end
+    _error_response(405, "Method not allowed")
 end
 
 # Graph Store Protocol: GET/PUT/POST/DELETE /<ds>/data
@@ -877,6 +1311,39 @@ $(join(["<li><strong>$k</strong>: <code>$v</code></li>" for (k,v) in info["endpo
 </body></html>"""
 end
 
+# ─── SPARQL Service Description ───────────────────────────────────
+#
+# A GET on the SPARQL endpoint (without a query) returns a SPARQL 1.1
+# Service Description graph containing an `sd:endpoint` triple naming this
+# endpoint's URL, serialized as RDF (Turtle by default; content-negotiated).
+
+const SD = "http://www.w3.org/ns/sparql-service-description#"
+const RDFNS_SERVER = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+
+function _service_description(server::SparqlServer, req::HTTP.Request)
+    authority = "$(server.host):$(server.port)"
+    for (k, v) in req.headers
+        lowercase(k) == "host" && (authority = v)
+    end
+    endpoint_url = "http://$authority/sparql"
+    g = RDFGraph()
+    svc = BNode()
+    rdftype = URIRef(RDFNS_SERVER * "type")
+    add!(g, Triple(svc, rdftype, URIRef(SD * "Service")))
+    add!(g, Triple(svc, URIRef(SD * "endpoint"), URIRef(endpoint_url)))
+    add!(g, Triple(svc, URIRef(SD * "supportedLanguage"), URIRef(SD * "SPARQL11Query")))
+    add!(g, Triple(svc, URIRef(SD * "supportedLanguage"), URIRef(SD * "SPARQL11Update")))
+    add!(g, Triple(svc, URIRef(SD * "resultFormat"),
+                   URIRef("http://www.w3.org/ns/formats/SPARQL_Results_JSON")))
+    add!(g, Triple(svc, URIRef(SD * "resultFormat"),
+                   URIRef("http://www.w3.org/ns/formats/SPARQL_Results_XML")))
+    accept = _get_accept(req)
+    ct = _negotiate_content_type(accept, RDF_CONTENT_TYPES)
+    data, actual_ct = _serialize_graph(g, ct)
+    out_ct = actual_ct == CT_TURTLE ? CT_TURTLE_UTF8 : actual_ct
+    _response(200, data, out_ct)
+end
+
 # ─── Main Router ──────────────────────────────────────────────────
 
 function _route(server::SparqlServer, req::HTTP.Request)
@@ -892,6 +1359,26 @@ function _route(server::SparqlServer, req::HTTP.Request)
             "Access-Control-Allow-Headers" => "Content-Type, Accept, Authorization",
             "Access-Control-Max-Age" => "86400",
         ])
+    end
+
+    # W3C protocol endpoints at the server root (when configured): `/sparql`
+    # (SPARQL Protocol query+update) and `/gsp[...]` (Graph Store Protocol).
+    if !isnothing(server.protocol_dataset) && !isempty(segments)
+        pep = get_dataset(server, server.protocol_dataset)
+        if !isnothing(pep)
+            if segments[1] == "sparql"
+                if method == "GET"
+                    # Service Description: GET on the endpoint with no `query`
+                    # (and no update) returns an RDF service description.
+                    if !haskey(params, "query") && !haskey(params, "update")
+                        return _service_description(server, req)
+                    end
+                end
+                return _handle_protocol_sparql(pep, req, uri)
+            elseif segments[1] == "gsp"
+                return _handle_protocol_gsp(pep, req, uri)
+            end
+        end
     end
 
     # Root
@@ -1013,7 +1500,9 @@ function serve!(server::SparqlServer; background::Bool=false)
     end
 
     if background
-        @async HTTP.serve(handler, server.host, server.port)
+        # Non-blocking: store the server handle so stop!() can shut it down.
+        server.server = HTTP.serve!(handler, server.host, server.port)
+        return server.server
     else
         HTTP.serve(handler, server.host, server.port)
     end
