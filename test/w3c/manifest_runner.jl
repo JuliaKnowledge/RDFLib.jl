@@ -795,14 +795,12 @@ function _run_update_eval(g_manifest, name, id, cls, action_node, result_node, m
 
     ds = Dataset()
     if data_iri !== nothing
-        for t in _parse_graph(_local_path(manifest_dir, data_iri.value), _base_iri(assumed_base, manifest_dir, data_iri.value)); add!(ds, t); end
+        _load_into_dataset!(ds, _local_path(manifest_dir, data_iri.value), _base_iri(assumed_base, manifest_dir, data_iri.value))
     end
     for gd in gdata
         fileiri, name = _graphdata_entry(g_manifest, gd, UT)
         isempty(fileiri) && continue
-        for t in _parse_graph(_local_path(manifest_dir, fileiri), _base_iri(assumed_base, manifest_dir, fileiri))
-            add!(ds, t, URIRef(name))
-        end
+        _load_into_dataset!(ds, _local_path(manifest_dir, fileiri), _base_iri(assumed_base, manifest_dir, fileiri); gname=URIRef(name))
     end
 
     sparql_update(ds, req)
@@ -812,14 +810,12 @@ function _run_update_eval(g_manifest, name, id, cls, action_node, result_node, m
     rgdata = _objs(g_manifest, result_node, URIRef(UT * "graphData"))
     expds = Dataset()
     if rdata_iri !== nothing
-        for t in _parse_graph(_local_path(manifest_dir, rdata_iri.value), _base_iri(assumed_base, manifest_dir, rdata_iri.value)); add!(expds, t); end
+        _load_into_dataset!(expds, _local_path(manifest_dir, rdata_iri.value), _base_iri(assumed_base, manifest_dir, rdata_iri.value))
     end
     for gd in rgdata
         fileiri, name = _graphdata_entry(g_manifest, gd, UT)
         isempty(fileiri) && continue
-        for t in _parse_graph(_local_path(manifest_dir, fileiri), _base_iri(assumed_base, manifest_dir, fileiri))
-            add!(expds, t, URIRef(name))
-        end
+        _load_into_dataset!(expds, _local_path(manifest_dir, fileiri), _base_iri(assumed_base, manifest_dir, fileiri); gname=URIRef(name))
     end
     _dataset_iso(ds, expds) ? TestOutcome(id, name, cls, :pass, "") :
         TestOutcome(id, name, cls, :fail, "post-update dataset differs")
