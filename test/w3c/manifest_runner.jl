@@ -622,9 +622,12 @@ function _dataset_iso(a::Dataset, b::Dataset)
     # across graph boundaries: defer to per-graph isomorphism (fast & complete).
     if !any(n isa BNode for (n, _) in graphs(a)) && !any(n isa BNode for (n, _) in graphs(b))
         isomorphic(get_graph(a), get_graph(b)) || return false
+        # Ignore EMPTY named graphs: they hold no quads, so they don't affect
+        # dataset equality. (SPARQL DELETE leaves an emptied named graph
+        # registered; the expected result simply omits it.)
         na = Dict{String,RDFGraph}(); nb = Dict{String,RDFGraph}()
-        for (n, g) in graphs(a); n === nothing || (na[string(n)] = g); end
-        for (n, g) in graphs(b); n === nothing || (nb[string(n)] = g); end
+        for (n, g) in graphs(a); (n === nothing || length(g) == 0) || (na[string(n)] = g); end
+        for (n, g) in graphs(b); (n === nothing || length(g) == 0) || (nb[string(n)] = g); end
         keys(na) == keys(nb) || return false
         for (k, g) in na
             isomorphic(g, nb[k]) || return false
