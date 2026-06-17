@@ -1406,8 +1406,23 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
             p isa PatTriple ||
                 error("CONSTRUCT WHERE template may contain only triples")
         end
-        # Extract PatTriple patterns as template
-        template = PatTriple[p for p in patterns if p isa PatTriple]
+        # Extract PatTriple patterns as template. In a CONSTRUCT WHERE template,
+        # parser-generated blank-node variables (`_:…`, from `[]`/`_:b` and the
+        # desugaring of reifiers/annotation blocks) behave as TEMPLATE blank
+        # nodes — minted fresh per solution — not as solution-bound variables.
+        # (This mirrors the explicit-template CONSTRUCT, where these are BNodes.)
+        # Mapping each distinct `_:label` to a stable BNode keeps a label shared
+        # across template triples consistent within one solution.
+        tmpl_bnodes = Dict{String,BNode}()
+        _cw_term(t) = if t isa AbstractString && startswith(t, "_:")
+            get!(() -> BNode(t[3:end]), tmpl_bnodes, t)
+        elseif t isa TripleTermPattern
+            TripleTermPattern(_cw_term(t.subject), t.predicate, _cw_term(t.object))
+        else
+            t
+        end
+        template = PatTriple[PatTriple(_cw_term(p.subject), _cw_term(p.predicate), _cw_term(p.object))
+                             for p in patterns if p isa PatTriple]
         group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
         if _check_keyword(tz, "VALUES")
             push!(patterns, _parse_values(tz, prefixes))

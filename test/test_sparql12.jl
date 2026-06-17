@@ -389,4 +389,106 @@
         r = sparql_query(g, "PREFIX : <http://example/> SELECT ?v { :x :p ?v . { FILTER(?v = 1) } }")
         @test isempty(r)
     end
+
+    @testset "TriG bnode label inside reified triple is document-scoped" begin
+        # `_:b` used both as a plain blank node and inside a `<< ... >>` reified
+        # triple in the SAME TriG document denotes the SAME blank node, even
+        # across named-graph boundaries. (Regression: the explicit-label scanner
+        # mistook `<<` for an IRI and skipped the label inside it.)
+        ds = Dataset()
+        RDFLib.parse_trig!(ds, """
+        PREFIX : <http://example/>
+        GRAPH :g1 { _:b :r :o3 . }
+        GRAPH :g2 { << _:b :r :o3 >> :pb "abc" . }
+        """; base="file:///x")
+        plain = nothing
+        for (n, gg) in graphs(ds), t in triples(gg)
+            n == URIRef("http://example/g1") && (plain = t.subject)
+        end
+        inner = nothing
+        for (n, gg) in graphs(ds), t in triples(gg)
+            if n == URIRef("http://example/g2") && t.object isa RDFLib.TripleTerm
+                inner = t.object.subject
+            end
+        end
+        @test plain isa BNode && inner isa BNode
+        @test plain == inner   # same document-scoped blank node
+
+        # The W3C eval-triple-terms "GRAPHs with blank node" query joins a plain
+        # triple in one graph with its reified form in another — must succeed.
+        rows = sparql_query(ds, """
+        PREFIX : <http://example/>
+        SELECT * { GRAPH ?g1 { ?s ?p ?o } GRAPH ?g2 { << ?s ?p ?o >> ?q ?z } }
+        """)
+        @test length(rows) == 2
+    end
+
+    @testset "xsd:string cast canonicalizes numeric/boolean values" begin
+        g = RDFGraph()
+        ex = Namespace("http://example/")
+        xsd = "http://www.w3.org/2001/XMLSchema#"
+        add!(g, Triple(ex("a"), ex("p"), Literal("1.0", datatype=URIRef(xsd * "decimal"))))
+        add!(g, Triple(ex("b"), ex("p"), Literal("1E0", datatype=URIRef(xsd * "double"))))
+        add!(g, Triple(ex("c"), ex("p"), Literal("0E1", datatype=URIRef(xsd * "double"))))
+        add!(g, Triple(ex("d"), ex("p"), Literal("2.5", datatype=URIRef(xsd * "decimal"))))
+        add!(g, Triple(ex("e"), ex("p"), Literal("0", datatype=URIRef(xsd * "boolean"))))
+        out = Dict{String,String}()
+        for r in sparql_query(g, """
+            PREFIX : <http://example/>
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT ?a (xsd:string(?v) AS ?s) WHERE { ?a :p ?v }
+        """)
+            out[string(r["a"].value[end])] = (r["s"]::Literal).lexical
+        end
+        @test out["a"] == "1"      # decimal 1.0 → "1"
+        @test out["b"] == "1"      # double  1E0 → "1"
+        @test out["c"] == "0"      # double  0E1 → "0"
+        @test out["d"] == "2.5"    # decimal 2.5 → "2.5"
+        @test out["e"] == "false"  # boolean "0" → "false"
+    end
+
+    @testset "Aggregate over a computed expression argument" begin
+        # AVG/SUM over an expression (not a bare variable) must evaluate the
+        # expression per row, not silently treat the group as empty.
+        g = RDFGraph()
+        RDFLib.parse_turtle!(g, """
+        @prefix : <http://example.com/data/#> .
+        :x :p 1, "2", 3, 4 .
+        """)
+        rows = sparql_query(g, """
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX : <http://example.com/data/#>
+        SELECT ?g (AVG(IF(isNumeric(?p), ?p, COALESCE(xsd:double(?p),0))) AS ?avg)
+        WHERE { ?g :p ?p } GROUP BY ?g
+        """)
+        @test length(rows) == 1
+        avg = rows[1]["avg"]::Literal
+        @test parse(Float64, avg.lexical) ≈ 2.5
+    end
+
+    @testset "CONSTRUCT WHERE with annotation mints fresh reifiers" begin
+        # `:a :b ?c {| ?q ?z |}` matched against data carrying a reifier produces
+        # two solutions (the reifies triple and the annotation triple); the
+        # CONSTRUCT WHERE template treats the reifier as a fresh template blank
+        # node, yielding two distinct reifiers (reifies-only + reifies+annotation).
+        g = RDFGraph()
+        RDFLib.parse_turtle!(g, """
+        PREFIX : <http://example/>
+        :a :b :c {| :q :z |} .
+        """; base="file:///x")
+        res = sparql_query(g, """
+        PREFIX : <http://example/>
+        CONSTRUCT WHERE { :a :b ?c {| ?q ?z |} . }
+        """)
+        reifies = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+        reifiers = Set{BNode}()
+        nq = 0
+        for t in triples(res)
+            t.subject isa BNode && push!(reifiers, t.subject)
+            t.predicate == URIRef("http://example/q") && (nq += 1)
+        end
+        @test length(collect(triples(res))) == 4
+        @test length(reifiers) == 2   # two distinct reifiers
+        @test nq == 1                 # exactly one annotation triple
+    end
 end

@@ -1475,6 +1475,10 @@ end
 
 const _ACTIVE_DATASET = Base.RefValue{Any}(nothing)       # Union{Dataset,Nothing}
 const _ACTIVE_NAMED_FILTER = Base.RefValue{Any}(nothing)  # Union{Nothing,Set} (FROM NAMED)
+# Default graph in scope while computing aggregates, so an aggregate over a
+# computed expression argument (e.g. AVG(IF(...))) can evaluate that expression
+# per row. `nothing` ⇒ no graph context (use an empty graph).
+const _AGG_GRAPH = Base.RefValue{Any}(nothing)            # Union{Nothing,RDFGraph}
 # The query's BASE IRI (from a `BASE <…>` prologue), used by IRI()/URI() to
 # resolve relative references at evaluation time. `nothing` when no BASE given.
 const _ACTIVE_BASE = Base.RefValue{Union{String,Nothing}}(nothing)
@@ -2578,6 +2582,18 @@ function _ast_xsd_cast(target::String, val)
     if target == "string"
         val isa URIRef && return Literal(val.value)
         val isa Literal || return nothing
+        # Casting a numeric typed literal to xsd:string yields the XPath canonical
+        # string of its VALUE (e.g. xsd:string("1.0"^^decimal) = "1", not "1.0";
+        # xsd:string("1E0"^^double) = "1"). For booleans and other lexical types
+        # the lexical form is used directly.
+        tn = _typed_numeric(val)
+        if tn !== nothing
+            return Literal(_xpath_string_of_numeric(tn[1], tn[2]))
+        end
+        # xsd:boolean → canonical "true"/"false" (e.g. "0"^^xsd:boolean → "false").
+        if _is_boolean_lit(val)
+            return Literal(_bool_value(val) ? "true" : "false")
+        end
         return Literal(val.lexical)
     end
     val isa Literal || return nothing
@@ -2772,6 +2788,46 @@ function _numeric_literal(kind::Symbol, v::Real)
         return Literal(_xsd_double_lexical(Float64(v)), datatype=_XSD_FLOAT_DT)
     else
         return Literal(_xsd_double_lexical(Float64(v)), datatype=_XSD_DOUBLE)
+    end
+end
+
+# XPath canonical string of a numeric VALUE (for xsd:string casts). Unlike the
+# RDF canonical numeric lexicals, the XPath string mapping drops trailing
+# fractional zeros and the decimal point when integral, and only uses an
+# exponent for very large/small doubles.
+function _xpath_string_of_numeric(kind::Symbol, v::Real)
+    if kind === :integer
+        return string(v isa Float64 ? Int64(v) : v)
+    elseif kind === :decimal
+        f = Float64(v)
+        (isnan(f) || isinf(f)) && return _decimal_lexical(f)
+        s = _decimal_lexical(f)            # e.g. "1.0", "2.5", "0.0"
+        # Strip trailing zeros and a dangling decimal point.
+        if occursin('.', s)
+            s = replace(s, r"0+$" => "")
+            endswith(s, '.') && (s = s[1:end-1])
+            isempty(s) && (s = "0")
+            s == "-" && (s = "0")
+        end
+        return s
+    else  # :float / :double
+        f = Float64(v)
+        isnan(f) && return "NaN"
+        isinf(f) && return f > 0 ? "INF" : "-INF"
+        f == 0.0 && return (1/f < 0 ? "-0" : "0")
+        a = abs(f)
+        # XPath uses plain decimal notation for magnitudes in [1e-6, 1e21);
+        # exponent form otherwise (matching the canonical double mapping).
+        if a >= 1e-6 && a < 1e21
+            s = _decimal_lexical(f)
+            if occursin('.', s)
+                s = replace(s, r"0+$" => "")
+                endswith(s, '.') && (s = s[1:end-1])
+            end
+            isempty(s) && (s = "0")
+            return s
+        end
+        return _xsd_double_lexical(f)
     end
 end
 
@@ -3508,6 +3564,16 @@ end
 # ─── Aggregate computation ────────────────────────────────────────
 
 function _ast_eval_group_aggregate(q::SparqlSelect, bindings, g)
+    old_agg_g = _AGG_GRAPH[]
+    _AGG_GRAPH[] = g
+    try
+        return _ast_eval_group_aggregate_impl(q, bindings, g)
+    finally
+        _AGG_GRAPH[] = old_agg_g
+    end
+end
+
+function _ast_eval_group_aggregate_impl(q::SparqlSelect, bindings, g)
     # Empty solution sequence + no GROUP BY → exactly one row of
     # aggregates-over-the-empty-group (SPARQL §18.5; COUNT()=0, SUM()=0, ...)
     if isempty(bindings) && isempty(q.group_by)
@@ -3598,6 +3664,10 @@ function _streaming_aggregate_safe(q::SparqlSelect)
             agg.arg isa ExprVar || agg.arg isa ExprStar || return false
         else
             agg.func in ("COUNT", "SUM", "AVG", "MIN", "MAX", "SAMPLE") || return false
+            # The streaming accumulators read the argument as a plain variable or
+            # star; aggregates over a computed expression (e.g. AVG(IF(...))) need
+            # the materialized per-group path that evaluates the expression per row.
+            agg.arg isa ExprVar || agg.arg isa ExprStar || return false
         end
     end
     for gb in q.group_by
@@ -4362,6 +4432,9 @@ end
 function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Identifier}})
     var_name = agg.arg isa ExprVar ? agg.arg.name : nothing
     is_star = agg.arg isa ExprStar
+    # An aggregate argument that is neither a plain variable nor `*` is a computed
+    # expression (e.g. AVG(IF(isNumeric(?p), ?p, ...))). Evaluate it per row.
+    is_expr_arg = !is_star && isnothing(var_name)
 
     # Fast path: COUNT(*) without DISTINCT — just count rows
     if agg.func == "COUNT" && is_star && !agg.distinct
@@ -4385,6 +4458,15 @@ function _ast_compute_aggregate(agg::ExprAggregate, group::Vector{Dict{String,Id
         end
     elseif !isnothing(var_name)
         Identifier[b[var_name] for b in group if haskey(b, var_name)]
+    elseif is_expr_arg
+        ag = _AGG_GRAPH[]
+        gref = ag === nothing ? RDFGraph() : ag::RDFGraph
+        out = Identifier[]
+        for b in group
+            v = _ast_eval_expr(agg.arg, b, gref)
+            v === nothing || push!(out, v)
+        end
+        out
     else
         Identifier[]
     end

@@ -705,6 +705,12 @@ function _trig_scan_explicit_labels(body::AbstractString)
             end
         elseif c == '"' || c == '\''
             i = _trig_skip_str_in(body, i, c)
+        elseif c == '<' && nextind(body, i) <= lastidx && body[nextind(body, i)] == '<'
+            # `<<` / `<<(` opens an RDF 1.2 reified-triple / triple-term, NOT an
+            # IRI. Skip only the delimiter so blank-node labels INSIDE it (e.g.
+            # `<< _:b :r :o >>`) are still scanned and treated as document-scoped.
+            j = nextind(body, nextind(body, i))
+            i = (j <= lastidx && body[j] == '(') ? nextind(body, j) : j
         elseif c == '<'
             j = nextind(body, i)
             while j <= lastidx && body[j] != '>'

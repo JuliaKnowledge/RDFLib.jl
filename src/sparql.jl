@@ -118,6 +118,7 @@ function _sparql_eval_on_dataset(ds::Dataset, ast; union_default::Bool=false)
     from_named = (ast isa SparqlSelect || ast isa SparqlConstruct || ast isa SparqlDescribe) ?
         ast.from_named : URIRef[]
 
+    eval_ds = ds
     default_g, named_filter = if isempty(from) && isempty(from_named)
         if union_default
             merged = RDFGraph()
@@ -132,23 +133,52 @@ function _sparql_eval_on_dataset(ds::Dataset, ast; union_default::Bool=false)
             (ds.default_graph, nothing)
         end
     else
-        # Explicit dataset description: FROM graphs (merged) become the
-        # default graph (empty if only FROM NAMED given); FROM NAMED lists
-        # the named graphs visible to GRAPH.
+        # Explicit dataset description. Per RDF dataset semantics the blank
+        # nodes of distinct source documents are DISTINCT scopes. When such a
+        # dataset is assembled from separately-loaded files that happen to share
+        # bnode labels (e.g. two FROM/FROM NAMED documents each using `_:x`),
+        # those labels must not alias across graph boundaries. Rebuild the
+        # dataset relabeling each named graph's blank nodes to a per-graph-unique
+        # scope, so the FROM-merged default graph and each FROM NAMED graph keep
+        # independent blank nodes. (FROM graphs are merged into the default; FROM
+        # NAMED lists the named graphs visible to GRAPH.)
+        scoped = Dataset()
+        seq = Ref(0)
+        relabel_into!(srcg, name) = begin
+            seq[] += 1
+            pre = "fg$(seq[])_"
+            m = Dict{BNode,BNode}()
+            rl(v) = v isa BNode ? get!(() -> BNode(pre * v.id), m, v) :
+                    v isa TripleTerm ? TripleTerm(rl(v.subject), v.predicate, rl(v.object)) : v
+            for t in triples(srcg)
+                add!(scoped, Triple(rl(t.subject), t.predicate, rl(t.object)), name)
+            end
+        end
         merged = RDFGraph()
         for iri in from
             src = get(ds.named_graphs, iri, nothing)
             src === nothing && continue
+            seq[] += 1
+            pre = "fg$(seq[])_"
+            m = Dict{BNode,BNode}()
+            rl(v) = v isa BNode ? get!(() -> BNode(pre * v.id), m, v) :
+                    v isa TripleTerm ? TripleTerm(rl(v.subject), v.predicate, rl(v.object)) : v
             for t in triples(src)
-                add!(merged, t)
+                add!(merged, Triple(rl(t.subject), t.predicate, rl(t.object)))
             end
         end
+        for iri in from_named
+            src = get(ds.named_graphs, iri, nothing)
+            src === nothing && (add_graph(scoped, iri); continue)
+            relabel_into!(src, iri)
+        end
+        eval_ds = scoped
         (merged, Set{GraphName}(from_named))
     end
 
     old_ds = _ACTIVE_DATASET[]
     old_filter = _ACTIVE_NAMED_FILTER[]
-    _ACTIVE_DATASET[] = ds
+    _ACTIVE_DATASET[] = eval_ds
     _ACTIVE_NAMED_FILTER[] = named_filter
     try
         return _ast_evaluate(default_g, ast)

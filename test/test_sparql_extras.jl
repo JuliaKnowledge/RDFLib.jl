@@ -1685,6 +1685,23 @@ end
         @test length(r2) == 1 && r2[1]["g"] == EX("g")
     end
 
+    @testset "FROM / FROM NAMED keep blank nodes scope-isolated" begin
+        # A FROM document and a FROM NAMED document that happen to share a blank
+        # node label (e.g. both use `_:x`) must NOT alias each other: the FROM
+        # default-graph `_:x` and the FROM NAMED `_:x` are distinct scopes, so a
+        # join on `?s` across them yields nothing. (W3C dataset-09b/10b.)
+        ds = Dataset()
+        # Both "documents" share the bnode label _:x but live under distinct IRIs.
+        add!(ds, Triple(BNode("x"), EX("p"), Literal(1)), URIRef("http://ex/from"))
+        add!(ds, Triple(BNode("x"), EX("q"), Literal(2)), URIRef("http://ex/named"))
+        q = """
+        PREFIX : <http://example/>
+        SELECT * FROM <http://ex/from> FROM NAMED <http://ex/named>
+        { ?s ?p ?o GRAPH ?g { ?s ?q ?v } }
+        """
+        @test isempty(sparql_query(ds, q))
+    end
+
     @testset "REGEX on a non-string is a type error" begin
         g = RDFGraph()
         add!(g, Triple(EX("foo"), EX("v"), EX("uri")))           # IRI value
