@@ -75,6 +75,7 @@ using RDFLib
     include("test_batchaddgraph.jl")
     include("test_isomorphicgraph.jl")
     include("test_inference.jl")
+    include("test_entailment.jl")
     include("test_rdfs2dot.jl")
     include("test_graphviz_render.jl")
     include("test_chunk_serializer.jl")

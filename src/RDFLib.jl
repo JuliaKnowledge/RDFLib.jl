@@ -161,6 +161,9 @@ include("isomorphicgraph.jl")
 # Inference engine (RDFS/OWL forward chaining)
 include("inference.jl")
 
+# Entailment regimes (simple / RDF / RDFS / RDFS-Plus / D)
+include("entailment.jl")
+
 # RDFS/OWL schema DOT visualization
 include("rdfs2dot.jl")
 
@@ -360,6 +363,7 @@ export
     # Inference
     rdfs_closure, rdfs_closure!, owl_closure, owl_closure!,
     owl2_rl_closure, owl2_rl_closure!, infer, entails,
+    simple_entails, is_inconsistent,
 
     # CLI tools
     rdfpipe, csv2rdf,
