@@ -53,6 +53,11 @@
     TOK_QUESTION      # ?  (as path modifier, not var prefix)
     TOK_LTLT          # <<
     TOK_GTGT          # >>
+    TOK_LTLT_PAREN    # <<(  (triple term open)
+    TOK_RPAREN_GTGT   # )>>  (triple term close)
+    TOK_ANNOT_OPEN    # {|   (annotation block open)
+    TOK_ANNOT_CLOSE   # |}   (annotation block close)
+    TOK_TILDE         # ~    (reifier marker)
     TOK_A             # 'a' (rdf:type shortcut)
     TOK_TRUE          # true
     TOK_FALSE         # false
@@ -215,7 +220,10 @@ function _unescape_iri_uchar(s::AbstractString)
                 for _ in 1:n
                     write(hex, s[k]); k = nextind(s, k)
                 end
-                write(io, Char(parse(UInt32, String(take!(hex)), base=16)))
+                cp = parse(UInt32, String(take!(hex)), base=16)
+                (0xD800 <= cp <= 0xDFFF) &&
+                    error("Surrogate code point U+$(string(cp, base=16, pad=4)) is not allowed in an IRI \\$e escape")
+                write(io, Char(cp))
                 i = k
                 continue
             end
@@ -251,6 +259,12 @@ function _sparql_tokenize_all(input::AbstractString)
         # IRI: <...>
         if c == '<'
             if pos < len && input[pos+1] == '<'
+                # `<<(` triple-term open vs `<<` reifier open
+                if pos + 1 < len && input[pos+2] == '('
+                    push!(tokens, _SparqlToken(TOK_LTLT_PAREN, "<<(", pos))
+                    pos += 3
+                    continue
+                end
                 push!(tokens, _SparqlToken(TOK_LTLT, "<<", pos))
                 pos += 2
                 continue
@@ -355,8 +369,24 @@ function _sparql_tokenize_all(input::AbstractString)
 
         # Operators and punctuation
         if c == '(' ; push!(tokens, _SparqlToken(TOK_LPAREN, "(", pos));   pos += 1; continue; end
-        if c == ')' ; push!(tokens, _SparqlToken(TOK_RPAREN, ")", pos));   pos += 1; continue; end
-        if c == '{' ; push!(tokens, _SparqlToken(TOK_LBRACE, "{", pos));   pos += 1; continue; end
+        if c == ')'
+            # `)>>` triple-term close (no internal whitespace)
+            if pos + 1 < len && input[pos+1] == '>' && input[pos+2] == '>'
+                push!(tokens, _SparqlToken(TOK_RPAREN_GTGT, ")>>", pos))
+                pos += 3
+                continue
+            end
+            push!(tokens, _SparqlToken(TOK_RPAREN, ")", pos)); pos += 1; continue
+        end
+        if c == '{'
+            # `{|` annotation-block open
+            if pos < len && input[pos+1] == '|'
+                push!(tokens, _SparqlToken(TOK_ANNOT_OPEN, "{|", pos))
+                pos += 2
+                continue
+            end
+            push!(tokens, _SparqlToken(TOK_LBRACE, "{", pos)); pos += 1; continue
+        end
         if c == '}' ; push!(tokens, _SparqlToken(TOK_RBRACE, "}", pos));   pos += 1; continue; end
         if c == '[' ; push!(tokens, _SparqlToken(TOK_LBRACKET, "[", pos)); pos += 1; continue; end
         if c == ']' ; push!(tokens, _SparqlToken(TOK_RBRACKET, "]", pos)); pos += 1; continue; end
@@ -381,10 +411,19 @@ function _sparql_tokenize_all(input::AbstractString)
             if pos < len && input[pos+1] == '|'
                 push!(tokens, _SparqlToken(TOK_OR, "||", pos))
                 pos += 2
+            elseif pos < len && input[pos+1] == '}'
+                push!(tokens, _SparqlToken(TOK_ANNOT_CLOSE, "|}", pos))
+                pos += 2
             else
                 push!(tokens, _SparqlToken(TOK_PIPE, "|", pos))
                 pos += 1
             end
+            continue
+        end
+
+        if c == '~'
+            push!(tokens, _SparqlToken(TOK_TILDE, "~", pos))
+            pos += 1
             continue
         end
 
@@ -505,9 +544,9 @@ function _sparql_tokenize_all(input::AbstractString)
             uw = uppercase(word)
             if word == "a"
                 push!(tokens, _SparqlToken(TOK_A, "a", start))
-            elseif word == "true"
+            elseif uw == "TRUE"
                 push!(tokens, _SparqlToken(TOK_TRUE, "true", start))
-            elseif word == "false"
+            elseif uw == "FALSE"
                 push!(tokens, _SparqlToken(TOK_FALSE, "false", start))
             elseif uw in _SPARQL_KEYWORDS
                 push!(tokens, _SparqlToken(TOK_KEYWORD, uw, start))
@@ -844,6 +883,11 @@ function _parse_primary_expr(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         return ExprStar()
     end
 
+    # SPARQL 1.2 triple term `<<( s p o )>>` in an expression.
+    if tok.kind == TOK_LTLT_PAREN
+        return _parse_triple_term(tz, prefixes, PatTriple[]; as_var=true, in_expr=true)
+    end
+
     error("Unexpected token in expression: $(tok.kind) '$(tok.value)' at position $(tok.pos)")
 end
 
@@ -909,14 +953,27 @@ function _parse_literal_expr(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         return ExprLiteral(Literal(lexical, datatype=dt_uri))
     end
 
-    # Check for @lang
+    # Check for @lang (possibly with a base direction `@lang--dir`)
     if _check(tz, TOK_LANGTAG)
         lt = _advance!(tz)
-        lang = lt.value[2:end]  # strip @
-        return ExprLiteral(Literal(lexical, lang=lang))
+        lang, dir = _split_langtag(lt.value[2:end])
+        return ExprLiteral(_make_lang_literal(lexical, lang, dir))
     end
 
     ExprLiteral(Literal(lexical))
+end
+
+# Split a SPARQL 1.2 language tag `lang--dir` into (lang, dir). When no `--`
+# is present, dir is `nothing`.
+function _split_langtag(tag::AbstractString)
+    i = findfirst("--", tag)
+    isnothing(i) && return (String(tag), nothing)
+    return (String(tag[1:first(i)-1]), String(tag[last(i)+1:end]))
+end
+
+function _make_lang_literal(lexical, lang, dir)
+    dir === nothing && return Literal(lexical, lang=lang)
+    return Literal(lexical, lang=lang, direction=dir)
 end
 
 function _parse_aggregate(tz::_SparqlTokenizer, prefixes)::SparqlExpr
@@ -930,8 +987,23 @@ function _parse_aggregate(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         _parse_expr(tz, prefixes)
     end
     _expect!(tz, TOK_RPAREN)
+    _reject_nested_aggregate(arg, func)
     ExprAggregate(func, arg, distinct, nothing)
 end
+
+# Aggregates may not be nested (e.g. COUNT(SUM(?x)) is a syntax error).
+function _reject_nested_aggregate(arg::SparqlExpr, outer)
+    if _expr_contains_aggregate(arg)
+        error("Nested aggregate function is not allowed inside $(outer)(...)")
+    end
+end
+
+_expr_contains_aggregate(e::ExprAggregate) = true
+_expr_contains_aggregate(e::ExprBinaryOp) = _expr_contains_aggregate(e.left) || _expr_contains_aggregate(e.right)
+_expr_contains_aggregate(e::ExprUnaryOp) = _expr_contains_aggregate(e.arg)
+_expr_contains_aggregate(e::ExprFunctionCall) = any(_expr_contains_aggregate, e.args)
+_expr_contains_aggregate(e::ExprIn) = _expr_contains_aggregate(e.expr) || any(_expr_contains_aggregate, e.values)
+_expr_contains_aggregate(e) = false
 
 function _parse_group_concat(tz::_SparqlTokenizer, prefixes)::SparqlExpr
     _advance!(tz)  # GROUP_CONCAT
@@ -947,6 +1019,7 @@ function _parse_group_concat(tz::_SparqlTokenizer, prefixes)::SparqlExpr
         sep = _unescape_sparql_string(sep_tok.value)
     end
     _expect!(tz, TOK_RPAREN)
+    _reject_nested_aggregate(arg, "GROUP_CONCAT")
     ExprAggregate("GROUP_CONCAT", arg, distinct, sep)
 end
 
@@ -1134,12 +1207,14 @@ function _parse_prologue!(tz::_SparqlTokenizer,
             prefixes[_BASE_KEY] = _make_uri(base_tok.value, prefixes).value
         elseif _check_keyword(tz, "VERSION")
             _advance!(tz)
-            # Skip version value
-            while !_check(tz, TOK_EOF) && !_check_keyword(tz, "SELECT") &&
-                  !_check_keyword(tz, "ASK") && !_check_keyword(tz, "CONSTRUCT") &&
-                  !_check_keyword(tz, "DESCRIBE") && !_check_keyword(tz, "PREFIX")
-                _advance!(tz)
-            end
+            # SPARQL 1.2 VersionSpecifier ::= a short string literal only.
+            # Reject bare numbers (VERSION 1.2) and long strings (VERSION """1.2""").
+            vtok = _peek(tz)
+            vtok.kind == TOK_STRING ||
+                error("VERSION expects a quoted string, got $(vtok.kind) '$(vtok.value)' at position $(vtok.pos)")
+            (startswith(vtok.value, "\"\"\"") || startswith(vtok.value, "'''")) &&
+                error("VERSION expects a short string literal at position $(vtok.pos)")
+            _advance!(tz)
         else
             break
         end
@@ -1194,7 +1269,9 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
     aggregates = SelectAggregate[]
 
     seen = Set{String}()   # projected names must be distinct
+    is_star = false
     if _check(tz, TOK_STAR)
+        is_star = true
         _advance!(tz)
     else
         while !_check_keyword(tz, "WHERE") && !_check_keyword(tz, "FROM") && !_check(tz, TOK_LBRACE) && !_check(tz, TOK_EOF)
@@ -1232,6 +1309,60 @@ function _parse_select(tz::_SparqlTokenizer, prefixes)
 
     # Solution modifiers
     group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
+
+    # SPARQL grammar scope rule: a project-expression alias `(... AS ?z)` must
+    # not collide with a variable exposed by GROUP BY (a group key variable or a
+    # `GROUP BY (expr AS ?z)` alias).
+    # `SELECT *` is not allowed together with GROUP BY or aggregation.
+    is_star && (!isempty(group_by) || !isempty(aggregates)) &&
+        error("SELECT * is not allowed with GROUP BY or aggregates")
+    if !isempty(group_by) || !isempty(aggregates)
+        # Aggregation is in effect. Group keys are the GROUP BY variables (the
+        # empty set when only bare aggregates are present). Every variable used
+        # in the SELECT clause — whether projected directly or referenced inside
+        # a non-aggregate projection expression — must be a group key (or an
+        # alias defined earlier in the SELECT).
+        gb_vars = Set{String}()
+        for ge in group_by
+            ge isa ExprVar && push!(gb_vars, ge.name)
+        end
+        for se in select_exprs
+            se.alias in gb_vars &&
+                error("SELECT alias ?$(se.alias) collides with a GROUP BY variable")
+        end
+        for sa in aggregates
+            sa.alias in gb_vars &&
+                error("SELECT alias ?$(sa.alias) collides with a GROUP BY variable")
+        end
+        # A plain projected variable must be a group key.
+        for v in variables
+            v in gb_vars ||
+                error("Projected variable ?$v is not a GROUP BY key")
+        end
+        # Variables referenced outside aggregates in a SELECT expression must be
+        # group keys, aggregate aliases, or earlier SELECT-expression aliases.
+        avail = copy(gb_vars)
+        for sa in aggregates; push!(avail, sa.alias); end
+        for se in select_exprs
+            evs = String[]
+            _collect_nonagg_expr_vars!(evs, se.expr)
+            for v in evs
+                v in avail ||
+                    error("Variable ?$v used in a SELECT expression is not a GROUP BY key")
+            end
+            push!(avail, se.alias)
+        end
+    end
+    if isempty(group_by) && isempty(aggregates)
+        # No GROUP BY: a project-expression alias `(... AS ?z)` must be a fresh
+        # variable not already in-scope in the WHERE clause.
+        ws_vars = Set{String}()
+        for p in patterns; _collect_inscope_vars!(ws_vars, p); end
+        for se in select_exprs
+            se.alias in ws_vars &&
+                error("SELECT alias ?$(se.alias) is already in-scope in the WHERE clause")
+        end
+    end
     append!(patterns, group_binds)
 
     # Trailing ValuesClause
@@ -1266,6 +1397,12 @@ function _parse_construct(tz::_SparqlTokenizer, prefixes)
         _skip_from_clauses!(tz, prefixes)
         _match_keyword!(tz, "WHERE")
         patterns = _parse_group_graph_pattern(tz, prefixes)
+        # CONSTRUCT WHERE shorthand permits only a TriplesTemplate — no FILTER,
+        # BIND, OPTIONAL, sub-select, etc.
+        for p in patterns
+            p isa PatTriple ||
+                error("CONSTRUCT WHERE template may contain only triples")
+        end
         # Extract PatTriple patterns as template
         template = PatTriple[p for p in patterns if p isa PatTriple]
         group_by, group_binds, having, order_by, limit, offset = _parse_solution_modifiers(tz, prefixes)
@@ -1341,9 +1478,114 @@ function _parse_group_graph_pattern(tz::_SparqlTokenizer, prefixes)::Vector{Spar
     patterns
 end
 
+# Whether a flattened nested group must be wrapped in PatGroup to preserve
+# FILTER/BIND variable scoping. A FILTER is scope-sensitive (it must not see
+# variables bound only outside its group). A bare BGP group is join-equivalent
+# to the surrounding group and need not be wrapped.
+function _group_needs_scope(pats::Vector{SparqlPattern})
+    any(p -> p isa PatFilter || p isa PatFilterExists, pats)
+end
+
+# Collect variable names referenced in an expression OUTSIDE of any aggregate
+# (aggregate arguments are evaluated per-group and need not be group keys).
+function _collect_nonagg_expr_vars!(out::Vector{String}, e)
+    if e isa ExprVar
+        push!(out, e.name)
+    elseif e isa ExprBinaryOp
+        _collect_nonagg_expr_vars!(out, e.left); _collect_nonagg_expr_vars!(out, e.right)
+    elseif e isa ExprUnaryOp
+        _collect_nonagg_expr_vars!(out, e.arg)
+    elseif e isa ExprFunctionCall
+        for a in e.args; _collect_nonagg_expr_vars!(out, a); end
+    elseif e isa ExprIn
+        _collect_nonagg_expr_vars!(out, e.expr)
+        for a in e.values; _collect_nonagg_expr_vars!(out, a); end
+    elseif e isa TripleTermPattern
+        e.subject isa String && push!(out, e.subject)
+        e.predicate isa String && push!(out, e.predicate)
+        e.object isa String && push!(out, e.object)
+    end
+    # ExprAggregate / ExprExists: do not descend (aggregate args are allowed).
+end
+
+# Collect variable names that a pattern brings into scope (for BIND-freshness
+# checks). Conservative: includes vars from nested OPTIONAL/UNION/GRAPH/etc.
+function _collect_inscope_vars!(out::Set{String}, p)
+    _collect_term_in!(t) = (t isa String && push!(out, t);
+                            t isa TripleTermPattern && (_collect_term_in!(t.subject);
+                            _collect_term_in!(t.predicate); _collect_term_in!(t.object)))
+    if p isa PatTriple
+        _collect_term_in!(p.subject); _collect_term_in!(p.predicate); _collect_term_in!(p.object)
+    elseif p isa PatBind
+        push!(out, p.var)
+    elseif p isa PatValues
+        for v in p.variables; push!(out, v); end
+    elseif p isa PatGroup
+        for q in p.patterns; _collect_inscope_vars!(out, q); end
+    elseif p isa PatOptional
+        for q in p.patterns; _collect_inscope_vars!(out, q); end
+    elseif p isa PatMinus
+        # MINUS does not bind variables into the outer scope.
+    elseif p isa PatUnion
+        for br in p.branches, q in br; _collect_inscope_vars!(out, q); end
+    elseif p isa PatGraph
+        p.graph_term isa ExprVar && push!(out, p.graph_term.name)
+        for q in p.patterns; _collect_inscope_vars!(out, q); end
+    elseif p isa PatService
+        for q in p.patterns; _collect_inscope_vars!(out, q); end
+    elseif p isa PatLateral
+        for q in p.patterns; _collect_inscope_vars!(out, q); end
+    elseif p isa PatSubquery
+        sq = p.query
+        if sq isa SparqlSelect
+            for v in sq.variables; push!(out, v); end
+            for se in sq.select_exprs; push!(out, se.alias); end
+            for sa in sq.aggregates; push!(out, sa.alias); end
+        end
+    end
+end
+
+# Collect blank-node labels appearing in a parsed pattern (recursively).
+function _collect_bnode_labels!(out::Set{String}, p)
+    addt = t -> begin
+        t isa BNode && push!(out, t.id)
+        t isa TripleTermPattern && (addt(t.subject); addt(t.predicate); addt(t.object))
+    end
+    if p isa PatTriple
+        addt(p.subject); addt(p.predicate); addt(p.object)
+    elseif p isa PatGroup || p isa PatOptional || p isa PatMinus ||
+           p isa PatService || p isa PatLateral || p isa PatFilterExists
+        for q in p.patterns; _collect_bnode_labels!(out, q); end
+    elseif p isa PatGraph
+        for q in p.patterns; _collect_bnode_labels!(out, q); end
+    elseif p isa PatUnion
+        for br in p.branches, q in br; _collect_bnode_labels!(out, q); end
+    end
+end
+
+# A blank-node label may not be shared across the branches of a UNION.
+function _check_union_bnode_scope(branches::Vector{Vector{SparqlPattern}})
+    seen = Set{String}()
+    for branch in branches
+        bl = Set{String}()
+        for p in branch; _collect_bnode_labels!(bl, p); end
+        for lbl in bl
+            lbl in seen &&
+                error("Blank node label _:$lbl reused across UNION branches")
+        end
+        union!(seen, bl)
+    end
+end
+
 function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern}
     patterns = SparqlPattern[]
     n_elements = 0   # number of group elements parsed (incl. empty `{}`)
+    # Cross-BGP blank-node label scoping: a label used in one BGP region may not
+    # reappear in a different region of the same group (regions are separated by
+    # any GraphPatternNotTriples — OPTIONAL/UNION/GRAPH/MINUS/nested group/etc.).
+    closed_bnode_labels = Set{String}()  # labels from prior closed regions
+    region_tb_labels = Set{String}()      # labels from triples blocks in current region
+    region_start = 1                      # index of first pattern of current region
     # Grammar: GroupGraphPatternSub ::= TriplesBlock?
     #   ( GraphPatternNotTriples '.'? TriplesBlock? )*
     # An optional '.' separator may follow a GraphPatternNotTriples; it is
@@ -1405,7 +1647,14 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
             _expect_keyword!(tz, "AS")
             var = _expect!(tz, TOK_VAR)
             _expect!(tz, TOK_RPAREN)
-            push!(patterns, PatBind(expr, var.value[2:end]))
+            bvar = var.value[2:end]
+            # The BIND target must be a fresh variable: it may not already be
+            # in-scope in this group (SPARQL grammar note on BIND).
+            in_scope = Set{String}()
+            for prev in patterns; _collect_inscope_vars!(in_scope, prev); end
+            bvar in in_scope &&
+                error("BIND variable ?$bvar is already in-scope at position $(var.pos)")
+            push!(patterns, PatBind(expr, bvar))
 
         elseif _check_keyword(tz, "VALUES")
             push!(patterns, _parse_values(tz, prefixes))
@@ -1461,6 +1710,7 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
                         pats = _parse_group_graph_pattern(tz, prefixes)
                         push!(branches, pats)
                     end
+                    _check_union_bnode_scope(branches)
                     push!(patterns, PatUnion(branches))
                 else
                     push!(patterns, sub)
@@ -1476,27 +1726,31 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
                         pats = _parse_group_graph_pattern(tz, prefixes)
                         push!(branches, pats)
                     end
+                    _check_union_bnode_scope(branches)
                     push!(patterns, PatUnion(branches))
+                elseif _group_needs_scope(first_pats)
+                    # A nested group containing a FILTER (or BIND) must keep its
+                    # own scope: evaluate it as an independent join unit so the
+                    # FILTER cannot see variables bound only outside the group.
+                    push!(patterns, PatGroup(first_pats))
                 else
                     append!(patterns, first_pats)
                 end
             end
 
-        elseif _check(tz, TOK_LTLT)
-            # Triple term pattern: << s p o >>
-            _advance!(tz)
-            s = _parse_term(tz, prefixes)
-            p = _parse_verb(tz, prefixes)
-            o = _parse_term(tz, prefixes)
-            _expect!(tz, TOK_GTGT)
-            push!(patterns, PatTripleTerm(s, p, o, nothing))
-            is_not_triples = false  # TriplesBlock-like: consumes its own dot
-            _match!(tz, TOK_DOT)
-
         else
             # Triple pattern(s): subject predicate-object-list
             is_not_triples = false
             triples = _parse_triples_block(tz, prefixes)
+            # A blank-node label in this triples block must not have appeared in
+            # a previously-closed BGP region of this group.
+            tb_labels = Set{String}()
+            for t in triples; _collect_bnode_labels!(tb_labels, t); end
+            for lbl in tb_labels
+                lbl in closed_bnode_labels &&
+                    error("Blank node label _:$lbl reused across a basic graph pattern boundary")
+                push!(region_tb_labels, lbl)
+            end
             append!(patterns, triples)
             # A TriplesBlock consumes all '.'-separated triples; if another
             # triple subject follows immediately, a '.' separator was missing.
@@ -1504,6 +1758,24 @@ function _parse_group_body(tz::_SparqlTokenizer, prefixes)::Vector{SparqlPattern
                 t = _peek(tz)
                 error("Expected '.' between triples, got $(t.kind) '$(t.value)' at position $(t.pos)")
             end
+        end
+
+        if is_not_triples
+            # A GraphPatternNotTriples is its own BGP region. Its blank-node
+            # labels must not appear in the surrounding group's other regions.
+            elem_labels = Set{String}()
+            for k in region_start:length(patterns)
+                _collect_bnode_labels!(elem_labels, patterns[k])
+            end
+            for lbl in elem_labels
+                (lbl in closed_bnode_labels || lbl in region_tb_labels) &&
+                    error("Blank node label _:$lbl reused across a basic graph pattern boundary")
+            end
+            # Close the region: all labels seen so far become unusable later.
+            union!(closed_bnode_labels, region_tb_labels)
+            union!(closed_bnode_labels, elem_labels)
+            empty!(region_tb_labels)
+            region_start = length(patterns) + 1
         end
 
         # Optional '.' separator after a GraphPatternNotTriples.
@@ -1527,6 +1799,122 @@ const _SPARQL_RDF_NIL = URIRef(_SPARQL_RDF_NS * "nil")
 const _ANON_NODE_COUNTER = Ref(0)
 _fresh_anon_var() = "_:anon$(_ANON_NODE_COUNTER[] += 1)"
 
+const _SPARQL_RDF_REIFIES = URIRef(_SPARQL_RDF_NS * "reifies")
+
+# ─── SPARQL 1.2 triple terms / reification ────────────────────────
+#
+# Triple term:    <<( s p o )>>          → TripleTermPattern (a term value)
+# Reified triple: << s p o (~reifier)? >> → introduces a reifier node `r` and
+#                 emits `r rdf:reifies <<( s p o )>>`; the reified-triple
+#                 expression denotes `r` (a fresh blank node / variable when
+#                 the reifier is anonymous, otherwise the given iri/var/bnode).
+
+# Parse the inner `s p o` of a triple term and return a TripleTermPattern.
+# `subject`/`object` are VarOrTerm (incl. nested triple terms, []); `predicate`
+# is a verb (iri/`a`/var) but NOT a property path. No collections allowed.
+function _parse_triple_term_inner(tz::_SparqlTokenizer, prefixes, acc; as_var::Bool=true, in_expr::Bool=false)
+    s = _parse_tt_subobj(tz, prefixes, acc; as_var=as_var, in_expr=in_expr, is_subject=true)
+    p = _parse_tt_predicate(tz, prefixes)
+    o = _parse_tt_subobj(tz, prefixes, acc; as_var=as_var, in_expr=in_expr, is_subject=false)
+    return TripleTermPattern(s, p, o)
+end
+
+# Subject/object position inside a triple term: a term, [], or (object only) a
+# nested triple term. Collections `( ... )` and reifiers are NOT allowed here.
+# The *subject* position cannot be a triple term. In expression context (BIND
+# etc.), blank nodes (`[]` and reified triples) are not allowed.
+function _parse_tt_subobj(tz::_SparqlTokenizer, prefixes, acc; as_var::Bool=true,
+                          in_expr::Bool=false, is_subject::Bool=false)
+    if _check(tz, TOK_LTLT_PAREN)
+        (is_subject && in_expr) && error("A triple term is not allowed in the subject position of a triple term at position $(_peek(tz).pos)")
+        return _parse_triple_term(tz, prefixes, acc; as_var=as_var, in_expr=in_expr)
+    end
+    if _check(tz, TOK_LTLT)
+        in_expr && error("Reified triples are not allowed in expressions at position $(_peek(tz).pos)")
+        return _parse_reified_triple_term(tz, prefixes, acc; as_var=as_var)
+    end
+    if _check(tz, TOK_LBRACKET)
+        in_expr && error("Blank node not allowed in a triple term in an expression at position $(_peek(tz).pos)")
+        _advance!(tz)
+        node = as_var ? _fresh_anon_var() : BNode()
+        # Only the empty blank node `[]` is allowed inside a triple term.
+        _expect!(tz, TOK_RBRACKET)
+        return node
+    end
+    if _check(tz, TOK_BNODE) && in_expr
+        error("Blank node not allowed in a triple term in an expression at position $(_peek(tz).pos)")
+    end
+    if _check(tz, TOK_LPAREN)
+        t = _peek(tz)
+        error("Collections are not allowed inside a triple term at position $(t.pos)")
+    end
+    if is_subject && _peek(tz).kind in (TOK_STRING, TOK_INTEGER, TOK_DECIMAL, TOK_DOUBLE, TOK_TRUE, TOK_FALSE)
+        t = _peek(tz)
+        error("A literal is not allowed in the subject position of a triple term at position $(t.pos)")
+    end
+    _parse_term(tz, prefixes)
+end
+
+# Predicate position inside a triple term: `a`, a variable, or an IRI — never a
+# property path or a blank node.
+function _parse_tt_predicate(tz::_SparqlTokenizer, prefixes)
+    if _check(tz, TOK_A)
+        _advance!(tz)
+        return URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+    end
+    if _check(tz, TOK_VAR)
+        return _advance!(tz).value[2:end]
+    end
+    if _check(tz, TOK_IRI) || _check(tz, TOK_PNAME)
+        return _parse_iri(tz, prefixes)
+    end
+    t = _peek(tz)
+    error("Expected IRI or variable as triple-term predicate, got $(t.kind) '$(t.value)' at position $(t.pos)")
+end
+
+# `<<( s p o )>>`  →  TripleTermPattern
+function _parse_triple_term(tz::_SparqlTokenizer, prefixes, acc; as_var::Bool=true, in_expr::Bool=false)
+    _expect!(tz, TOK_LTLT_PAREN)
+    tt = _parse_triple_term_inner(tz, prefixes, acc; as_var=as_var, in_expr=in_expr)
+    _expect!(tz, TOK_RPAREN_GTGT)
+    return tt
+end
+
+# `<< s p o (~ reifier)? >>` as a *term* → emit `reifier rdf:reifies <<(s p o)>>`
+# onto `acc` and return the reifier node.
+function _parse_reified_triple_term(tz::_SparqlTokenizer, prefixes, acc; as_var::Bool=true)
+    _expect!(tz, TOK_LTLT)
+    tt = _parse_triple_term_inner(tz, prefixes, acc; as_var=as_var)
+    reifier = _parse_optional_reifier(tz, prefixes, acc; as_var=as_var)
+    _expect!(tz, TOK_GTGT)
+    push!(acc, PatTriple(reifier, _SPARQL_RDF_REIFIES, tt))
+    return reifier
+end
+
+# Parse an optional `~ reifier`. Returns the reifier node (a fresh anon
+# var/bnode when absent or when `~` is given without an explicit term).
+function _parse_optional_reifier(tz::_SparqlTokenizer, prefixes, acc; as_var::Bool=true)
+    if _check(tz, TOK_TILDE)
+        _advance!(tz)
+        # `~` may be followed by an explicit reifier term (iri/var/bnode) or
+        # nothing (anonymous reifier).
+        if _check(tz, TOK_IRI) || _check(tz, TOK_PNAME)
+            return _parse_iri(tz, prefixes)
+        elseif _check(tz, TOK_VAR)
+            return _advance!(tz).value[2:end]
+        elseif _check(tz, TOK_BNODE)
+            t = _advance!(tz)
+            return as_var ? string(t.value) : BNode(t.value[3:end])
+        elseif _check(tz, TOK_LBRACKET)
+            _advance!(tz)
+            _expect!(tz, TOK_RBRACKET)
+            return as_var ? _fresh_anon_var() : BNode()
+        end
+        return as_var ? _fresh_anon_var() : BNode()
+    end
+    return as_var ? _fresh_anon_var() : BNode()
+end
+
 """
 Parse a graph node: a plain term, a blank node property list
 `[ :p :o ; ... ]`, or a collection `( e1 e2 ... )`.
@@ -1536,6 +1924,14 @@ Nested triples generated by property lists / collections are pushed onto
 represented as fresh internal variables; when false (templates), as BNodes.
 """
 function _parse_term_or_node(tz::_SparqlTokenizer, prefixes, acc::AbstractVector; as_var::Bool=true)
+    # SPARQL 1.2 triple term: <<( s p o )>>
+    if _check(tz, TOK_LTLT_PAREN)
+        return _parse_triple_term(tz, prefixes, acc; as_var=as_var)
+    end
+    # SPARQL 1.2 reified triple as a term: << s p o (~ reifier)? >>
+    if _check(tz, TOK_LTLT)
+        return _parse_reified_triple_term(tz, prefixes, acc; as_var=as_var)
+    end
     if _check(tz, TOK_LBRACKET)
         _advance!(tz)
         node = as_var ? _fresh_anon_var() : BNode()
@@ -1572,6 +1968,56 @@ function _parse_term_or_node(tz::_SparqlTokenizer, prefixes, acc::AbstractVector
     _parse_term(tz, prefixes)
 end
 
+# Parse SPARQL 1.2 annotation following a triple object: a sequence of
+# reifiers `~r` and annotation blocks `{| predicateObjectList |}`. Desugars by
+# emitting `reifier rdf:reifies <<( s p o )>>` and the annotation triples onto
+# `acc`. Multiple annotation blocks reuse the most-recent reifier (a fresh one
+# is created when a block appears with no preceding reifier).
+function _parse_annotation!(tz::_SparqlTokenizer, prefixes, s, p, o, acc::AbstractVector; as_var::Bool=true)
+    # An annotation/reifier may follow only a plain `s p o` triple — a property
+    # path predicate cannot be reified/annotated.
+    if _check(tz, TOK_TILDE) || _check(tz, TOK_ANNOT_OPEN)
+        if !(p isa URIRef || p isa String)
+            t = _peek(tz)
+            error("Reifier/annotation is not allowed on a property-path triple at position $(t.pos)")
+        end
+    end
+    # The reified triple term to relate via rdf:reifies.
+    tt = TripleTermPattern(s, p, o)
+    current_reifier = nothing
+    while true
+        if _check(tz, TOK_TILDE)
+            _advance!(tz)
+            r = if _check(tz, TOK_IRI) || _check(tz, TOK_PNAME)
+                _parse_iri(tz, prefixes)
+            elseif _check(tz, TOK_VAR)
+                _advance!(tz).value[2:end]
+            elseif _check(tz, TOK_BNODE)
+                t = _advance!(tz)
+                as_var ? string(t.value) : BNode(t.value[3:end])
+            elseif _check(tz, TOK_LBRACKET)
+                _advance!(tz); _expect!(tz, TOK_RBRACKET)
+                as_var ? _fresh_anon_var() : BNode()
+            else
+                as_var ? _fresh_anon_var() : BNode()
+            end
+            push!(acc, PatTriple(r, _SPARQL_RDF_REIFIES, tt))
+            current_reifier = r
+        elseif _check(tz, TOK_ANNOT_OPEN)
+            _advance!(tz)
+            if current_reifier === nothing
+                current_reifier = as_var ? _fresh_anon_var() : BNode()
+                push!(acc, PatTriple(current_reifier, _SPARQL_RDF_REIFIES, tt))
+            end
+            _parse_predicate_object_list!(tz, prefixes, current_reifier, acc; as_var=as_var)
+            _expect!(tz, TOK_ANNOT_CLOSE)
+        else
+            break
+        end
+    end
+    return current_reifier
+end
+
 """Parse `verb objectList ( ';' ( verb objectList )? )*` for subject `subj`,
 pushing PatTriples onto `acc`."""
 function _parse_predicate_object_list!(tz::_SparqlTokenizer, prefixes, subj, acc::AbstractVector; as_var::Bool=true)
@@ -1580,6 +2026,10 @@ function _parse_predicate_object_list!(tz::_SparqlTokenizer, prefixes, subj, acc
         while true
             obj = _parse_term_or_node(tz, prefixes, acc; as_var=as_var)
             push!(acc, PatTriple(subj, pred, obj))
+            # SPARQL 1.2 reifier `~r` and/or annotation blocks `{| ... |}`
+            # may follow an object. They only apply to a plain `s p o` triple
+            # (predicate must be an IRI/`a`/var, not a property path).
+            _parse_annotation!(tz, prefixes, subj, pred, obj, acc; as_var=as_var)
             if _check(tz, TOK_COMMA)
                 _advance!(tz)
             else
@@ -1638,7 +2088,7 @@ function _starts_triples_same_subject(tz::_SparqlTokenizer)::Bool
     k = _peek(tz).kind
     k in (TOK_VAR, TOK_IRI, TOK_PNAME, TOK_BNODE, TOK_A, TOK_STRING,
           TOK_INTEGER, TOK_DECIMAL, TOK_DOUBLE, TOK_TRUE, TOK_FALSE,
-          TOK_LBRACKET, TOK_LPAREN, TOK_LTLT)
+          TOK_LBRACKET, TOK_LPAREN, TOK_LTLT, TOK_LTLT_PAREN)
 end
 
 function _parse_verb(tz::_SparqlTokenizer, prefixes)
@@ -1771,6 +2221,18 @@ end
 function _parse_term(tz::_SparqlTokenizer, prefixes)
     tok = _peek(tz)
 
+    # Signed numeric literal: INTEGER_POSITIVE/NEGATIVE etc. — a leading
+    # '+'/'-' immediately preceding a numeric token (e.g. object `+5`).
+    if (tok.kind == TOK_PLUS || tok.kind == TOK_MINUS) &&
+       tz.idx + 1 <= length(tz.tokens) &&
+       tz.tokens[tz.idx + 1].kind in (TOK_INTEGER, TOK_DECIMAL, TOK_DOUBLE)
+        sign = _advance!(tz).kind == TOK_MINUS ? "-" : "+"
+        ntok = _advance!(tz)
+        dt = ntok.kind == TOK_INTEGER ? "integer" :
+             ntok.kind == TOK_DOUBLE ? "double" : "decimal"
+        return Literal(sign * ntok.value, datatype=URIRef("http://www.w3.org/2001/XMLSchema#$dt"))
+    end
+
     if tok.kind == TOK_VAR
         return _advance!(tz).value[2:end]  # return variable name as String
     end
@@ -1825,7 +2287,26 @@ function _parse_term(tz::_SparqlTokenizer, prefixes)
         return BNode()
     end
 
+    # SPARQL 1.2 ground triple term `<<( s p o )>>` (e.g. in VALUES). Reified
+    # triples `<< ... >>` are not RDFTerms and must not appear here.
+    if tok.kind == TOK_LTLT_PAREN
+        ttp = _parse_triple_term(tz, prefixes, PatTriple[]; as_var=true, in_expr=true)
+        gt = _ground_triple_term(ttp)
+        isnothing(gt) && error("Triple term with variables not allowed here at position $(tok.pos)")
+        return gt
+    end
+
     error("Expected term, got $(tok.kind) '$(tok.value)' at position $(tok.pos)")
+end
+
+# Convert a fully-ground TripleTermPattern into a concrete TripleTerm, or
+# return nothing if it contains variables.
+function _ground_triple_term(ttp::TripleTermPattern)
+    s = ttp.subject isa TripleTermPattern ? _ground_triple_term(ttp.subject) : ttp.subject
+    o = ttp.object isa TripleTermPattern ? _ground_triple_term(ttp.object) : ttp.object
+    p = ttp.predicate
+    (s isa Node && p isa URIRef && o isa Identifier) || return nothing
+    return TripleTerm(s, p, o)
 end
 
 function _parse_literal_term(tz::_SparqlTokenizer, prefixes)::Literal
@@ -1840,7 +2321,8 @@ function _parse_literal_term(tz::_SparqlTokenizer, prefixes)::Literal
 
     if _check(tz, TOK_LANGTAG)
         lt = _advance!(tz)
-        return Literal(lexical, lang=lt.value[2:end])
+        lang, dir = _split_langtag(lt.value[2:end])
+        return _make_lang_literal(lexical, lang, dir)
     end
 
     Literal(lexical)
@@ -1870,7 +2352,9 @@ function _parse_values(tz::_SparqlTokenizer, prefixes)::PatValues
     if _check(tz, TOK_LPAREN)
         _advance!(tz)
         while _check(tz, TOK_VAR)
-            push!(vars, _advance!(tz).value[2:end])
+            v = _advance!(tz).value[2:end]
+            v in vars && error("Duplicate variable '?$v' in VALUES clause")
+            push!(vars, v)
         end
         _expect!(tz, TOK_RPAREN)
     elseif _check(tz, TOK_VAR)
@@ -2031,6 +2515,21 @@ end
 Parse a SPARQL UPDATE query string into an update operation AST node
 using the recursive descent tokenizer/parser infrastructure.
 """
+# Blank-node labels appearing in the ground data of an INSERT/DELETE DATA op.
+function _update_op_data_bnodes(op)
+    out = Set{String}()
+    add_terms! = (s, p, o) -> begin
+        s isa BNode && push!(out, s.id)
+        o isa BNode && push!(out, o.id)
+    end
+    if op isa UpdateInsertData || op isa UpdateDeleteData
+        for (s, p, o, _) in op.quads; add_terms!(s, p, o); end
+    elseif op isa _SPARQLInsertData || op isa _SPARQLDeleteData
+        for (s, p, o) in op.triples; add_terms!(s, p, o); end
+    end
+    out
+end
+
 function sparql_parse_update(query::String)
     tz = _sparql_tokenize_all(strip(query))
     # Grammar: Update ::= Prologue ( Update1 ( ';' Update )? )?
@@ -2038,10 +2537,21 @@ function sparql_parse_update(query::String)
     # contributions. Prefixes/BASE accumulate across the whole request.
     prefixes = Dict{String,String}()
     ops = Any[]
+    # Blank-node labels are scoped to a single operation: a label appearing in
+    # one INSERT/DELETE DATA operation may not reappear in another operation of
+    # the same request (SPARQL 1.1 Update §19.6).
+    seen_data_bnodes = Set{String}()
     while true
         _parse_prologue!(tz, prefixes)
         _check(tz, TOK_EOF) && break
-        push!(ops, _parse_update_op(tz, prefixes))
+        op = _parse_update_op(tz, prefixes)
+        op_bnodes = _update_op_data_bnodes(op)
+        for lbl in op_bnodes
+            lbl in seen_data_bnodes &&
+                error("Blank node label _:$lbl reused across update operations")
+        end
+        union!(seen_data_bnodes, op_bnodes)
+        push!(ops, op)
         # Operations are separated by ';'. A trailing ';' is permitted.
         if _check(tz, TOK_SEMICOLON)
             _advance!(tz)
@@ -2149,10 +2659,10 @@ function _parse_update_op(tz::_SparqlTokenizer, prefixes)
                                      _SPARQLInsertData(_drop_graph(tpl), prefixes)
         end
         ins = _parse_update_template(tz, prefixes)
-        _parse_using_clauses!(tz, prefixes)
+        ug, un = _parse_using_clauses!(tz, prefixes)
         _expect_keyword!(tz, "WHERE")
         pats = SparqlPattern[_parse_group_graph_pattern(tz, prefixes)...]
-        return _make_modify(_empty_quad_template(), ins, pats, prefixes, with_graph)
+        return _make_modify(_empty_quad_template(), ins, pats, prefixes, with_graph, ug, un)
     end
 
     # DELETE ...
@@ -2184,10 +2694,10 @@ function _parse_update_op(tz::_SparqlTokenizer, prefixes)
             _advance!(tz)
             ins = _parse_update_template(tz, prefixes)
         end
-        _parse_using_clauses!(tz, prefixes)
+        ug, un = _parse_using_clauses!(tz, prefixes)
         _expect_keyword!(tz, "WHERE")
         pats = SparqlPattern[_parse_group_graph_pattern(tz, prefixes)...]
-        return _make_modify(del, ins, pats, prefixes, with_graph)
+        return _make_modify(del, ins, pats, prefixes, with_graph, ug, un)
     end
 
     error("Unsupported SPARQL UPDATE operation")
@@ -2203,11 +2713,11 @@ _drop_graph(quads) = Tuple{Any,Any,Any}[(q[1], q[2], q[3]) for q in quads]
 
 # Choose the legacy 3-tuple `_SPARQLModify` (no named graphs) or the quad-aware
 # `UpdateModify` (when delete/insert templates reference named graphs).
-function _make_modify(del, ins, pats, prefixes, with_graph)
+function _make_modify(del, ins, pats, prefixes, with_graph, using_graphs=URIRef[], using_named=URIRef[])
     if _has_graph(del) || _has_graph(ins)
-        UpdateModify(del, ins, pats, prefixes, with_graph)
+        UpdateModify(del, ins, pats, prefixes, with_graph, using_graphs, using_named)
     else
-        _SPARQLModify(_drop_graph(del), _drop_graph(ins), pats, prefixes, with_graph)
+        _SPARQLModify(_drop_graph(del), _drop_graph(ins), pats, prefixes, with_graph, using_graphs, using_named)
     end
 end
 

@@ -1514,21 +1514,20 @@ end
             SELECT (STRLANGDIR("chat", "fr", "ltr") AS ?dl)
                    (LANGDIR(STRLANGDIR("chat", "fr", "ltr")) AS ?dir)
                    (LANGDIR(?l) AS ?nodir)
-                   (hasLANG(?l, "en") AS ?hl)
-                   (hasLANG(?l, "fr") AS ?hlf)
-                   (hasLANG("plain", "en") AS ?hlp)
-                   (hasLANGDIR(STRLANGDIR("chat", "fr", "ltr"), "fr") AS ?hld)
-                   (hasLANGDIR(?l, "en") AS ?hldn)
+                   (hasLANG(?l) AS ?hl)
+                   (hasLANG("plain") AS ?hlp)
+                   (hasLANGDIR(STRLANGDIR("chat", "fr", "ltr")) AS ?hld)
+                   (hasLANGDIR(?l) AS ?hldn)
             WHERE { ?s ex:label ?l }
         """)
         @test r[1]["dl"].language == "fr"
         @test RDFLib.direction(r[1]["dl"]) == "ltr"
         @test r[1]["dir"].lexical == "ltr"
         @test r[1]["nodir"].lexical == ""
-        @test r[1]["hl"].lexical == "true"
-        @test r[1]["hlf"].lexical == "false"
-        @test r[1]["hlp"].lexical == "false"
-        @test r[1]["hld"].lexical == "true"
+        # SPARQL 1.2 hasLANG / hasLANGDIR are 1-argument predicates.
+        @test r[1]["hl"].lexical == "true"     # "hello"@en has a language tag
+        @test r[1]["hlp"].lexical == "false"   # plain string has none
+        @test r[1]["hld"].lexical == "true"    # dir-lang string
         @test r[1]["hldn"].lexical == "false"  # no direction on plain langString
         # invalid direction → error (unbound)
         r = sparql_query(g, """

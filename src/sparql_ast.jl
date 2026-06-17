@@ -163,12 +163,37 @@ struct PatLateral <: SparqlPattern
     patterns::Vector{SparqlPattern}
 end
 
+"""
+A nested group `{ ... }` that must be evaluated as an independent join unit
+(its own algebra), rather than flattened into the surrounding group. This
+preserves SPARQL variable-scope semantics for FILTERs: a FILTER inside a group
+is evaluated against that group's own solutions, so it does not see variables
+bound only in the enclosing group (SPARQL §18.2.2.2 / §5.2.1).
+"""
+struct PatGroup <: SparqlPattern
+    patterns::Vector{SparqlPattern}
+end
+
 """RDF-star triple term pattern: `<< s p o >>` (SPARQL 1.2)"""
 struct PatTripleTerm <: SparqlPattern
     subject::Any
     predicate::Any
     object::Any
     annotation::Any
+end
+
+"""
+SPARQL 1.2 triple-term term `<<( s p o )>>` used as a subject/object term or
+in an expression. Each of `subject`/`predicate`/`object` is itself a term
+(URIRef/Literal/BNode/variable-name-String or a nested `TripleTermPattern`).
+
+This is distinct from `TripleTerm` (the concrete RDF value): a `TripleTermPattern`
+may contain variables and is resolved/matched recursively during evaluation.
+"""
+struct TripleTermPattern <: SparqlExpr
+    subject::Any
+    predicate::Any
+    object::Any
 end
 
 # ─── Property Path AST ────────────────────────────────────────────
@@ -313,9 +338,12 @@ struct UpdateModify
     patterns::Vector{SparqlPattern}
     prefixes::Dict{String, String}
     with_graph::Union{URIRef, Nothing}
+    using_graphs::Vector{URIRef}        # USING <iri> — WHERE-clause default graph(s)
+    using_named::Vector{URIRef}         # USING NAMED <iri> — WHERE-clause named graphs
 end
 
-UpdateModify(del, ins, pats, prefixes) = UpdateModify(del, ins, pats, prefixes, nothing)
+UpdateModify(del, ins, pats, prefixes) = UpdateModify(del, ins, pats, prefixes, nothing, URIRef[], URIRef[])
+UpdateModify(del, ins, pats, prefixes, with_graph) = UpdateModify(del, ins, pats, prefixes, with_graph, URIRef[], URIRef[])
 
 """A `;`-separated sequence of update operations, executed in order."""
 struct UpdateRequest

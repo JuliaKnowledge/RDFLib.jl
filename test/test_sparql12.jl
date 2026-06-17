@@ -298,4 +298,95 @@
         next_age = parse(Float64, results[1]["next_age"].lexical)
         @test next_age == 31.0
     end
+
+    # ─── SPARQL 1.2: triple terms, reification, lang-direction, VERSION ───
+    @testset "Triple terms and reification (1.2)" begin
+        REIFIES = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+        ex = Namespace("http://example/")
+        g = RDFGraph()
+        # `<<:a :b :c>> :q :z .` reifies with an anonymous reifier.
+        add!(g, Triple(BNode("r"), REIFIES, TripleTerm(ex("a"), ex("b"), ex("c"))))
+        add!(g, Triple(BNode("r"), ex("q"), ex("z")))
+
+        # Match the triple-term object via rdf:reifies.
+        r = sparql_query(g, """
+            PREFIX : <http://example/>
+            SELECT * { ?r <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( :a :b :c )>> }
+        """)
+        @test length(r) == 1
+
+        # Reified-triple subject `<< :a :b :c >>` desugars to its reifier.
+        r = sparql_query(g, """
+            PREFIX : <http://example/>
+            SELECT ?z { << :a :b :c >> :q ?z }
+        """)
+        @test length(r) == 1
+        @test r[1]["z"] == ex("z")
+
+        # Triple term bound by BIND; introspection builtins.
+        g2 = RDFGraph()
+        add!(g2, Triple(ex("s"), ex("p"), ex("o")))
+        r = sparql_query(g2, """
+            PREFIX : <http://example/>
+            SELECT ?t ?subj { ?s ?p ?o . BIND(<<(?s ?p ?o)>> AS ?t) BIND(SUBJECT(?t) AS ?subj) }
+        """)
+        @test length(r) == 1
+        @test r[1]["t"] isa TripleTerm
+        @test r[1]["subj"] == ex("s")
+        @test sparql_query(g2, "SELECT (isTRIPLE(<<(<http://example/s> <http://example/p> <http://example/o>)>>) AS ?b) {}")[1]["b"] == Literal(true)
+        # TRIPLE() with a literal subject is unbound.
+        @test !haskey(sparql_query(g2, raw"""SELECT (TRIPLE("x", <http://example/p>, <http://example/o>) AS ?t) {}""")[1], "t")
+    end
+
+    @testset "Language base direction (1.2)" begin
+        g = RDFGraph()
+        # STRLANGDIR builds rdf:dirLangString; LANGDIR / hasLANG(DIR) inspect it.
+        r = sparql_query(g, raw"""
+            SELECT (STRLANGDIR("abc", "en", "ltr") AS ?dl)
+                   (LANGDIR(STRLANGDIR("abc", "en", "rtl")) AS ?dir)
+                   (hasLANGDIR(STRLANGDIR("abc", "en", "ltr")) AS ?hd)
+                   (hasLANG("abc"@en) AS ?hl) WHERE {}
+        """)
+        @test r[1]["dl"].language == "en"
+        @test r[1]["dir"].lexical == "rtl"
+        @test r[1]["hd"] == Literal(true)
+        @test r[1]["hl"] == Literal(true)
+        # Direction is case-sensitive: "LTR" → unbound.
+        @test !haskey(sparql_query(g, raw"""SELECT (STRLANGDIR("a","en","LTR") AS ?x) {}""")[1], "x")
+        # Literal syntax `"x"@en--ltr` parses lang + direction.
+        r2 = sparql_query(g, raw"""SELECT (LANGDIR(?v) AS ?d) WHERE { VALUES ?v { "x"@en--ltr } }""")
+        @test r2[1]["d"].lexical == "ltr"
+    end
+
+    @testset "VERSION declaration (1.2)" begin
+        @test RDFLib.sparql_parse(raw"""VERSION "1.2" SELECT * { ?s ?p ?o }""") isa Any
+        @test RDFLib.sparql_parse(raw"""PREFIX : <http://e/> VERSION '1.2' SELECT * { ?s ?p ?o }""") isa Any
+        @test_throws Exception RDFLib.sparql_parse(raw"""VERSION 1.2 SELECT * { ?s ?p ?o }""")
+        @test_throws Exception RDFLib.sparql_parse("VERSION \"\"\"1.2\"\"\" SELECT * { ?s ?p ?o }")
+    end
+
+    @testset "Negative syntax / scoping (1.1/1.2)" begin
+        # Triple term in subject position is illegal in VALUES.
+        @test_throws Exception RDFLib.sparql_parse(raw"""SELECT * { VALUES ?x { <<( <<(<http://e/s> <http://e/p> <http://e/o>)>> <http://e/q> <http://e/z> )>> } }""")
+        # Nested aggregates / duplicate VALUES vars / GROUP BY scope.
+        @test_throws Exception RDFLib.sparql_parse("SELECT (COUNT(SUM(?x)) AS ?c) {}")
+        @test_throws Exception RDFLib.sparql_parse("SELECT * { VALUES (?a ?a) { (1 1) } }")
+        @test_throws Exception RDFLib.sparql_parse(raw"""SELECT (123 AS ?z) WHERE { } GROUP BY ?z""")
+        @test_throws Exception RDFLib.sparql_parse("SELECT * { ?s ?p ?o } GROUP BY ?s")
+        # BIND target must be fresh.
+        @test_throws Exception RDFLib.sparql_parse("SELECT * { ?s ?p ?o . BIND(1 AS ?o) }")
+        # Cross-BGP blank-node label reuse.
+        @test_throws Exception RDFLib.sparql_parse("SELECT * { _:a ?p ?v . OPTIONAL { _:a ?q 1 } }")
+        @test_throws Exception RDFLib.sparql_parse("SELECT * { { _:a ?p ?v } UNION { _:a ?q 1 } }")
+    end
+
+    @testset "Variable scoping in nested groups (1.0)" begin
+        ex = Namespace("http://example/")
+        g = RDFGraph()
+        add!(g, Triple(ex("x"), ex("p"), Literal(1)))
+        add!(g, Triple(ex("x"), ex("p"), Literal(2)))
+        # FILTER in a nested group cannot see ?v bound outside the group.
+        r = sparql_query(g, "PREFIX : <http://example/> SELECT ?v { :x :p ?v . { FILTER(?v = 1) } }")
+        @test isempty(r)
+    end
 end

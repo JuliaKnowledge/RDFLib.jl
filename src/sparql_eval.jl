@@ -128,10 +128,19 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
     # Evaluate SELECT expressions. Those that reference aggregates (e.g.
     # `(MIN(?p)+MAX(?p))/2 AS ?c`) must be deferred until after grouping; plain
     # projections are computed per input row here.
+    # A SELECT expression must be deferred until after grouping if it contains
+    # an aggregate, or transitively references an aggregate alias (e.g.
+    # `(?count + 1 AS ?x)` where `?count` is `(COUNT(?v) AS ?count)`). Plain
+    # projection expressions that only reference other plain projection aliases
+    # (e.g. projexp03's `(2 * ?sum AS ?twice)`) are evaluated per-row, in order.
+    agg_dep_names = Set{String}()           # aggregate-dependent alias names
+    for sa in q.aggregates; push!(agg_dep_names, sa.alias); end
+
     agg_exprs = SelectExpr[]
     for se in q.select_exprs
-        if _expr_has_aggregate(se.expr)
+        if _expr_has_aggregate(se.expr) || _expr_refs_any(se.expr, agg_dep_names)
             push!(agg_exprs, se)
+            push!(agg_dep_names, se.alias)
         else
             for b in bindings
                 val = _ast_eval_expr(se.expr, b, g)
@@ -145,7 +154,8 @@ function _ast_evaluate(g::RDFGraph, q::SparqlSelect)
     # there is no bare aggregate or GROUP BY clause.
     if !isempty(q.aggregates) || !isempty(q.group_by) || !isempty(agg_exprs)
         bindings = _ast_eval_group_aggregate(q, bindings, g)
-        # Evaluate deferred aggregate-containing SELECT expressions per group row.
+        # Evaluate deferred SELECT expressions per group row, in declaration
+        # order so a later expression can reference an earlier alias.
         if !isempty(agg_exprs)
             for b in bindings
                 for se in agg_exprs
@@ -381,6 +391,7 @@ _pattern_has_bnode(p::PatMinus) = any(_pattern_has_bnode, p.patterns)
 _pattern_has_bnode(p::PatGraph) = any(_pattern_has_bnode, p.patterns)
 _pattern_has_bnode(p::PatUnion) = any(b -> any(_pattern_has_bnode, b), p.branches)
 _pattern_has_bnode(p::PatFilterExists) = any(_pattern_has_bnode, p.patterns)
+_pattern_has_bnode(p::PatGroup) = any(_pattern_has_bnode, p.patterns)
 _pattern_has_bnode(p) = false
 
 _rewrite_pattern_bnodes(p::PatTriple) =
@@ -395,6 +406,8 @@ _rewrite_pattern_bnodes(p::PatUnion) =
     PatUnion(Vector{SparqlPattern}[SparqlPattern[_rewrite_pattern_bnodes(x) for x in b] for b in p.branches])
 _rewrite_pattern_bnodes(p::PatFilterExists) =
     PatFilterExists(SparqlPattern[_rewrite_pattern_bnodes(x) for x in p.patterns], p.negated)
+_rewrite_pattern_bnodes(p::PatGroup) =
+    PatGroup(SparqlPattern[_rewrite_pattern_bnodes(x) for x in p.patterns])
 _rewrite_pattern_bnodes(p) = p
 
 function _ast_eval_patterns(g::RDFGraph, patterns::Vector{SparqlPattern},
@@ -565,6 +578,9 @@ function _star_group_end(patterns::Vector{SparqlPattern}, start::Int)
     subj = pat.subject
     subj isa String || return start
     pat.predicate isa URIRef || return start
+    # Triple-term object patterns may contain variables and need the general
+    # matcher; exclude them from star-join grouping.
+    pat.object isa TripleTermPattern && return start
     last = start
     for j in (start+1):length(patterns)
         next = patterns[j]
@@ -572,6 +588,7 @@ function _star_group_end(patterns::Vector{SparqlPattern}, start::Int)
         next.subject isa String || break
         next.subject == subj || break
         next.predicate isa URIRef || break
+        next.object isa TripleTermPattern && break
         last = j
     end
     last
@@ -965,6 +982,37 @@ function _ast_eval_pattern(g::RDFGraph, pat::PatBind, bindings)
     bindings
 end
 
+function _ast_eval_pattern(g::RDFGraph, pat::PatGroup, bindings)
+    isempty(bindings) && return bindings
+    # Evaluate the group body as its own algebra unit (empty seed) so FILTERs
+    # inside it are scoped to the group's own solutions, then inner-join the
+    # result with the incoming bindings on shared variables.
+    group_results = _ast_eval_patterns(g, pat.patterns)
+    isempty(group_results) && return Dict{String,Identifier}[]
+    out = Dict{String,Identifier}[]
+    for b in bindings
+        for gr in group_results
+            merged = _ast_merge_compatible(b, gr)
+            merged === nothing || push!(out, merged)
+        end
+    end
+    out
+end
+
+# Merge two solution mappings if they agree on all shared variables, returning
+# the merged mapping, or `nothing` if they are incompatible.
+function _ast_merge_compatible(a::Dict{String,Identifier}, b::Dict{String,Identifier})
+    merged = copy(a)
+    for (k, v) in b
+        if haskey(merged, k)
+            merged[k] == v || return nothing
+        else
+            merged[k] = v
+        end
+    end
+    merged
+end
+
 function _ast_eval_pattern(g::RDFGraph, pat::PatOptional, bindings)
     isempty(bindings) && return bindings
 
@@ -1102,13 +1150,15 @@ end
 
 function _collect_produced_vars!(out::Set{String}, p::SparqlPattern)
     if p isa PatTriple
-        p.subject isa String && push!(out, p.subject)
-        p.predicate isa String && push!(out, p.predicate)
-        p.object isa String && push!(out, p.object)
+        _collect_term_vars!(out, p.subject)
+        _collect_term_vars!(out, p.predicate)
+        _collect_term_vars!(out, p.object)
     elseif p isa PatBind
         push!(out, p.var)
     elseif p isa PatValues
         for v in p.variables; push!(out, v); end
+    elseif p isa PatGroup
+        for q in p.patterns; _collect_produced_vars!(out, q); end
     elseif p isa PatOptional
         for q in p.patterns; _collect_produced_vars!(out, q); end
     elseif p isa PatUnion
@@ -1121,11 +1171,25 @@ function _collect_produced_vars!(out::Set{String}, p::SparqlPattern)
     end
 end
 
+# Collect variable names appearing in a term (handles nested triple-term
+# patterns recursively).
+function _collect_term_vars!(out::Set{String}, term)
+    if term isa String
+        push!(out, term)
+    elseif term isa TripleTermPattern
+        _collect_term_vars!(out, term.subject)
+        _collect_term_vars!(out, term.predicate)
+        _collect_term_vars!(out, term.object)
+    end
+end
+
 function _collect_expr_vars!(out::Vector{String}, p::SparqlPattern)
     if p isa PatFilter
         _collect_vars_in_expr!(out, p.expr)
     elseif p isa PatBind
         _collect_vars_in_expr!(out, p.expr)
+    elseif p isa PatGroup
+        for q in p.patterns; _collect_expr_vars!(out, q); end
     elseif p isa PatOptional
         for q in p.patterns; _collect_expr_vars!(out, q); end
     elseif p isa PatUnion
@@ -1627,6 +1691,18 @@ function _ast_match_term(graph_val::Identifier, pattern, resolved, binding::Dict
             binding[pattern] = graph_val
             return true
         end
+    elseif pattern isa TripleTermPattern
+        # Match a triple-term pattern against a TripleTerm graph value,
+        # binding nested variables.
+        graph_val isa TripleTerm || return false
+        ok = _ast_match_term(graph_val.subject, pattern.subject,
+                             _ast_resolve_term(pattern.subject, binding), binding)
+        ok || return false
+        ok = _ast_match_term(graph_val.predicate, pattern.predicate,
+                             _ast_resolve_term(pattern.predicate, binding), binding)
+        ok || return false
+        return _ast_match_term(graph_val.object, pattern.object,
+                               _ast_resolve_term(pattern.object, binding), binding)
     else
         return !isnothing(resolved) && resolved == graph_val
     end
@@ -1636,7 +1712,7 @@ function _ast_resolve_term(term, binding::Dict{String,Identifier})
     if term isa String  # variable
         return get(binding, term, nothing)
     end
-    if term isa URIRef || term isa Literal || term isa BNode
+    if term isa URIRef || term isa Literal || term isa BNode || term isa TripleTerm
         return term
     end
     if term isa ExprVar
@@ -1647,6 +1723,16 @@ function _ast_resolve_term(term, binding::Dict{String,Identifier})
     end
     if term isa ExprLiteral
         return term.value
+    end
+    if term isa TripleTermPattern
+        # Resolve recursively; all three components must be bound to concrete
+        # terms and form a valid RDF-star triple term.
+        s = _ast_resolve_term(term.subject, binding)
+        p = _ast_resolve_term(term.predicate, binding)
+        o = _ast_resolve_term(term.object, binding)
+        (isnothing(s) || isnothing(p) || isnothing(o)) && return nothing
+        (s isa Node && p isa URIRef && o isa Identifier) || return nothing
+        return TripleTerm(s, p, o)
     end
     nothing
 end
@@ -1900,6 +1986,13 @@ function _ast_eval_expr(expr::ExprStar, binding::Dict{String,Identifier}, g::RDF
     nothing  # Star is only meaningful in aggregates
 end
 
+function _ast_eval_expr(expr::TripleTermPattern, binding::Dict{String,Identifier}, g::RDFGraph=RDFGraph())
+    # SPARQL 1.2 triple term `<<( s p o )>>` used in an expression (e.g. BIND).
+    # Yields a TripleTerm when all parts resolve to terms forming a valid
+    # triple term, otherwise unbound (nothing).
+    _ast_resolve_term(expr, binding)
+end
+
 function _ast_eval_expr(expr::ExprBinaryOp, binding::Dict{String,Identifier}, g::RDFGraph=RDFGraph())
     # Logical operators use three-valued error semantics (SPARQL §17.2):
     #   error || true  → true     error || false → error
@@ -2026,8 +2119,15 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         lex = join(v.lexical for v in vals)
         if !isempty(vals)
             lang1 = vals[1].language
+            dir1 = vals[1].direction
             if lang1 !== nothing && all(v -> v.language == lang1, vals)
-                return Literal(lex; lang=lang1)
+                # Preserve the language tag only if every argument also shares
+                # the same base direction (including all having none); otherwise
+                # the result is a plain string.
+                if all(v -> v.direction == dir1, vals)
+                    return dir1 === nothing ? Literal(lex; lang=lang1) :
+                                              Literal(lex; lang=lang1, direction=dir1)
+                end
             end
         end
         return Literal(lex)
@@ -2153,22 +2253,22 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
         val isa Literal || return nothing
         return Literal(something(val.direction, ""))
     elseif name == "HASLANG"
-        val = _eval_arg(1); rng = _eval_arg(2)
-        val isa Literal || return nothing
-        rng isa Literal || return nothing
-        val.language === nothing && return Literal(false)
-        return Literal(_lang_range_matches(val.language, rng.lexical))
+        # SPARQL 1.2 hasLANG(literal): true iff the term has a language tag.
+        val = _eval_arg(1)
+        val isa Literal || return Literal(false)
+        return Literal(val.language !== nothing)
     elseif name == "HASLANGDIR"
-        val = _eval_arg(1); rng = _eval_arg(2)
-        val isa Literal || return nothing
-        rng isa Literal || return nothing
-        (val.language === nothing || val.direction === nothing) && return Literal(false)
-        return Literal(_lang_range_matches(val.language, rng.lexical))
+        # SPARQL 1.2 hasLANGDIR(literal): true iff the term has both a language
+        # tag and a base direction.
+        val = _eval_arg(1)
+        val isa Literal || return Literal(false)
+        return Literal(val.language !== nothing && val.direction !== nothing)
     elseif name == "STRLANGDIR"
         val = _eval_arg(1); lang = _eval_arg(2); dir = _eval_arg(3)
         (isnothing(val) || isnothing(lang) || isnothing(dir)) && return nothing
         _is_string_lit(val) || return nothing
-        d = lowercase(_ast_str(dir))
+        # The direction must be exactly "ltr" or "rtl" (case-sensitive).
+        d = _ast_str(dir)
         d in ("ltr", "rtl") || return nothing
         ls = _ast_str(lang)
         isempty(ls) && return nothing
@@ -2262,6 +2362,10 @@ function _ast_eval_expr(expr::ExprFunctionCall, binding::Dict{String,Identifier}
     elseif name == "TRIPLE"
         s = _eval_arg(1); p = _eval_arg(2); o = _eval_arg(3)
         (isnothing(s) || isnothing(p) || isnothing(o)) && return nothing
+        # A triple term requires a Node subject (URIRef/BNode, NOT itself a
+        # triple term), an IRI predicate, and any term object (which may be a
+        # nested triple term).
+        ((s isa URIRef || s isa BNode) && p isa URIRef && o isa Identifier) || return nothing
         return TripleTerm(s, p, o)
     elseif name == "SUBJECT"
         val = _eval_arg(1)
@@ -2702,15 +2806,16 @@ function _ast_ebv(val)
     val === nothing && return nothing
     val isa Bool && return val
     val isa Literal || return nothing
-    # Language-tagged literals: treat like strings (lenient; rdflib-compatible)
-    val.language === nothing || return !isempty(val.lexical)
+    # Language-tagged (and dir-lang) literals have no EBV → type error.
+    val.language === nothing || return nothing
     dt = val.datatype
     dt === nothing && return !isempty(val.lexical)
     dtv = dt.value
     if dtv == _XSD_NS * "boolean"
         lx = val.lexical
-        # ill-formed boolean lexical → false per spec
-        return lx == "true" || lx == "1"
+        # Well-formed boolean lexical only; ill-formed → type error (unbound).
+        return (lx == "true" || lx == "1") ? true :
+               (lx == "false" || lx == "0") ? false : nothing
     end
     if _numeric_kind_of_dt(dtv) !== :none
         tn = _typed_numeric(val)
@@ -2765,6 +2870,19 @@ end
 function _ast_term_eq(a, b)
     a == b && return true
     (a === nothing || b === nothing) && return nothing
+    if a isa TripleTerm && b isa TripleTerm
+        # SPARQL 1.2: triple terms are `=` when their components are pairwise
+        # RDFterm-equal (value-equality on the object, term-equality elsewhere).
+        es = _ast_term_eq(a.subject, b.subject)
+        es === nothing && return nothing
+        es === false && return false
+        ep = _ast_term_eq(a.predicate, b.predicate)
+        ep === nothing && return nothing
+        ep === false && return false
+        return _ast_term_eq(a.object, b.object)
+    end
+    # A triple term and a non-triple-term are known-different.
+    (a isa TripleTerm) != (b isa TripleTerm) && return false
     if a isa Literal && b isa Literal
         c = _ast_value_cmp(a, b)
         c !== nothing && return c == 0
@@ -3998,6 +4116,15 @@ _expr_has_aggregate(e::ExprUnaryOp) = _expr_has_aggregate(e.arg)
 _expr_has_aggregate(e::ExprFunctionCall) = any(_expr_has_aggregate, e.args)
 _expr_has_aggregate(e::ExprIn) = _expr_has_aggregate(e.expr) || any(_expr_has_aggregate, e.values)
 _expr_has_aggregate(e) = false
+
+# Whether an expression references any variable whose name is in `names`.
+_expr_refs_any(e::ExprVar, names) = e.name in names
+_expr_refs_any(e::ExprBinaryOp, names) = _expr_refs_any(e.left, names) || _expr_refs_any(e.right, names)
+_expr_refs_any(e::ExprUnaryOp, names) = _expr_refs_any(e.arg, names)
+_expr_refs_any(e::ExprFunctionCall, names) = any(a -> _expr_refs_any(a, names), e.args)
+_expr_refs_any(e::ExprIn, names) = _expr_refs_any(e.expr, names) || any(v -> _expr_refs_any(v, names), e.values)
+_expr_refs_any(e::ExprAggregate, names) = _expr_refs_any(e.arg, names)
+_expr_refs_any(e, names) = false
 
 """Recursively find ExprAggregate nodes and stash their computed values in the binding."""
 function _ast_stash_agg_values!(expr::ExprAggregate, binding::Dict{String,Identifier}, group)

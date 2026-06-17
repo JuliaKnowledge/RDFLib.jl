@@ -174,9 +174,12 @@ struct _SPARQLModify
     patterns::Vector{Any}
     prefixes::Dict{String,String}
     with_graph::Union{URIRef,Nothing}   # WITH <iri> target graph (nothing = default)
+    using_graphs::Vector{URIRef}        # USING <iri> — WHERE-clause default graph(s)
+    using_named::Vector{URIRef}         # USING NAMED <iri> — WHERE-clause named graphs
 end
 
-_SPARQLModify(del, ins, pats, prefixes) = _SPARQLModify(del, ins, pats, prefixes, nothing)
+_SPARQLModify(del, ins, pats, prefixes) = _SPARQLModify(del, ins, pats, prefixes, nothing, URIRef[], URIRef[])
+_SPARQLModify(del, ins, pats, prefixes, with_graph) = _SPARQLModify(del, ins, pats, prefixes, with_graph, URIRef[], URIRef[])
 
 struct _SPARQLClear
     target::String  # "ALL", "DEFAULT", "NAMED"
@@ -317,7 +320,7 @@ end
 function _sparql_exec_update(ds::Dataset, op::_SPARQLModify)
     target_g = isnothing(op.with_graph) ? ds.default_graph :
                _get_or_create_graph!(ds, op.with_graph)
-    bindings = _modify_bindings(ds, op.patterns, op.with_graph)
+    bindings = _modify_bindings(ds, op.patterns, op.with_graph, op.using_graphs, op.using_named)
     # Delete first, then insert (per SPARQL 1.1 Update §3.1.3).
     for binding in bindings
         bnodes = Dict{String,BNode}()
@@ -345,15 +348,35 @@ end
 # Evaluate the WHERE patterns of a DELETE/INSERT against a dataset. The WITH
 # graph (if any) becomes the active default graph for matching, matching the
 # spec: WITH names both the default graph for the WHERE clause and the target.
-function _modify_bindings(ds::Dataset, patterns, with_graph)
+function _modify_bindings(ds::Dataset, patterns, with_graph,
+                          using_graphs::Vector{URIRef}=URIRef[],
+                          using_named::Vector{URIRef}=URIRef[])
     ast_patterns = SparqlPattern[p for p in patterns if p isa SparqlPattern]
     isempty(ast_patterns) && return Dict{String,Identifier}[Dict{String,Identifier}()]
-    default_g = isnothing(with_graph) ? ds.default_graph :
-                _get_or_create_graph!(ds, with_graph)
+
+    # A USING clause specifies the dataset for the WHERE clause (overriding the
+    # default graph and the visible named graphs), per SPARQL 1.1 Update §4.1.2.
+    # USING and WITH together: USING wins for the WHERE dataset; WITH still
+    # names the target graph for DELETE/INSERT.
+    named_filter = nothing
+    if !isempty(using_graphs) || !isempty(using_named)
+        merged = RDFGraph()
+        for iri in using_graphs
+            src = get(ds.named_graphs, iri, nothing)
+            src === nothing && continue
+            for t in triples(src); add!(merged, t); end
+        end
+        default_g = merged
+        named_filter = Set{GraphName}(using_named)
+    else
+        default_g = isnothing(with_graph) ? ds.default_graph :
+                    _get_or_create_graph!(ds, with_graph)
+    end
+
     old_ds = _ACTIVE_DATASET[]
     old_filter = _ACTIVE_NAMED_FILTER[]
     _ACTIVE_DATASET[] = ds
-    _ACTIVE_NAMED_FILTER[] = nothing
+    _ACTIVE_NAMED_FILTER[] = named_filter
     try
         return _ast_eval_patterns(default_g, ast_patterns)
     finally
@@ -383,7 +406,7 @@ end
 
 # DELETE/INSERT ... WHERE with quad (GRAPH-aware) templates.
 function _sparql_exec_update(ds::Dataset, op::UpdateModify)
-    bindings = _modify_bindings(ds, op.patterns, op.with_graph)
+    bindings = _modify_bindings(ds, op.patterns, op.with_graph, op.using_graphs, op.using_named)
     for binding in bindings
         bnodes = Dict{String,BNode}()
         for (s_t, p_t, o_t, gr) in op.delete_template

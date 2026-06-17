@@ -6,7 +6,7 @@
         @test tt.subject == URIRef("http://example.org/s")
         @test tt.predicate == URIRef("http://example.org/p")
         @test tt.object == Literal("o")
-        @test n3(tt) == "<< <http://example.org/s> <http://example.org/p> \"o\" >>"
+        @test n3(tt) == "<<( <http://example.org/s> <http://example.org/p> \"o\" )>>"
 
         # Equality and hashing
         tt2 = TripleTerm(URIRef("http://example.org/s"), URIRef("http://example.org/p"), Literal("o"))

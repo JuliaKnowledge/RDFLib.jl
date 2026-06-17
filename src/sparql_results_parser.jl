@@ -33,11 +33,18 @@ function _json_term_to_identifier(v::AbstractDict)
         return URIRef(val)
     elseif typ == "bnode"
         return BNode(val)
+    elseif typ == "triple"
+        # SPARQL 1.2 triple term: value is { subject, predicate, object }
+        s = _json_term_to_identifier(val["subject"])
+        p = _json_term_to_identifier(val["predicate"])
+        o = _json_term_to_identifier(val["object"])
+        return TripleTerm(s, p, o)
     elseif typ == "literal" || typ == "typed-literal"
         lang = get(v, "xml:lang", nothing)
+        dir = get(v, "its:dir", nothing)
         dt_str = get(v, "datatype", nothing)
         dt = isnothing(dt_str) ? nothing : URIRef(dt_str)
-        return Literal(val; datatype=dt, lang=lang)
+        return Literal(val; datatype=dt, lang=lang, direction=dir)
     else
         return Literal(val)
     end
@@ -88,24 +95,51 @@ end
 
 function _xml_binding_to_identifier(bnode::EzXML.Node, ns)
     for child in EzXML.eachelement(bnode)
-        tag = EzXML.nodename(child)
-        if tag == "uri"
-            return URIRef(EzXML.nodecontent(child))
-        elseif tag == "bnode"
-            return BNode(EzXML.nodecontent(child))
-        elseif tag == "literal"
-            val = EzXML.nodecontent(child)
-            lang = nothing
-            dt = nothing
-            if EzXML.haskey(child, "xml:lang")
-                lang = child["xml:lang"]
-            elseif EzXML.haskey(child, "datatype")
-                dt = URIRef(child["datatype"])
-            end
-            return Literal(val; datatype=dt, lang=lang)
-        end
+        v = _xml_node_to_identifier(child, ns)
+        isnothing(v) || return v
     end
     error("No term found in binding element")
+end
+
+# Convert a single XML term element (<uri>/<bnode>/<literal>/<triple>) to an
+# Identifier, or nothing if the element is not a recognised term.
+function _xml_node_to_identifier(child::EzXML.Node, ns)
+    tag = EzXML.nodename(child)
+    if tag == "uri"
+        return URIRef(EzXML.nodecontent(child))
+    elseif tag == "bnode"
+        return BNode(EzXML.nodecontent(child))
+    elseif tag == "literal"
+        val = EzXML.nodecontent(child)
+        lang = nothing
+        dir = nothing
+        dt = nothing
+        if EzXML.haskey(child, "xml:lang")
+            lang = child["xml:lang"]
+        elseif EzXML.haskey(child, "datatype")
+            dt = URIRef(child["datatype"])
+        end
+        # SPARQL 1.2 base direction is carried in an its:dir attribute.
+        if EzXML.haskey(child, "its:dir")
+            dir = child["its:dir"]
+        end
+        return Literal(val; datatype=dt, lang=lang, direction=dir)
+    elseif tag == "triple"
+        s = p = o = nothing
+        for part in EzXML.eachelement(child)
+            ptag = EzXML.nodename(part)
+            inner = nothing
+            for sub in EzXML.eachelement(part)
+                inner = _xml_node_to_identifier(sub, ns)
+                inner === nothing || break
+            end
+            ptag == "subject"   && (s = inner)
+            ptag == "predicate" && (p = inner)
+            ptag == "object"    && (o = inner)
+        end
+        return TripleTerm(s, p, o)
+    end
+    return nothing
 end
 
 """

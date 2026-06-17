@@ -298,18 +298,23 @@
     # Triple term patterns in WHERE (<< s p o >>)
     # ═══════════════════════════════════════════════════════════════════
     @testset "Triple term patterns" begin
+        # SPARQL 1.2 triple terms `<<( s p o )>>` match TripleTerm values in the
+        # data (e.g. via rdf:reifies). A triple term may also bind variables.
+        REIFIES = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
         g = RDFGraph()
         ex = Namespace("http://example.org/")
-        add!(g, Triple(ex("alice"), ex("knows"), ex("bob")))
-        add!(g, Triple(ex("bob"), ex("knows"), ex("carol")))
-        add!(g, Triple(ex("alice"), ex("age"), Literal(30)))
+        # Reified statements: a reifier blank/IRI node rdf:reifies a triple term.
+        add!(g, Triple(ex("r1"), REIFIES, TripleTerm(ex("alice"), ex("knows"), ex("bob"))))
+        add!(g, Triple(ex("r2"), REIFIES, TripleTerm(ex("bob"), ex("knows"), ex("carol"))))
+        add!(g, Triple(ex("r1"), ex("certainty"), Literal(9)))
 
-        # << ?s ?p ?o >> matches triples like a BGP
+        # `?r rdf:reifies <<( ?s ex:knows ?o )>>` matches the triple terms.
         r = sparql_query(g, """
             PREFIX ex: <http://example.org/>
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             SELECT ?s ?o
             WHERE {
-                << ?s ex:knows ?o >>
+                ?r rdf:reifies <<( ?s ex:knows ?o )>>
             }
         """)
         @test length(r) == 2
@@ -317,29 +322,29 @@
         @test (URIRef("http://example.org/alice"), URIRef("http://example.org/bob")) in pairs
         @test (URIRef("http://example.org/bob"), URIRef("http://example.org/carol")) in pairs
 
-        # << >> with fixed subject
+        # Triple term with fixed subject.
         r = sparql_query(g, """
             PREFIX ex: <http://example.org/>
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             SELECT ?o
             WHERE {
-                << ex:alice ex:knows ?o >>
+                ?r rdf:reifies <<( ex:alice ex:knows ?o )>>
             }
         """)
         @test length(r) == 1
         @test r[1]["o"] == URIRef("http://example.org/bob")
 
-        # << >> combined with regular triple pattern
+        # Reified triple `<< s p o >>` desugars to a reifier; join with the
+        # reifier's other properties.
         r = sparql_query(g, """
             PREFIX ex: <http://example.org/>
-            SELECT ?person ?age
+            SELECT ?c
             WHERE {
-                << ?person ex:knows ex:bob >> .
-                ?person ex:age ?age
+                << ex:alice ex:knows ex:bob >> ex:certainty ?c .
             }
         """)
         @test length(r) == 1
-        @test r[1]["person"] == URIRef("http://example.org/alice")
-        @test r[1]["age"] == Literal(30)
+        @test r[1]["c"] == Literal(9)
     end
 
     # ═══════════════════════════════════════════════════════════════════
