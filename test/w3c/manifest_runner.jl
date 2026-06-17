@@ -136,18 +136,38 @@ function _parse_graph(path::String, base::String)
     g
 end
 
+# Blank nodes are scoped per RDF document, so labels from one loaded file must
+# not collide with identical labels in another. Each load gets a unique prefix.
+const _LOAD_SEQ = Ref(0)
+function _fresh_bnodes(triples_iter)
+    _LOAD_SEQ[] += 1
+    pre = "ld$(_LOAD_SEQ[])_"
+    m = Dict{BNode,BNode}()
+    relabel(v) = v isa BNode ? get!(() -> BNode(pre * v.id), m, v) :
+                 v isa TripleTerm ? TripleTerm(relabel(v.subject), v.predicate, relabel(v.object)) : v
+    [Triple(relabel(t.subject), t.predicate, relabel(t.object)) for t in triples_iter]
+end
+
 # Load a data file into an existing Dataset, dispatching on format: quad formats
 # (.nq/.trig) contribute their default graph + named graphs; triple formats load
-# into the dataset's default graph (or `gname` when given).
+# into the dataset's default graph (or `gname` when given). Blank-node labels are
+# freshened per-file so separately-loaded graphs don't alias each other's bnodes.
 function _load_into_dataset!(ds::Dataset, path::String, base::String; gname=nothing)
     fmt = _format_for(path)
     if fmt isa NQuadsFormat || fmt isa TriGFormat
         src = _parse_dataset(path, base)
+        # Freshen across the whole document (one bnode scope spanning its graphs).
+        _LOAD_SEQ[] += 1
+        pre = "ld$(_LOAD_SEQ[])_"
+        m = Dict{BNode,BNode}()
+        relabel(v) = v isa BNode ? get!(() -> BNode(pre * v.id), m, v) :
+                     v isa TripleTerm ? TripleTerm(relabel(v.subject), v.predicate, relabel(v.object)) : v
         for (n, g) in graphs(src), t in g
-            add!(ds, t, n === nothing ? gname : n)
+            nn = n === nothing ? gname : (n isa BNode ? relabel(n) : n)
+            add!(ds, Triple(relabel(t.subject), t.predicate, relabel(t.object)), nn)
         end
     else
-        for t in _parse_graph(path, base)
+        for t in _fresh_bnodes(_parse_graph(path, base))
             add!(ds, t, gname)
         end
     end
@@ -718,9 +738,8 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
         end
         for gd in gdata
             gp = _local_path(manifest_dir, gd.value)
-            for t in _parse_graph(gp, _base_iri(assumed_base, manifest_dir, gd.value))
-                add!(ds, t, URIRef(gd.value))
-            end
+            add_graph(ds, URIRef(gd.value))   # register even if the file is empty
+            _load_into_dataset!(ds, gp, _base_iri(assumed_base, manifest_dir, gd.value); gname=URIRef(gd.value))
         end
         # FROM <rel> / FROM NAMED <rel>: load each referenced document as a named
         # graph under its resolved IRI; the evaluator merges FROM graphs into the
@@ -732,8 +751,11 @@ function _run_query_eval(g_manifest, name, id, cls, action_node, result, manifes
                 add!(ds, t, URIRef(iri))
             end
         end
-        # Pass the dataset whenever named graphs / FROM clauses are present.
-        use_ds = !isempty(gdata) || !isempty(fromq) || !isempty(fromnamedq)
+        # Pass the dataset whenever named graphs are present — from graphData,
+        # FROM/FROM NAMED, or a quad-format qt:data that carried named graphs.
+        has_named = false
+        for (n, _) in graphs(ds); n === nothing || (has_named = true; break); end
+        use_ds = !isempty(gdata) || !isempty(fromq) || !isempty(fromnamedq) || has_named
         actual = sparql_query(use_ds ? ds : get_graph(ds), query)
     else
         actual = sparql_query(RDFGraph(), query)
