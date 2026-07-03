@@ -45,11 +45,11 @@ function add!(cg::ConjunctiveGraph, t::Triple)
 end
 
 """
-    add!(cg::ConjunctiveGraph, triple::Triple, context::URIRef)
+    add!(cg::ConjunctiveGraph, triple::Triple, context::GraphName)
 
 Add a triple to a named graph (context).
 """
-function add!(cg::ConjunctiveGraph, t::Triple, context::URIRef)
+function add!(cg::ConjunctiveGraph, t::Triple, context::GraphName)
     add!(cg.dataset, t, context)
     cg
 end
@@ -59,7 +59,7 @@ end
 
 Remove matching triples from a specific context or all contexts.
 """
-function remove!(cg::ConjunctiveGraph, pattern::TriplePattern, context::Union{URIRef, Nothing}=nothing)
+function remove!(cg::ConjunctiveGraph, pattern::TriplePattern, context::OptGraphName=nothing)
     remove!(cg.dataset, pattern, context)
     cg
 end
@@ -99,20 +99,20 @@ Return all graph identifiers (including nothing for the default graph).
 contexts(cg::ConjunctiveGraph) = contexts(cg.dataset)
 
 """
-    get_context(cg::ConjunctiveGraph, name::Union{URIRef, Nothing}=nothing)
+    get_context(cg::ConjunctiveGraph, name::OptGraphName=nothing)
 
 Get a specific named graph (context), or the default graph.
 """
-function get_context(cg::ConjunctiveGraph, name::Union{URIRef, Nothing}=nothing)
+function get_context(cg::ConjunctiveGraph, name::OptGraphName=nothing)
     get_graph(cg.dataset, name)
 end
 
 """
-    remove_context!(cg::ConjunctiveGraph, name::URIRef)
+    remove_context!(cg::ConjunctiveGraph, name::GraphName)
 
 Remove a named graph from the conjunctive graph.
 """
-function remove_context!(cg::ConjunctiveGraph, name::URIRef)
+function remove_context!(cg::ConjunctiveGraph, name::GraphName)
     remove_graph(cg.dataset, name)
     cg
 end

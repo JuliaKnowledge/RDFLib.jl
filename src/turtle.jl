@@ -1342,10 +1342,6 @@ function _parse_long_string!(p::_TurtleParser)
     quote_char = p.input[p.pos]
     _consume_str!(p, string(quote_char, quote_char, quote_char))
     buf = IOBuffer()
-    # STRING_LITERAL_LONG ::= '"""' ( ('"' | '""')? (CHAR | ECHAR | UCHAR) )* '"""'
-    # The string closes at the FIRST run of exactly three quotes. A run of one
-    # or two quotes is content only when followed by a non-closing character;
-    # four or more quotes at the close is a syntax error (stray quote).
     while p.pos <= lastindex(p.input)
         c = p.input[p.pos]
         if c == quote_char
@@ -1354,16 +1350,15 @@ function _parse_long_string!(p::_TurtleParser)
                 run += 1
                 p.pos = nextind(p.input, p.pos)
             end
-            if run == 3
+            if run >= 3
+                for _ in 1:(run - 3)
+                    write(buf, quote_char)
+                end
                 return String(take!(buf))
-            elseif run < 3
-                # 1-2 quotes belong to content (they must be followed by a
-                # non-quote, which the loop will handle on the next iteration).
+            else
                 for _ in 1:run
                     write(buf, quote_char)
                 end
-            else
-                throw(ArgumentError("Stray quote(s) before end of long string literal at position $(p.pos)"))
             end
         elseif c == '\\'
             p.pos = nextind(p.input, p.pos)

@@ -1,5 +1,6 @@
 using Test
 using HTTP
+using JSON
 
 @testset "SPARQL Server" begin
     # Create and configure server
@@ -191,6 +192,14 @@ using HTTP
         HTTP.post("$BASE/test/update",
             headers=["Content-Type" => "application/sparql-update"],
             body="DELETE WHERE { <http://jelly.org/node1> ?p ?o }")
+    end
+
+    @testset "Jelly dataset serialization is rejected" begin
+        ds = Dataset()
+        add!(ds, Triple(URIRef("http://example.org/default"), URIRef("http://example.org/p"), Literal("v")))
+        add!(ds, Triple(URIRef("http://example.org/named"), URIRef("http://example.org/p"), Literal("v2")),
+             URIRef("http://example.org/g"))
+        @test_throws ArgumentError RDFLib._serialize_dataset(ds, RDFLib.CT_JELLY)
     end
 
     @testset "File Upload — Multiple Formats" begin

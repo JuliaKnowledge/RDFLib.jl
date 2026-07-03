@@ -14,17 +14,29 @@ end
 
 AuditableStore(inner::RDFLib.AbstractStore) = AuditableStore(inner, Tuple{Symbol, RDFLib.Triple}[])
 
+function _auditable_contains(store::RDFLib.AbstractStore, t::RDFLib.Triple)
+    for _ in RDFLib.triples(store, (t.subject, t.predicate, t.object))
+        return true
+    end
+    false
+end
+
 function RDFLib.add!(store::AuditableStore, t::RDFLib.Triple)
+    already_present = _auditable_contains(store.inner, t)
     RDFLib.add!(store.inner, t)
-    push!(store.journal, (:add, t))
+    if !already_present && _auditable_contains(store.inner, t)
+        push!(store.journal, (:add, t))
+    end
     store
 end
 
 function RDFLib.remove!(store::AuditableStore, pattern::RDFLib.TriplePattern)
-    for t in collect(RDFLib.triples(store.inner, pattern))
+    candidates = collect(RDFLib.triples(store.inner, pattern))
+    RDFLib.remove!(store.inner, pattern)
+    for t in candidates
+        _auditable_contains(store.inner, t) && continue
         push!(store.journal, (:remove, t))
     end
-    RDFLib.remove!(store.inner, pattern)
     store
 end
 

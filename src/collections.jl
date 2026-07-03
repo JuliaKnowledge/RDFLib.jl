@@ -69,7 +69,10 @@ function collect_list(g::RDFGraph, head::Node)
     result = Identifier[]
     head == RDF_NIL && return result
     current = head
+    visited = Set{Node}()
     while true
+        current in visited && break
+        push!(visited, current)
         firsts = collect(objects(g, current, RDF_FIRST))
         isempty(firsts) && break
         push!(result, firsts[1])

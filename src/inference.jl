@@ -447,6 +447,11 @@ function _owl_same_as!(g::RDFGraph, new_triples::Vector{Triple})
             t.object isa Node || continue
             push!(new_triples, Triple(t.subject, t.predicate, y))
         end
+        if x isa URIRef && y isa URIRef
+            for t in _collect_triples(g, (nothing, x, nothing))
+                push!(new_triples, Triple(t.subject, y, t.object))
+            end
+        end
     end
 end
 

@@ -115,6 +115,25 @@
         @test triples_vec[1].object.lexical == "42"
     end
 
+    @testset "parse SPARQL JSON - directional literal" begin
+        json_str = """
+        {
+            "results": {
+                "bindings": [
+                    {
+                        "s": {"type": "uri", "value": "http://example.org/x"},
+                        "p": {"type": "uri", "value": "http://example.org/label"},
+                        "o": {"type": "literal", "value": "שלום", "xml:lang": "he", "its:dir": "rtl"}
+                    }
+                ]
+            }
+        }
+        """
+        triples_vec = RDFLib._parse_sparql_json_results(json_str)
+        @test length(triples_vec) == 1
+        @test triples_vec[1].object == Literal("שלום", lang="he", direction="rtl")
+    end
+
     @testset "parse SPARQL JSON - blank node" begin
         json_str = """
         {
@@ -174,7 +193,10 @@
         @test RDFLib._sparql_term(BNode("b0")) == "_:b0"
         @test RDFLib._sparql_term(Literal("hello")) == "\"hello\""
         @test RDFLib._sparql_term(Literal("hi", lang="en")) == "\"hi\"@en"
+        @test RDFLib._sparql_term(Literal("שלום", lang="he", direction="rtl")) == "\"שלום\"@he--rtl"
         dt = URIRef("http://www.w3.org/2001/XMLSchema#integer")
         @test RDFLib._sparql_term(Literal("42", datatype=dt)) == "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+        @test occursin("\\\"", RDFLib._sparql_term(Literal("a\" . ?s ?p ?o")))
+        @test_throws ArgumentError RDFLib._sparql_term(URIRef("http://example.org/bad space"))
     end
 end

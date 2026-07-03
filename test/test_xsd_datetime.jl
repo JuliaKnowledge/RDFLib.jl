@@ -95,10 +95,14 @@ using Dates
         # Non-zero milliseconds are serialized
         @test format_xsd_datetime(DateTime(2020, 1, 1, 0, 0, 0, 123)) == "2020-01-01T00:00:00.123"
         @test format_xsd_datetime(DateTime(2023, 1, 15, 10, 30, 45, 500)) == "2023-01-15T10:30:45.500"
+        @test format_xsd_datetime(DateTime(-500, 1, 15, 0, 0, 0)) == "-0500-01-15T00:00:00"
+        @test format_xsd_datetime(DateTime(12023, 1, 15, 10, 30, 0)) == "12023-01-15T10:30:00"
     end
 
     @testset "format_xsd_date" begin
         @test format_xsd_date(Date(2023, 1, 15)) == "2023-01-15"
+        @test format_xsd_date(Date(-500, 1, 15)) == "-0500-01-15"
+        @test format_xsd_date(Date(12023, 1, 15)) == "12023-01-15"
     end
 
     @testset "format_xsd_time" begin
@@ -164,5 +168,18 @@ using Dates
 
         tms = Time(14, 30, 45, 250)
         @test parse_xsd_time(format_xsd_time(tms)) == tms
+
+        neg = DateTime(-500, 6, 15, 14, 30, 45, 123)
+        @test parse_xsd_datetime(format_xsd_datetime(neg)) == neg
+
+        big = DateTime(12023, 6, 15, 14, 30, 45, 123)
+        @test parse_xsd_datetime(format_xsd_datetime(big)) == big
+    end
+
+    @testset "invalid timezone offsets are rejected" begin
+        @test_throws ArgumentError parse_xsd_datetime("2023-01-15T10:30:00+14:01")
+        @test_throws ArgumentError parse_xsd_datetime("2023-01-15T10:30:00+99:99")
+        @test_throws ArgumentError parse_xsd_date("2023-01-15+14:01")
+        @test_throws ArgumentError parse_xsd_time("10:30:00+14:01")
     end
 end

@@ -79,6 +79,19 @@ Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
         @test ts[1].object.language == "fr"
     end
 
+    @testset "directional literals remain distinct" begin
+        store = DuckDBStore()
+        g = RDFLib.RDFGraph(store=store)
+        EX = Namespace("http://example.org/")
+        add!(g, Triple(EX("s"), EX("label"), Literal("שלום", lang="he", direction="rtl")))
+        add!(g, Triple(EX("s"), EX("label"), Literal("שלום", lang="he", direction="ltr")))
+        ts = collect(triples(g, (EX("s"), EX("label"), nothing)))
+        @test length(ts) == 2
+        @test Literal("שלום", lang="he", direction="rtl") in [t.object for t in ts]
+        @test Literal("שלום", lang="he", direction="ltr") in [t.object for t in ts]
+        close(store)
+    end
+
     @testset "blank nodes" begin
         store = DuckDBStore()
         g = RDFLib.RDFGraph(store=store)

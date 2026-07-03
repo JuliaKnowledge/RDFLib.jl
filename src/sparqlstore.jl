@@ -69,20 +69,35 @@ end
 
 # ─── SPARQL query construction ──────────────────────────────────────
 
+const _SPARQL_BNODE_RE = r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$"
+const _SPARQL_LANG_RE = r"^[A-Za-z]+(?:-[A-Za-z0-9]+)*$"
+
 function _sparql_term(term::URIRef)
-    "<$(term.value)>"
+    validate_iri!(term.value)
+    "<$(_nt_escape_iri(term.value))>"
 end
 
 function _sparql_term(term::BNode)
+    occursin(_SPARQL_BNODE_RE, term.id) && !endswith(term.id, ".") ||
+        throw(ArgumentError("Invalid blank node label for SPARQL serialization: $(term.id)"))
     "_:$(term.id)"
 end
 
 function _sparql_term(term::Literal)
-    lex = replace(term.lexical, "\\" => "\\\\", "\"" => "\\\"", "\n" => "\\n", "\r" => "\\r")
+    lex = _nt_escape_string(term.lexical)
     if !isnothing(term.language)
-        "\"$(lex)\"@$(term.language)"
+        occursin(_SPARQL_LANG_RE, term.language) ||
+            throw(ArgumentError("Invalid language tag for SPARQL serialization: $(term.language)"))
+        s = "\"$(lex)\"@$(term.language)"
+        if !isnothing(term.direction)
+            term.direction in ("ltr", "rtl") ||
+                throw(ArgumentError("Invalid base direction for SPARQL serialization: $(term.direction)"))
+            s *= "--" * term.direction
+        end
+        s
     elseif !isnothing(term.datatype)
-        "\"$(lex)\"^^<$(term.datatype.value)>"
+        validate_iri!(term.datatype.value)
+        "\"$(lex)\"^^<$(_nt_escape_iri(term.datatype.value))>"
     else
         "\"$(lex)\""
     end
@@ -133,10 +148,11 @@ function _parse_sparql_json_binding_value(val)
     elseif typ == "bnode"
         BNode(val["value"])
     elseif typ == "literal" || typ == "typed-literal"
-        lang_val = get(val, "xml:lang", nothing)
+        lang_val = get(val, "xml:lang", get(val, "lang", nothing))
+        dir_val = get(val, "its:dir", nothing)
         dt = get(val, "datatype", nothing)
         dt_uri = isnothing(dt) ? nothing : URIRef(dt)
-        Literal(val["value"]; datatype=dt_uri, lang=lang_val)
+        Literal(val["value"]; datatype=dt_uri, lang=lang_val, direction=dir_val)
     else
         error("Unknown SPARQL result binding type: $typ")
     end

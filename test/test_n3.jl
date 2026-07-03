@@ -219,6 +219,16 @@ end
         @test Triple(EX("s"), EX("p"), Literal(".5", datatype=xsd_decimal)) in g
     end
 
+    @testset "base resolution handles fragments and parent segments" begin
+        g = parse_n3("""
+            @base <http://example.org/dir/file> .
+            <#frag> <../p> <> .
+        """)
+        @test Triple(URIRef("http://example.org/dir/file#frag"),
+                     URIRef("http://example.org/p"),
+                     URIRef("http://example.org/dir/file")) in g
+    end
+
     @testset "'a' keyword boundary" begin
         rdf_type = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
         g = parse_n3("@prefix ex: <http://example.org/> . ex:s a[ex:p ex:o] .")

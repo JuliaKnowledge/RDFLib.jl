@@ -34,6 +34,14 @@ using Test, RDFLib
         @test isempty(collect_list(g, RDF.nil))
     end
 
+    @testset "collect_list stops on cyclic list" begin
+        g = RDFGraph()
+        head = BNode("cycle")
+        add!(g, Triple(head, RDF.first, Literal("x")))
+        add!(g, Triple(head, RDF.rest, head))
+        @test collect_list(g, head) == Identifier[Literal("x")]
+    end
+
     @testset "add_collection!" begin
         g = RDFGraph()
         EX = Namespace("http://example.org/")

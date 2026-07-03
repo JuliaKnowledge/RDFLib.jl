@@ -11,13 +11,29 @@ function _split_tz(s::AbstractString)
     m = match(r"([+-])(\d{2}):(\d{2})$", s)
     isnothing(m) && return (String(s), nothing)
     sign = m.captures[1] == "-" ? -1 : 1
-    mins = sign * (parse(Int, m.captures[2]) * 60 + parse(Int, m.captures[3]))
+    hh = parse(Int, m.captures[2])
+    mm = parse(Int, m.captures[3])
+    (hh < 14 || (hh == 14 && mm == 0)) || throw(ArgumentError("Invalid xsd timezone offset: $s"))
+    mm < 60 || throw(ArgumentError("Invalid xsd timezone offset: $s"))
+    mins = sign * (hh * 60 + mm)
     (String(s[1:end-6]), mins)
 end
 
 # Backwards-compatible helper: remove a trailing timezone designator.
 function _strip_tz(s::AbstractString)
     first(_split_tz(s))
+end
+
+function _xsd_year_string(y::Int)
+    abs_y = abs(y)
+    body = lpad(string(abs_y), max(4, ndigits(abs_y)), '0')
+    y < 0 ? "-" * body : body
+end
+
+function _xsd_date_prefix(y::Int, mo::Int, d::Int)
+    string(_xsd_year_string(y), "-",
+           lpad(string(mo), 2, '0'), "-",
+           lpad(string(d), 2, '0'))
 end
 
 # Convert a fractional-seconds digit string to milliseconds, truncating any
@@ -110,10 +126,14 @@ Format a DateTime as XSD dateTime string. Fractional seconds are included
 when non-zero (e.g. `2020-01-01T00:00:00.123`).
 """
 function format_xsd_datetime(dt::DateTime)
+    prefix = _xsd_date_prefix(year(dt), month(dt), day(dt))
+    suffix = string(lpad(string(hour(dt)), 2, '0'), ":",
+                    lpad(string(minute(dt)), 2, '0'), ":",
+                    lpad(string(second(dt)), 2, '0'))
     if millisecond(dt) == 0
-        Dates.format(dt, dateformat"yyyy-mm-ddTHH:MM:SS")
+        prefix * "T" * suffix
     else
-        Dates.format(dt, dateformat"yyyy-mm-ddTHH:MM:SS.sss")
+        prefix * "T" * suffix * "." * lpad(string(millisecond(dt)), 3, '0')
     end
 end
 
@@ -122,7 +142,7 @@ end
 
 Format a Date as XSD date string.
 """
-format_xsd_date(d::Date) = Dates.format(d, dateformat"yyyy-mm-dd")
+format_xsd_date(d::Date) = _xsd_date_prefix(year(d), month(d), day(d))
 
 """
     format_xsd_time(t::Time) -> String

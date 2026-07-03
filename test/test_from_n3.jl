@@ -41,6 +41,14 @@ using RDFLib
     @testset "escaped characters" begin
         lit = from_n3("\"hello\\nworld\"")
         @test lit.lexical == "hello\nworld"
+        @test from_n3("\"\\\\n\"").lexical == "\\n"
+        @test from_n3("\"\\u03B1\\U0001F600\"").lexical == "α😀"
+    end
+
+    @testset "UTF-8 safe parsing" begin
+        lit = from_n3("\"héllo ☃\"@fr")
+        @test lit.lexical == "héllo ☃"
+        @test lit.language == "fr"
     end
 
     @testset "to_term alias" begin
@@ -50,5 +58,8 @@ using RDFLib
     @testset "error on invalid input" begin
         @test_throws ArgumentError from_n3("")
         @test_throws ArgumentError from_n3("invalid")
+        @test_throws ArgumentError from_n3("\"unterminated")
+        @test_throws ArgumentError from_n3("\"x\"junk")
+        @test_throws ArgumentError from_n3("\"x\"^^xsd:")
     end
 end

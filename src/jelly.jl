@@ -597,6 +597,10 @@ function serialize_jelly(g::RDFGraph;
     return result
 end
 
+function serialize_jelly(ds::Dataset; kwargs...)::Vector{UInt8}
+    throw(ArgumentError("Jelly serialization currently supports RDFGraph only; dataset serialization would drop named graphs"))
+end
+
 # ─── Jelly Decoder ────────────────────────────────────────────────
 
 mutable struct JellyDecoder

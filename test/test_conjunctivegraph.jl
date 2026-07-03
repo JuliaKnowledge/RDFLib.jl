@@ -26,6 +26,19 @@ using RDFLib
         @test length(g1) == 1
     end
 
+    @testset "blank node contexts are preserved" begin
+        cg = ConjunctiveGraph()
+        ctx = BNode("ctx1")
+        add!(cg, Triple(EX("s"), EX("p"), EX("o")), ctx)
+        @test ctx in collect(contexts(cg))
+        @test length(get_context(cg, ctx)) == 1
+        remove!(cg, (EX("s"), EX("p"), EX("o")), ctx)
+        @test isempty(get_context(cg, ctx))
+        add!(cg, Triple(EX("s"), EX("p"), EX("o")), ctx)
+        remove_context!(cg, ctx)
+        @test !(ctx in collect(contexts(cg)))
+    end
+
     @testset "triples across all graphs" begin
         cg = ConjunctiveGraph()
         add!(cg, Triple(EX("s1"), EX("p"), EX("o1")))

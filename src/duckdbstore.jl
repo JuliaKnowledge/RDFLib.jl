@@ -36,7 +36,7 @@ function DuckDBStore(db_path::AbstractString=":memory:")
     DuckDBStore(db, con, -1)
 end
 
-function _duckdb_init_schema!(con::DuckDB.Connection)
+function _duckdb_create_triples_table!(con::DuckDB.Connection)
     DBInterface.execute(con, """
         CREATE TABLE IF NOT EXISTS triples (
             subject TEXT NOT NULL,
@@ -45,9 +45,43 @@ function _duckdb_init_schema!(con::DuckDB.Connection)
             object_type TEXT NOT NULL,
             datatype TEXT NOT NULL,
             language TEXT NOT NULL,
-            UNIQUE(subject, predicate, object, object_type, datatype, language)
+            direction TEXT NOT NULL,
+            UNIQUE(subject, predicate, object, object_type, datatype, language, direction)
         )
     """)
+end
+
+function _duckdb_init_schema!(con::DuckDB.Connection)
+    cols = Set{String}()
+    result = DBInterface.execute(con, """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'triples'
+    """)
+    for row in Tables.namedtupleiterator(result)
+        push!(cols, String(row.column_name))
+    end
+
+    if isempty(cols)
+        _duckdb_create_triples_table!(con)
+    elseif !("direction" in cols)
+        DBInterface.execute(con, "ALTER TABLE triples RENAME TO triples_old")
+        _duckdb_create_triples_table!(con)
+        DBInterface.execute(con, """
+            INSERT OR IGNORE INTO triples
+                (subject, predicate, object, object_type, datatype, language, direction)
+            SELECT
+                subject,
+                predicate,
+                object,
+                object_type,
+                COALESCE(datatype, ''),
+                COALESCE(language, ''),
+                ''
+            FROM triples_old
+        """)
+        DBInterface.execute(con, "DROP TABLE triples_old")
+    end
     DBInterface.execute(con, "CREATE INDEX IF NOT EXISTS idx_ddb_spo ON triples(subject, predicate, object)")
     DBInterface.execute(con, "CREATE INDEX IF NOT EXISTS idx_ddb_pos ON triples(predicate, object, subject)")
     DBInterface.execute(con, "CREATE INDEX IF NOT EXISTS idx_ddb_osp ON triples(object, subject, predicate)")
@@ -63,17 +97,18 @@ _duckdb_encode_node(n::URIRef) = n.value
 _duckdb_encode_node(n::BNode) = "_:" * n.id
 
 function _duckdb_encode_object(o::URIRef)
-    (o.value, "uri", "", "")
+    (o.value, "uri", "", "", "")
 end
 
 function _duckdb_encode_object(o::BNode)
-    ("_:" * o.id, "bnode", "", "")
+    ("_:" * o.id, "bnode", "", "", "")
 end
 
 function _duckdb_encode_object(o::Literal)
     dt = isnothing(o.datatype) ? "" : o.datatype.value
     lang = isnothing(o.language) ? "" : o.language
-    (o.lexical, "literal", dt, lang)
+    dir = isnothing(o.direction) ? "" : o.direction
+    (o.lexical, "literal", dt, lang, dir)
 end
 
 function _duckdb_decode_node(value::AbstractString)
@@ -84,9 +119,10 @@ function _duckdb_decode_node(value::AbstractString)
     end
 end
 
-function _duckdb_decode_object(value, obj_type, datatype, language)
+function _duckdb_decode_object(value, obj_type, datatype, language, direction)
     dt_val = (datatype === missing || datatype == "") ? nothing : datatype
     lang_val = (language === missing || language == "") ? nothing : language
+    dir_val = (direction === missing || direction == "") ? nothing : direction
 
     if obj_type == "uri"
         URIRef(value)
@@ -94,7 +130,7 @@ function _duckdb_decode_object(value, obj_type, datatype, language)
         BNode(value[3:end])
     else  # "literal"
         dt = isnothing(dt_val) ? nothing : URIRef(dt_val)
-        Literal(value; datatype=dt, lang=lang_val)
+        Literal(value; datatype=dt, lang=lang_val, direction=dir_val)
     end
 end
 
@@ -103,14 +139,14 @@ end
 function add!(store::DuckDBStore, t::Triple)
     s = _duckdb_encode_node(t.subject)
     p = t.predicate.value
-    o_val, o_type, o_dt, o_lang = _duckdb_encode_object(t.object)
+    o_val, o_type, o_dt, o_lang, o_dir = _duckdb_encode_object(t.object)
     # INSERT OR IGNORE: duplicates (per the table's UNIQUE constraint) are
     # skipped by the engine itself. Real errors (I/O, constraint violations
     # other than duplicate-key, closed connections, ...) propagate — never
     # swallow arbitrary QueryExceptions to emulate ignore-on-conflict.
     DBInterface.execute(store.con,
-        "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language) VALUES (?, ?, ?, ?, ?, ?)",
-        (s, p, o_val, o_type, o_dt, o_lang))
+        "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language, direction) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (s, p, o_val, o_type, o_dt, o_lang, o_dir))
     store._count = -1
     store
 end
@@ -129,7 +165,7 @@ function remove!(store::DuckDBStore, pattern::TriplePattern)
         push!(params, p.value)
     end
     if !isnothing(o)
-        o_val, o_type, o_dt, o_lang = _duckdb_encode_object(o)
+        o_val, o_type, o_dt, o_lang, o_dir = _duckdb_encode_object(o)
         push!(conditions, "object = ?")
         push!(params, o_val)
         push!(conditions, "object_type = ?")
@@ -138,6 +174,8 @@ function remove!(store::DuckDBStore, pattern::TriplePattern)
         push!(params, o_dt)
         push!(conditions, "language = ?")
         push!(params, o_lang)
+        push!(conditions, "direction = ?")
+        push!(params, o_dir)
     end
 
     sql = "DELETE FROM triples"
@@ -163,7 +201,7 @@ function triples(store::DuckDBStore, pattern::TriplePattern)
         push!(params, p.value)
     end
     if !isnothing(o)
-        o_val, o_type, o_dt, o_lang = _duckdb_encode_object(o)
+        o_val, o_type, o_dt, o_lang, o_dir = _duckdb_encode_object(o)
         push!(conditions, "object = ?")
         push!(params, o_val)
         push!(conditions, "object_type = ?")
@@ -172,9 +210,11 @@ function triples(store::DuckDBStore, pattern::TriplePattern)
         push!(params, o_dt)
         push!(conditions, "language = ?")
         push!(params, o_lang)
+        push!(conditions, "direction = ?")
+        push!(params, o_dir)
     end
 
-    sql = "SELECT subject, predicate, object, object_type, datatype, language FROM triples"
+    sql = "SELECT subject, predicate, object, object_type, datatype, language, direction FROM triples"
     if !isempty(conditions)
         sql *= " WHERE " * join(conditions, " AND ")
     end
@@ -188,7 +228,7 @@ function triples(store::DuckDBStore, pattern::TriplePattern)
     for row in Tables.namedtupleiterator(result)
         s_node = _duckdb_decode_node(row.subject)
         p_node = URIRef(row.predicate)
-        o_node = _duckdb_decode_object(row.object, row.object_type, row.datatype, row.language)
+        o_node = _duckdb_decode_object(row.object, row.object_type, row.datatype, row.language, row.direction)
         push!(out, Triple(s_node, p_node, o_node))
     end
     out
@@ -271,7 +311,8 @@ function bulk_add!(store::DuckDBStore, ts; dedup::Bool=true)
             object TEXT NOT NULL,
             object_type TEXT NOT NULL,
             datatype TEXT NOT NULL,
-            language TEXT NOT NULL
+            language TEXT NOT NULL,
+            direction TEXT NOT NULL
         )
     """)
     DBInterface.execute(con, "DELETE FROM _rdflib_bulk_stg")
@@ -281,13 +322,14 @@ function bulk_add!(store::DuckDBStore, ts; dedup::Bool=true)
         for t in ts
             s = _duckdb_encode_node(t.subject)
             p = t.predicate.value
-            ov, ot, od, ol = _duckdb_encode_object(t.object)
+            ov, ot, od, ol, odi = _duckdb_encode_object(t.object)
             DuckDB.append(appender, s)
             DuckDB.append(appender, p)
             DuckDB.append(appender, ov)
             DuckDB.append(appender, ot)
             DuckDB.append(appender, od)
             DuckDB.append(appender, ol)
+            DuckDB.append(appender, odi)
             DuckDB.end_row(appender)
         end
         DuckDB.flush(appender)

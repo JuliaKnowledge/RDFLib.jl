@@ -44,6 +44,14 @@
         @test length(g2) == 0
     end
 
+    @testset "Dataset serialization is rejected" begin
+        ds = Dataset()
+        add!(ds, Triple(URIRef("http://example.org/s"), URIRef("http://example.org/p"), Literal("v")))
+        add!(ds, Triple(URIRef("http://example.org/s2"), URIRef("http://example.org/p"), Literal("v2")),
+             URIRef("http://example.org/g"))
+        @test_throws ArgumentError serialize_jelly(ds)
+    end
+
     @testset "Literals" begin
         g = RDFGraph()
         ex = URIRef("http://example.org/s")

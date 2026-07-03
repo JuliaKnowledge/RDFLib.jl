@@ -47,18 +47,54 @@ function SQLiteStore(db::SQLite.DB)
     SQLiteStore(db, -1, Dict{String, SQLite.Stmt}())
 end
 
-function _init_schema!(db::SQLite.DB)
+function _create_triples_table!(db::SQLite.DB)
     DBInterface.execute(db, """
         CREATE TABLE IF NOT EXISTS triples (
             subject TEXT NOT NULL,
             predicate TEXT NOT NULL,
             object TEXT NOT NULL,
             object_type TEXT NOT NULL,
-            datatype TEXT,
-            language TEXT,
-            UNIQUE(subject, predicate, object, object_type, datatype, language)
+            datatype TEXT NOT NULL,
+            language TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            UNIQUE(subject, predicate, object, object_type, datatype, language, direction)
         )
     """)
+end
+
+function _init_schema!(db::SQLite.DB)
+    cols = Set{String}()
+    for row in DBInterface.execute(db, "PRAGMA table_info(triples)")
+        push!(cols, String(row.name))
+    end
+
+    if isempty(cols)
+        _create_triples_table!(db)
+    elseif !("direction" in cols)
+        DBInterface.execute(db, "BEGIN")
+        try
+            DBInterface.execute(db, "ALTER TABLE triples RENAME TO triples_old")
+            _create_triples_table!(db)
+            DBInterface.execute(db, """
+                INSERT OR IGNORE INTO triples
+                    (subject, predicate, object, object_type, datatype, language, direction)
+                SELECT
+                    subject,
+                    predicate,
+                    object,
+                    object_type,
+                    COALESCE(datatype, ''),
+                    COALESCE(language, ''),
+                    ''
+                FROM triples_old
+            """)
+            DBInterface.execute(db, "DROP TABLE triples_old")
+            DBInterface.execute(db, "COMMIT")
+        catch
+            DBInterface.execute(db, "ROLLBACK")
+            rethrow()
+        end
+    end
     DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_spo ON triples(subject, predicate, object)")
     DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_pos ON triples(predicate, object, subject)")
     DBInterface.execute(db, "CREATE INDEX IF NOT EXISTS idx_osp ON triples(object, subject, predicate)")
@@ -79,7 +115,7 @@ function _prepared(store::SQLiteStore, sql::String)
     end
 end
 
-const _SQL_INSERT_TRIPLE = "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language) VALUES (?, ?, ?, ?, ?, ?)"
+const _SQL_INSERT_TRIPLE = "INSERT OR IGNORE INTO triples (subject, predicate, object, object_type, datatype, language, direction) VALUES (?, ?, ?, ?, ?, ?, ?)"
 
 # ─── Term encoding/decoding ──────────────────────────────────────────
 
@@ -90,17 +126,18 @@ _sql_encode_node(n::BNode) = "_:" * n.id
 # SQLite's UNIQUE constraint correctly deduplicates triples.
 
 function _sql_encode_object(o::URIRef)
-    (o.value, "uri", "", "")
+    (o.value, "uri", "", "", "")
 end
 
 function _sql_encode_object(o::BNode)
-    ("_:" * o.id, "bnode", "", "")
+    ("_:" * o.id, "bnode", "", "", "")
 end
 
 function _sql_encode_object(o::Literal)
     dt = isnothing(o.datatype) ? "" : o.datatype.value
     lang = isnothing(o.language) ? "" : o.language
-    (o.lexical, "literal", dt, lang)
+    dir = isnothing(o.direction) ? "" : o.direction
+    (o.lexical, "literal", dt, lang, dir)
 end
 
 function _sql_decode_node(value::AbstractString)
@@ -111,10 +148,11 @@ function _sql_decode_node(value::AbstractString)
     end
 end
 
-function _sql_decode_object(value, obj_type, datatype, language)
+function _sql_decode_object(value, obj_type, datatype, language, direction)
     # Handle missing values from SQLite (NULL → missing) and empty strings
     dt_val = (datatype === missing || datatype == "") ? nothing : datatype
     lang_val = (language === missing || language == "") ? nothing : language
+    dir_val = (direction === missing || direction == "") ? nothing : direction
 
     if obj_type == "uri"
         URIRef(value)
@@ -122,7 +160,7 @@ function _sql_decode_object(value, obj_type, datatype, language)
         BNode(value[3:end])
     else  # "literal"
         dt = isnothing(dt_val) ? nothing : URIRef(dt_val)
-        Literal(value; datatype=dt, lang=lang_val)
+        Literal(value; datatype=dt, lang=lang_val, direction=dir_val)
     end
 end
 
@@ -131,9 +169,9 @@ end
 function add!(store::SQLiteStore, t::Triple)
     s = _sql_encode_node(t.subject)
     p = t.predicate.value
-    o_val, o_type, o_dt, o_lang = _sql_encode_object(t.object)
+    o_val, o_type, o_dt, o_lang, o_dir = _sql_encode_object(t.object)
     DBInterface.execute(_prepared(store, _SQL_INSERT_TRIPLE),
-        (s, p, o_val, o_type, o_dt, o_lang))
+        (s, p, o_val, o_type, o_dt, o_lang, o_dir))
     store._count = -1
     store
 end
@@ -152,8 +190,8 @@ function add_bulk!(store::SQLiteStore, triples_iter)
         for t in triples_iter
             s = _sql_encode_node(t.subject)
             p = t.predicate.value
-            o_val, o_type, o_dt, o_lang = _sql_encode_object(t.object)
-            DBInterface.execute(stmt, (s, p, o_val, o_type, o_dt, o_lang))
+            o_val, o_type, o_dt, o_lang, o_dir = _sql_encode_object(t.object)
+            DBInterface.execute(stmt, (s, p, o_val, o_type, o_dt, o_lang, o_dir))
         end
     end
     store._count = -1
@@ -174,7 +212,7 @@ function remove!(store::SQLiteStore, pattern::TriplePattern)
         push!(params, p.value)
     end
     if !isnothing(o)
-        o_val, o_type, o_dt, o_lang = _sql_encode_object(o)
+        o_val, o_type, o_dt, o_lang, o_dir = _sql_encode_object(o)
         push!(conditions, "object = ?")
         push!(params, o_val)
         push!(conditions, "object_type = ?")
@@ -183,6 +221,8 @@ function remove!(store::SQLiteStore, pattern::TriplePattern)
         push!(params, o_dt)
         push!(conditions, "language = ?")
         push!(params, o_lang)
+        push!(conditions, "direction = ?")
+        push!(params, o_dir)
     end
 
     sql = "DELETE FROM triples"
@@ -208,7 +248,7 @@ function triples(store::SQLiteStore, pattern::TriplePattern)
         push!(params, p.value)
     end
     if !isnothing(o)
-        o_val, o_type, o_dt, o_lang = _sql_encode_object(o)
+        o_val, o_type, o_dt, o_lang, o_dir = _sql_encode_object(o)
         push!(conditions, "object = ?")
         push!(params, o_val)
         push!(conditions, "object_type = ?")
@@ -217,9 +257,11 @@ function triples(store::SQLiteStore, pattern::TriplePattern)
         push!(params, o_dt)
         push!(conditions, "language = ?")
         push!(params, o_lang)
+        push!(conditions, "direction = ?")
+        push!(params, o_dir)
     end
 
-    sql = "SELECT subject, predicate, object, object_type, datatype, language FROM triples"
+    sql = "SELECT subject, predicate, object, object_type, datatype, language, direction FROM triples"
     if !isempty(conditions)
         sql *= " WHERE " * join(conditions, " AND ")
     end
@@ -233,7 +275,7 @@ function triples(store::SQLiteStore, pattern::TriplePattern)
     for row in result
         s_node = _sql_decode_node(row.subject)
         p_node = URIRef(row.predicate)
-        o_node = _sql_decode_object(row.object, row.object_type, row.datatype, row.language)
+        o_node = _sql_decode_object(row.object, row.object_type, row.datatype, row.language, row.direction)
         push!(out, Triple(s_node, p_node, o_node))
     end
     out

@@ -55,6 +55,13 @@ using RDFLib
             obj = first(objects(g, EX("s"), EX("p")))
             @test string(obj) == "single quoted"
         end
+
+        @testset "long string accepts 4-quote close run" begin
+            ttl = "@prefix ex: <http://example.org/> .\nex:s ex:p \"\"\"a\"\"\"\" .\n"
+            g = parse_rdf(ttl, TurtleFormat())
+            obj = first(objects(g, EX("s"), EX("p")))
+            @test string(obj) == "a\""
+        end
     end
 
     # ── 2. PName escaping ─────────────────────────────────────────────
@@ -170,6 +177,15 @@ using RDFLib
             @test t.subject == URIRef("http://example.org/x")
             @test t.predicate == URIRef("http://example.org/dir/p")
             @test t.object == URIRef("http://example.org/dir/q")
+        end
+
+        @testset "empty relative reference resolves to base" begin
+            ttl = """
+            @base <http://example.org/dir/file> .
+            <> a <Thing> .
+            """
+            g = parse_rdf(ttl, TurtleFormat())
+            @test Triple(URIRef("http://example.org/dir/file"), RDF.type, URIRef("http://example.org/dir/Thing")) in g
         end
     end
 
@@ -626,11 +642,13 @@ end
     end
 
     @testset "long string termination per W3C grammar" begin
-        # A long string closes at the FIRST run of three quotes; a stray quote
-        # adjacent to the closing delimiter is a syntax error (W3C
-        # turtle-syntax-bad-string-06/07), not "greedy" content.
-        @test_throws ArgumentError RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\" .")
-        @test_throws ArgumentError RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\"\" .")
+        # Turtle and N3 share the same long-string rule: in a run of n>=3
+        # quotes, the final three close the string and the earlier quotes stay
+        # in the content.
+        g1 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\" .")
+        @test Triple(EX("s"), EX("p"), Literal("a\"")) in g1
+        g2 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"\"\"\" .")
+        @test Triple(EX("s"), EX("p"), Literal("a\"\"")) in g2
 
         # 1-2 quotes inside content (each followed by a non-quote) are kept.
         g3 = RDFLib.parse_turtle("@prefix ex: <http://example.org/> . ex:s ex:p \"\"\"a\"\"b\"\"\" .")

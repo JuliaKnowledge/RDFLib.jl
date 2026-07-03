@@ -19,12 +19,12 @@ include(joinpath(@__DIR__, "..", "src", "auditablestore.jl"))
         @test !isempty(store)
     end
 
-    @testset "duplicate add recorded but inner deduplicates" begin
+    @testset "duplicate add is not journaled twice" begin
         store = AuditableStore(MemoryStore())
         add!(store, t1)
         add!(store, t1)
         @test length(store) == 1
-        @test length(journal(store)) == 2
+        @test length(journal(store)) == 1
     end
 
     @testset "journal records add operations" begin
@@ -86,6 +86,16 @@ include(joinpath(@__DIR__, "..", "src", "auditablestore.jl"))
         undone = undo!(store)
         @test undone == (:remove, t1)
         @test length(store) == 1
+    end
+
+    @testset "undo after duplicate add does not delete real data" begin
+        store = AuditableStore(MemoryStore())
+        add!(store, t1)
+        add!(store, t1)
+        @test length(journal(store)) == 1
+        @test undo!(store) == (:add, t1)
+        @test length(store) == 0
+        @test undo!(store) === nothing
     end
 
     @testset "undo on empty journal returns nothing" begin

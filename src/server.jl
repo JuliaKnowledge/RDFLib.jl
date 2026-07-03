@@ -207,7 +207,7 @@ function _serialize_dataset(ds::Dataset, ct::String)::Tuple{Vector{UInt8}, Strin
     elseif ct == CT_NQUADS
         return (Vector{UInt8}(serialize_nquads(ds)), CT_NQUADS)
     elseif ct == CT_JELLY
-        return (serialize_jelly(ds.default_graph), CT_JELLY)
+        throw(ArgumentError("Jelly dataset serialization is not supported because it would drop named graphs"))
     end
     # Default: serialize default graph
     _serialize_graph(ds.default_graph, ct)

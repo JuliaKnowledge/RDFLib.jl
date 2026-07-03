@@ -44,50 +44,105 @@ function from_n3(s::AbstractString)
 end
 
 function _parse_from_n3_literal(s::AbstractString)
-    # Find the closing quote (handle escaped quotes)
-    i = 2
-    while i <= length(s)
-        if s[i] == '\\' && i < length(s)
-            i += 2
-            continue
-        end
-        if s[i] == '"'
+    io = IOBuffer()
+    i = nextind(s, firstindex(s))
+    closed = false
+    while i <= lastindex(s)
+        c = s[i]
+        if c == '"'
+            i = nextind(s, i)
+            closed = true
             break
+        elseif c == '\\'
+            i = _unescape_n3!(io, s, i)
+        else
+            write(io, c)
+            i = nextind(s, i)
         end
-        i += 1
     end
-    i > length(s) && throw(ArgumentError("Unterminated literal: $s"))
+    closed || throw(ArgumentError("Unterminated literal: $s"))
 
-    lexical = _unescape_n3(s[2:i-1])
-    rest = s[i+1:end]
+    lexical = String(take!(io))
+    if i > lastindex(s)
+        return Literal(lexical)
+    end
 
+    rest = String(SubString(s, i))
     if startswith(rest, "@")
-        return Literal(lexical; lang=rest[2:end])
+        m = match(r"^@([A-Za-z]+(?:-[A-Za-z0-9]+)*)(?:--(ltr|rtl))?$", rest)
+        isnothing(m) && throw(ArgumentError("Invalid language suffix in N3 literal: $s"))
+        return Literal(lexical; lang=m.captures[1], direction=m.captures[2])
     elseif startswith(rest, "^^")
         dt_str = rest[3:end]
         if startswith(dt_str, "<") && endswith(dt_str, ">")
-            return Literal(lexical; datatype=URIRef(dt_str[2:end-1]))
+            end_idx = prevind(dt_str, lastindex(dt_str))
+            return Literal(lexical; datatype=URIRef(String(SubString(dt_str, nextind(dt_str, firstindex(dt_str)), end_idx))))
         else
-            # Try common prefixes
             for (prefix, uri) in _COMMON_PREFIXES
                 if startswith(dt_str, prefix)
-                    return Literal(lexical; datatype=URIRef(uri * dt_str[length(prefix)+1:end]))
+                    local_name = dt_str[length(prefix)+1:end]
+                    isempty(local_name) && break
+                    return Literal(lexical; datatype=URIRef(uri * local_name))
                 end
             end
             throw(ArgumentError("Unknown prefix in datatype: $dt_str"))
         end
-    else
-        return Literal(lexical)
     end
+    throw(ArgumentError("Trailing garbage after N3 literal: $s"))
 end
 
 function _unescape_n3(s::AbstractString)
-    s = replace(s, "\\\"" => "\"")
-    s = replace(s, "\\\\" => "\\")
-    s = replace(s, "\\n" => "\n")
-    s = replace(s, "\\r" => "\r")
-    s = replace(s, "\\t" => "\t")
-    s
+    io = IOBuffer()
+    i = firstindex(s)
+    while i <= lastindex(s)
+        if s[i] == '\\'
+            i = _unescape_n3!(io, s, i)
+        else
+            write(io, s[i])
+            i = nextind(s, i)
+        end
+    end
+    String(take!(io))
+end
+
+function _unescape_n3!(io::IOBuffer, s::AbstractString, slash_idx::Int)
+    i = nextind(s, slash_idx)
+    i <= lastindex(s) || throw(ArgumentError("Trailing backslash in N3 literal"))
+    esc = s[i]
+    if esc == '"' || esc == '\\' || esc == '\''
+        write(io, esc)
+        return nextind(s, i)
+    elseif esc == 'n'
+        write(io, '\n')
+        return nextind(s, i)
+    elseif esc == 'r'
+        write(io, '\r')
+        return nextind(s, i)
+    elseif esc == 't'
+        write(io, '\t')
+        return nextind(s, i)
+    elseif esc == 'b'
+        write(io, '\b')
+        return nextind(s, i)
+    elseif esc == 'f'
+        write(io, '\f')
+        return nextind(s, i)
+    elseif esc == 'u' || esc == 'U'
+        digits = esc == 'u' ? 4 : 8
+        j = nextind(s, i)
+        hex = IOBuffer()
+        for _ in 1:digits
+            j <= lastindex(s) || throw(ArgumentError("Truncated Unicode escape in N3 literal"))
+            ch = s[j]
+            isxdigit(ch) || throw(ArgumentError("Invalid Unicode escape in N3 literal"))
+            write(hex, ch)
+            j = nextind(s, j)
+        end
+        codepoint = parse(UInt32, String(take!(hex)); base=16)
+        write(io, Char(codepoint))
+        return j
+    end
+    throw(ArgumentError("Invalid escape sequence \\$esc in N3 literal"))
 end
 
 """

@@ -136,7 +136,10 @@ end
 # Format: type_byte ++ data
 #   URIRef:  0x01 ++ uri_string
 #   BNode:   0x02 ++ id_string
-#   Literal: 0x03 ++ lexical \0 datatype_uri \0 language
+#   Legacy Literal: 0x03 ++ lexical \0 datatype_uri \0 language
+#   Literal v2:     0x04 ++ len(lexical) ++ lexical ++ len(datatype_uri) ++
+#                         datatype_uri ++ len(language) ++ language ++
+#                         len(direction) ++ direction
 
 function _lmdb_serialize_term(term::URIRef)
     io = IOBuffer()
@@ -154,6 +157,24 @@ end
 
 function _lmdb_serialize_term(term::Literal)
     io = IOBuffer()
+    write(io, UInt8(0x04))
+    lex = Vector{UInt8}(codeunits(term.lexical))
+    dt = Vector{UInt8}(codeunits(isnothing(term.datatype) ? "" : string(term.datatype)))
+    lang = Vector{UInt8}(codeunits(something(term.language, "")))
+    dir = Vector{UInt8}(codeunits(something(term.direction, "")))
+    for field in (lex, dt, lang, dir)
+        n = UInt32(length(field))
+        write(io, UInt8((n >> 24) & 0xff))
+        write(io, UInt8((n >> 16) & 0xff))
+        write(io, UInt8((n >> 8) & 0xff))
+        write(io, UInt8(n & 0xff))
+        write(io, field)
+    end
+    take!(io)
+end
+
+function _lmdb_serialize_term_legacy(term::Literal)
+    io = IOBuffer()
     write(io, UInt8(0x03))
     write(io, term.lexical)
     write(io, UInt8(0x00))
@@ -163,6 +184,23 @@ function _lmdb_serialize_term(term::Literal)
     lang = something(term.language, "")
     write(io, lang)
     take!(io)
+end
+
+function _lmdb_read_u32(data::Vector{UInt8}, pos::Int)
+    pos + 3 <= length(data) || error("Truncated LMDB literal field length")
+    n = (UInt32(data[pos]) << 24) |
+        (UInt32(data[pos + 1]) << 16) |
+        (UInt32(data[pos + 2]) << 8) |
+        UInt32(data[pos + 3])
+    (Int(n), pos + 4)
+end
+
+function _lmdb_read_field(data::Vector{UInt8}, pos::Int)
+    len, pos = _lmdb_read_u32(data, pos)
+    len == 0 && return ("", pos)
+    stop = pos + len - 1
+    stop <= length(data) || error("Truncated LMDB literal field payload")
+    (String(data[pos:stop]), stop + 1)
 end
 
 function _lmdb_deserialize_term(data::Vector{UInt8})
@@ -188,9 +226,39 @@ function _lmdb_deserialize_term(data::Vector{UInt8})
         else
             Literal(lexical)
         end
+    elseif tag == 0x04
+        pos = 2
+        lexical, pos = _lmdb_read_field(data, pos)
+        dt_str, pos = _lmdb_read_field(data, pos)
+        lang_str, pos = _lmdb_read_field(data, pos)
+        dir_str, pos = _lmdb_read_field(data, pos)
+        dt = isempty(dt_str) ? nothing : URIRef(dt_str)
+        lang = isempty(lang_str) ? nothing : lang_str
+        dir = isempty(dir_str) ? nothing : dir_str
+        Literal(lexical; datatype=dt, lang=lang, direction=dir)
     else
         error("Unknown term type tag: $tag")
     end
+end
+
+function _lmdb_lookup_term_id(txn::LMDB.Transaction, store::LMDBStore,
+                              term::Identifier, term_bytes::Vector{UInt8})
+    existing_id = try
+        val = LMDB.get(txn, store._db_term2id, term_bytes, Vector{UInt8})
+        ntoh(reinterpret(UInt64, val)[1])
+    catch
+        nothing
+    end
+    if isnothing(existing_id) && term isa Literal && isnothing(term.direction)
+        legacy_bytes = _lmdb_serialize_term_legacy(term)
+        existing_id = try
+            val = LMDB.get(txn, store._db_term2id, legacy_bytes, Vector{UInt8})
+            ntoh(reinterpret(UInt64, val)[1])
+        catch
+            nothing
+        end
+    end
+    existing_id
 end
 
 # ─── Internal: ID packing ─────────────────────────────────────────
@@ -228,15 +296,7 @@ function _lmdb_term_to_id!(store::LMDBStore, txn::LMDB.Transaction, term::Identi
     !isnothing(cached) && return cached
 
     term_bytes = _lmdb_serialize_term(term)
-    # Try to find existing in LMDB. Note: LMDB.jl's txn-level `get` has no
-    # non-throwing variant (it throws MDB_NOTFOUND), so try/catch is the
-    # only available existence check.
-    existing_id = try
-        val = LMDB.get(txn, store._db_term2id, term_bytes, Vector{UInt8})
-        ntoh(reinterpret(UInt64, val)[1])
-    catch
-        nothing
-    end
+    existing_id = _lmdb_lookup_term_id(txn, store, term, term_bytes)
     if !isnothing(existing_id)
         _lmdb_cache_put!(store, term, existing_id)
         return existing_id
@@ -257,12 +317,11 @@ function _lmdb_term_to_id(store::LMDBStore, txn::LMDB.Transaction, term::Identif
     !isnothing(cached) && return cached
 
     term_bytes = _lmdb_serialize_term(term)
-    try
-        val = LMDB.get(txn, store._db_term2id, term_bytes, Vector{UInt8})
-        id = ntoh(reinterpret(UInt64, val)[1])
+    id = _lmdb_lookup_term_id(txn, store, term, term_bytes)
+    if !isnothing(id)
         _lmdb_cache_put!(store, term, id)
         id
-    catch
+    else
         nothing
     end
 end
@@ -602,6 +661,15 @@ function add_bulk!(store::LMDBStore, triples_iter)
                     ntoh(reinterpret(UInt64, val)[1])
                 catch
                     nothing
+                end
+                if isnothing(existing) && term isa Literal && isnothing(term.direction)
+                    legacy = _lmdb_serialize_term_legacy(term)
+                    existing = try
+                        val = LMDB.get(txn, store._db_term2id, legacy, Vector{UInt8})
+                        ntoh(reinterpret(UInt64, val)[1])
+                    catch
+                        nothing
+                    end
                 end
                 if !isnothing(existing)
                     store._term2id_cache[term] = existing

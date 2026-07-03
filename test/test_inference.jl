@@ -203,6 +203,14 @@ const EX = Namespace("http://example.org/")
         @test Triple(EX("b"), RDF.type, EX("Person")) in result
     end
 
+    @testset "OWL sameAs predicate propagation" begin
+        g = RDFGraph()
+        add!(g, Triple(EX("p1"), OWL.sameAs, EX("p2")))
+        add!(g, Triple(EX("alice"), EX("p1"), EX("bob")))
+        result = owl_closure(g)
+        @test Triple(EX("alice"), EX("p2"), EX("bob")) in result
+    end
+
     @testset "Fixed-point convergence (multi-step)" begin
         # Requires multiple iterations: subClassOf chain + typing
         g = RDFGraph()

@@ -181,6 +181,24 @@ using RDFLib
             close(store)
         end
 
+        @testset "Directional and embedded-NUL literals" begin
+            store = LMDBStore(joinpath(dir, "dirnul"))
+            g = RDFGraph(store=store)
+            EX = Namespace("http://example.org/")
+
+            lit_rtl = Literal("a\0b", lang="ar", direction="rtl")
+            lit_ltr = Literal("a\0b", lang="ar", direction="ltr")
+            add!(g, Triple(EX("s"), EX("label"), lit_rtl))
+            add!(g, Triple(EX("s"), EX("label"), lit_ltr))
+
+            got = [t.object for t in triples(g, (EX("s"), EX("label"), nothing))]
+            @test length(got) == 2
+            @test lit_rtl in got
+            @test lit_ltr in got
+
+            close(store)
+        end
+
         @testset "SPARQL on LMDBStore" begin
             store = LMDBStore(joinpath(dir, "sparql"))
             g = RDFGraph(store=store)
